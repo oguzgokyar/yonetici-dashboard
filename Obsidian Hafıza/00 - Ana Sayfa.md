@@ -12,6 +12,7 @@ Bu kasa, Yönetici uygulamasında kullanılacak kalıcı pazarlama kararlarını
 
 - [[Görsel İçerik Kategorileri]]
 - [[Öncelikli 5 İçerik Türü]]
+- [[Görsel Üretim - İçerik Tipi ve Dinamik Kreatif Planı]]
 
 ## Temel prensip
 
