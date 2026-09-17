@@ -52,7 +52,11 @@ export async function getUpdateStatus(fetchRemote = false): Promise<UpdateStatus
 
   const currentCommit = await git(["rev-parse", "--short", "HEAD"]);
   const currentMessage = await git(["log", "-1", "--pretty=%s", "HEAD"]);
-  const dirty = Boolean(await git(["status", "--porcelain"]));
+  const changedFiles = (await git(["status", "--porcelain"]))
+    .split("\n")
+    .filter(Boolean)
+    .filter((line) => !line.endsWith("next-env.d.ts"));
+  const dirty = changedFiles.length > 0;
   const hasRemoteMain = await git(["rev-parse", "--verify", "origin/main"]).then(() => true).catch(() => false);
 
   if (!hasRemoteMain) {
