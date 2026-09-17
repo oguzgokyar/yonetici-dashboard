@@ -1,12 +1,10 @@
 import { DashboardShell } from "@/components/layout/dashboard-shell";
-import { AiProviders } from "@/features/settings/ai-providers";
-import { SystemUpdates } from "@/features/settings/system-updates";
+import { SettingsTabs } from "@/features/settings/settings-tabs";
 
 export default function Page() {
   return (
     <DashboardShell title="Sistem Ayarları" eyebrow="Yönetim">
-      <AiProviders />
-      <SystemUpdates />
+      <SettingsTabs />
     </DashboardShell>
   );
 }
