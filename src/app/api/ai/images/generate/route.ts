@@ -3,10 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { getDatabase } from "@/lib/server/database";
 import { decryptSecret } from "@/lib/server/secrets";
+import { applyBrandOverlay } from "@/lib/server/brand-overlay";
 
 export const runtime = "nodejs";
 type ProviderRow = { base_url: string; encrypted_api_key: string; image_model: string };
 type ImageItem = { b64_json?: string; url?: string; mime_type?: string };
+type ProjectRow = { brand_json: string };
 
 function dimensions(ratio: string) {
   if (ratio === "9:16" || ratio === "2:3") return "1024x1536";
@@ -28,6 +30,10 @@ export async function POST(request: Request) {
   const jobId = crypto.randomUUID();
   const now = new Date().toISOString();
   const database = getDatabase();
+  const project = database.prepare("SELECT brand_json FROM projects WHERE id = ?").get(input.projectId) as ProjectRow | undefined;
+  if (!project) return Response.json({ ok: false, message: "Proje bulunamadı." }, { status: 404 });
+  const brand = JSON.parse(project.brand_json) as Record<string, string>;
+  const selectedFields = Array.isArray(input.settings?.selectedFields) ? input.settings.selectedFields.filter((item): item is string => typeof item === "string") : [];
   database.prepare("INSERT INTO generation_jobs (id, project_id, type, provider, model, status, prompt, request_json, created_at) VALUES (?, ?, 'image', 'cliproxy', '', 'running', ?, ?, ?)").run(jobId, input.projectId, input.prompt.trim(), JSON.stringify(input.settings || {}), now);
 
   try {
@@ -78,9 +84,15 @@ export async function POST(request: Request) {
         if (!remote.ok) throw new Error("Üretilen görsel indirilemedi.");
         bytes = Buffer.from(await remote.arrayBuffer());
       } else continue;
-      fs.writeFileSync(path.join(assetDir, `${id}.${extension}`), bytes);
-      fs.writeFileSync(path.join(assetDir, `${id}.json`), JSON.stringify({ mimeType, extension }));
-      assets.push({ id, url: `/api/assets/${id}`, mimeType });
+      if (selectedFields.length) {
+        const branded = await applyBrandOverlay(bytes, brand, selectedFields);
+        bytes = branded.bytes;
+      }
+      const finalMimeType = selectedFields.length ? "image/png" : mimeType;
+      const finalExtension = selectedFields.length ? "png" : extension;
+      fs.writeFileSync(path.join(assetDir, `${id}.${finalExtension}`), bytes);
+      fs.writeFileSync(path.join(assetDir, `${id}.json`), JSON.stringify({ mimeType: finalMimeType, extension: finalExtension }));
+      assets.push({ id, url: `/api/assets/${id}`, mimeType: finalMimeType });
     }
     if (!assets.length) throw new Error("Servis kullanılabilir görsel döndürmedi.");
     database.prepare("UPDATE generation_jobs SET status='complete', response_json=?, completed_at=? WHERE id=?").run(JSON.stringify({ assets }), new Date().toISOString(), jobId);

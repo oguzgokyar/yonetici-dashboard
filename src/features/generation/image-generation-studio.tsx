@@ -4,12 +4,13 @@ import Link from "next/link";
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import {
-  Check, ChevronDown, Download, ImageIcon, Info, LayoutTemplate, LoaderCircle, Palette,
-  Plus, Settings2, Sparkles, WandSparkles,
+  ArrowRight, Check, ChevronDown, Clock3, Download, History, ImageIcon, Info, LayoutTemplate, Lightbulb, LoaderCircle, Palette,
+  Plus, RefreshCw, Settings2, Sparkles, WandSparkles, X,
 } from "lucide-react";
 import { useProjects } from "@/features/projects/projects-context";
 
 type BrandKey = "logo" | "brandName" | "phone" | "email" | "address" | "website";
+type ContentIdea = { id: string; sourcePrompt: string; title: string; concept: string; visualDirection: string; suggestedPrompt: string; status: "suggested" | "used"; createdAt: string; usedAt: string | null };
 
 const brandFields: { key: BrandKey; label: string }[] = [
   { key: "logo", label: "Logo" }, { key: "brandName", label: "Marka adı" },
@@ -33,6 +34,12 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
   const [generating, setGenerating] = useState(false);
   const [results, setResults] = useState<{ id: string; url: string; mimeType: string }[]>([]);
   const [usedModel, setUsedModel] = useState("");
+  const [ideas, setIdeas] = useState<ContentIdea[]>([]);
+  const [ideasOpen, setIdeasOpen] = useState(false);
+  const [ideasView, setIdeasView] = useState<"suggested" | "used">("suggested");
+  const [ideasLoading, setIdeasLoading] = useState(false);
+  const [enhancing, setEnhancing] = useState(false);
+  const [activeIdea, setActiveIdea] = useState<ContentIdea | null>(null);
 
   const available = useMemo(() => project?.brand, [project]);
   if (!project || !available) return <div className="overview-loading" />;
@@ -40,6 +47,48 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
   function toggle(key: BrandKey) {
     if (!available?.[key]) return;
     setSelectedFields((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
+  }
+
+  async function loadIdeas(open = true) {
+    if (open) setIdeasOpen(true);
+    try {
+      const response = await fetch(`/api/ai/content-ideas?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" });
+      const body = await response.json() as { ok: boolean; ideas?: ContentIdea[] };
+      if (body.ok && body.ideas) setIdeas(body.ideas);
+    } catch { setMessage("Kayıtlı içerik fikirleri alınamadı."); }
+  }
+
+  async function suggestIdeas() {
+    if (!prompt.trim()) { setMessage("Önce ürün veya içerik bilgisini prompt alanına yazın."); return; }
+    setIdeasOpen(true); setIdeasView("suggested"); setIdeasLoading(true); setMessage("");
+    try {
+      const response = await fetch("/api/ai/content-ideas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, prompt: prompt.trim() }) });
+      const body = await response.json() as { ok: boolean; message?: string; ideas?: ContentIdea[] };
+      if (!response.ok || !body.ok || !body.ideas) throw new Error(body.message || "İçerik fikirleri üretilemedi.");
+      setIdeas((current) => [...body.ideas!, ...current]);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "İçerik fikirleri üretilemedi."); }
+    finally { setIdeasLoading(false); }
+  }
+
+  async function applyIdea(idea: ContentIdea) {
+    setPrompt(idea.suggestedPrompt); setActiveIdea(idea); setIdeasOpen(false); setMessage(`“${idea.title}” fikri prompta uygulandı.`);
+    if (idea.status !== "used") {
+      const usedAt = new Date().toISOString();
+      setIdeas((current) => current.map((item) => item.id === idea.id ? { ...item, status: "used", usedAt } : item));
+      fetch("/api/ai/content-ideas", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, ideaId: idea.id }) }).catch(() => undefined);
+    }
+  }
+
+  async function enhancePrompt() {
+    if (!prompt.trim()) { setMessage("Geliştirmek için önce bir prompt yazın veya içerik fikri seçin."); return; }
+    setEnhancing(true); setMessage("");
+    try {
+      const response = await fetch("/api/ai/prompts/enhance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, prompt: prompt.trim(), selectedFields, idea: activeIdea ? { title: activeIdea.title, concept: activeIdea.concept, visualDirection: activeIdea.visualDirection } : undefined }) });
+      const body = await response.json() as { ok: boolean; prompt?: string; message?: string };
+      if (!response.ok || !body.ok || !body.prompt) throw new Error(body.message || "Prompt geliştirilemedi.");
+      setPrompt(body.prompt); setMessage("Prompt, seçilen marka kaynakları ve içerik fikrine göre geliştirildi.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Prompt geliştirilemedi."); }
+    finally { setEnhancing(false); }
   }
 
   async function generate() {
@@ -76,9 +125,11 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
         </div>
 
         <div className="control-section">
-          <label className="control-title" htmlFor="creative-prompt"><span>Ne üretelim?</span><button type="button" className="inline-ai" onClick={() => prompt && setPrompt(`${prompt.trim()} Marka kimliğine uygun, güçlü bir görsel hiyerarşi ve net bir odak noktası kullan.`)}><Sparkles size={13} />Promptu geliştir</button></label>
+          <label className="control-title" htmlFor="creative-prompt"><span>Ne üretelim?</span><button type="button" className="inline-ai" onClick={enhancePrompt} disabled={enhancing}>{enhancing ? <LoaderCircle className="spin" size={13} /> : <Sparkles size={13} />}{enhancing ? "Geliştiriliyor" : "Promptu geliştir"}</button></label>
           <textarea id="creative-prompt" className="prompt-area" value={prompt} onChange={(e) => { setPrompt(e.target.value); setMessage(""); }} placeholder="Örn. Yeni bioklimatik pergola modelini modern bir terasta, gün batımı ışığında tanıtan premium reklam kreatifi..." />
-          <div className="prompt-footer"><span>{prompt.length}/1200</span><button type="button"><Plus size={13} />Referans görsel</button></div>
+          {activeIdea && <div className="active-idea-chip"><Lightbulb size={13} /><span>{activeIdea.title}</span><button type="button" onClick={() => setActiveIdea(null)} aria-label="Seçili fikri kaldır"><X size={12} /></button></div>}
+          <div className="prompt-footer"><span>{prompt.length}/1200</span><div><button type="button" onClick={() => loadIdeas()}><History size={13} />Fikirler</button><button type="button"><Plus size={13} />Referans görsel</button></div></div>
+          <button type="button" className="idea-button" onClick={suggestIdeas} disabled={ideasLoading}>{ideasLoading ? <LoaderCircle className="spin" size={15} /> : <Lightbulb size={15} />}{ideasLoading ? "Yeni fikirler hazırlanıyor" : "Öneri içerik fikri al"}</button>
         </div>
 
         <div className="control-section">
@@ -111,6 +162,14 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
           <div className="active-brief"><span><Settings2 size={14} />{platform}</span><span>{ratio}</span><span>{mode === "safe" ? "Marka Güvenli" : "Serbest AI"}</span></div>
         </div>}
       </section>
+
+      {ideasOpen && <div className="modal-backdrop idea-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIdeasOpen(false); }}><section className="idea-modal" role="dialog" aria-modal="true" aria-labelledby="idea-modal-title">
+        <button className="icon-button idea-modal-close" type="button" onClick={() => setIdeasOpen(false)} aria-label="Kapat"><X size={18} /></button>
+        <div className="idea-modal-heading"><span><Lightbulb size={20} /></span><div><h2 id="idea-modal-title">İçerik fikirleri</h2><p>Yeni bir yaklaşım seçin veya daha önce kullandığınız fikirlere dönün.</p></div></div>
+        <div className="idea-modal-tabs"><button className={ideasView === "suggested" ? "active" : ""} onClick={() => setIdeasView("suggested")}><Sparkles size={14} />Öneriler <span>{ideas.filter((idea) => idea.status === "suggested").length}</span></button><button className={ideasView === "used" ? "active" : ""} onClick={() => setIdeasView("used")}><History size={14} />Daha önce kullanılanlar <span>{ideas.filter((idea) => idea.status === "used").length}</span></button></div>
+        <div className="idea-list">{ideasLoading ? <div className="ideas-loading"><LoaderCircle className="spin" size={22} /><strong>Birbirinden farklı fikirler hazırlanıyor</strong><span>Daha önce önerilen ve kullanılan konseptler tekrar edilmiyor.</span></div> : ideas.filter((idea) => idea.status === ideasView).length ? ideas.filter((idea) => idea.status === ideasView).map((idea) => <article className="idea-card" key={idea.id}><div><span><Clock3 size={12} />{new Date(idea.createdAt).toLocaleDateString("tr-TR")}</span><h3>{idea.title}</h3><p>{idea.concept}</p><small>{idea.visualDirection}</small></div><button type="button" onClick={() => applyIdea(idea)}>{idea.status === "used" ? "Tekrar kullan" : "Bu fikri kullan"}<ArrowRight size={14} /></button></article>) : <div className="ideas-empty"><Lightbulb size={26} /><strong>{ideasView === "used" ? "Henüz kullanılan fikir yok" : "Henüz öneri oluşturulmadı"}</strong><span>{ideasView === "used" ? "Seçtiğiniz fikirler burada saklanır." : "Prompt alanına ürün veya içerik bilgisini yazıp yeni öneriler alın."}</span></div>}</div>
+        <div className="idea-modal-footer"><button type="button" className="button secondary" onClick={suggestIdeas} disabled={ideasLoading}>{ideasLoading ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}Yeni 7 fikir üret</button></div>
+      </section></div>}
     </div>
   );
 }
