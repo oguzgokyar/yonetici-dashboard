@@ -97,7 +97,7 @@ export async function installUpdate() {
     if (!token) throw new Error("COOLIFY_TOKEN tanımlanmamış.");
     const before = await getCoolifyStatus();
     if (!before.updateAvailable) return { ...before, restartRequired: false, deploymentQueued: false };
-    const response = await fetch(process.env.COOLIFY_DEPLOY_WEBHOOK, { method: "GET", headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(30_000) });
+    const response = await fetch(process.env.COOLIFY_DEPLOY_WEBHOOK, { method: "POST", headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(30_000) });
     if (!response.ok) throw new Error(`Coolify dağıtımı başlatılamadı (${response.status}).`);
     return { ...before, restartRequired: false, deploymentQueued: true };
   }
