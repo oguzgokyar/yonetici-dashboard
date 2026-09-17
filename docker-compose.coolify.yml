@@ -1,0 +1,25 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?}
+      SYSTEM_UPDATE_TOKEN: ${SYSTEM_UPDATE_TOKEN:?}
+      GITHUB_REPOSITORY: ${GITHUB_REPOSITORY:-oguzgokyar/yonetici-dashboard}
+      GITHUB_BRANCH: ${GITHUB_BRANCH:-main}
+      GITHUB_ACCESS_TOKEN: ${GITHUB_ACCESS_TOKEN:?}
+      COOLIFY_DEPLOY_WEBHOOK: ${COOLIFY_DEPLOY_WEBHOOK:?}
+      COOLIFY_TOKEN: ${COOLIFY_TOKEN:?}
+      SOURCE_COMMIT: ${SOURCE_COMMIT:-unknown}
+    volumes:
+      - yonetici-data:/app/.data
+    expose:
+      - "3000"
+    restart: unless-stopped
+
+volumes:
+  yonetici-data:

@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, Check, CloudDownload, GitBranch, Github, LoaderCircle, RefreshCw, Server } from "lucide-react";
 
 type Status = {
+  mode: "local-git" | "coolify";
   repositoryReady: boolean; remoteUrl: string; branch: string; currentCommit: string; currentMessage: string;
-  latestCommit: string; latestMessage: string; behind: number; ahead: number; updateAvailable: boolean; dirty: boolean; restartRequired?: boolean;
+  latestCommit: string; latestMessage: string; behind: number; ahead: number; updateAvailable: boolean; dirty: boolean; restartRequired?: boolean; deploymentQueued?: boolean;
 };
 
 export function SystemUpdates() {
@@ -27,7 +28,7 @@ export function SystemUpdates() {
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.message || "İşlem tamamlanamadı.");
       setStatus(data.status);
-      setResult({ ok: true, message: action === "check" ? (data.status.updateAvailable ? `${data.status.behind} yeni değişiklik bulundu.` : "Bu kurulum güncel.") : (data.status.restartRequired ? "Güncelleme kuruldu. Yeni sürümün açılması için uygulamayı yeniden başlatın." : "Bu kurulum zaten güncel.") });
+      setResult({ ok: true, message: action === "check" ? (data.status.updateAvailable ? `${data.status.behind} yeni değişiklik bulundu.` : "Bu kurulum güncel.") : (data.status.deploymentQueued ? "Yeni sürüm Coolify dağıtım kuyruğuna alındı. Mevcut sürüm, yenisi sağlıklı başlayana kadar çalışmaya devam eder." : data.status.restartRequired ? "Güncelleme kuruldu. Yeni sürümün açılması için uygulamayı yeniden başlatın." : "Bu kurulum zaten güncel.") });
     } catch (error) {
       setResult({ ok: false, message: error instanceof Error ? error.message : "İşlem tamamlanamadı." });
     } finally { setBusy(null); }
@@ -35,7 +36,7 @@ export function SystemUpdates() {
 
   const blocked = !status?.repositoryReady || !status.remoteUrl || status.branch !== "main" || status.dirty || status.ahead > 0;
   return <section className="update-card">
-    <div className="update-heading"><span><Github size={22} /></span><div><h2>GitHub güncellemeleri</h2><p>Sunucudaki kararlı sürümü yalnızca siz istediğinizde kontrol edin ve güncelleyin.</p></div></div>
+    <div className="update-heading"><span><Github size={22} /></span><div><h2>GitHub güncellemeleri</h2><p>{status?.mode === "coolify" ? "GitHub main sürümünü kontrol edin ve güvenli Coolify dağıtımını başlatın." : "Sunucudaki kararlı sürümü yalnızca siz istediğinizde kontrol edin ve güncelleyin."}</p></div></div>
     {busy === "loading" ? <div className="update-loading"><LoaderCircle className="spin" size={18} /> Sürüm bilgisi okunuyor</div> : <>
       <div className="version-grid">
         <div><span><Server size={15} /> Çalışan sürüm</span><strong>{status?.currentCommit || "—"}</strong><small>{status?.currentMessage || "Git deposu bekleniyor"}</small></div>
