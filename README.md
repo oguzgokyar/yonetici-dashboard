@@ -4,6 +4,8 @@ Markaların sosyal medya içerik üretimi, video hazırlığı ve yayın planlar
 
 Hermes AI ile VPS kurulumu için doğrudan [`HERMES.md`](./HERMES.md) talimatını kullanın.
 
+Kalıcı pazarlama kararları ve içerik sistemi [`Obsidian Hafıza`](./Obsidian%20Hafıza/00%20-%20Ana%20Sayfa.md) kasasında tutulur.
+
 ## Yerel geliştirme
 
 ```bash
