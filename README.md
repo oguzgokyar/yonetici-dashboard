@@ -47,4 +47,4 @@ Coolify ortamında uygulama çalışan konteynerin dosyalarını değiştirmez:
 3. Coolify yeni image'ı oluşturur ve health check'i doğrular.
 4. Kalıcı `.data` volume'u yeni konteynere bağlanır.
 
-Sunucuda **Configuration → Advanced → Include Source Commit in Build** seçeneğini etkinleştirin; `SOURCE_COMMIT` çalışma ortamında kullanılmalıdır.
+Coolify'ın sağladığı `SOURCE_COMMIT` çalışma ortamı değişkeni çalışan sürümün commit kimliğini gösterir; ayrıca bir build secret olarak tanımlanması gerekmez.
