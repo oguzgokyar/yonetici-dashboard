@@ -2,6 +2,8 @@
 
 Markaların sosyal medya içerik üretimi, video hazırlığı ve yayın planlarını proje bazında yöneten Next.js uygulaması.
 
+Hermes AI ile VPS kurulumu için doğrudan [`HERMES.md`](./HERMES.md) talimatını kullanın.
+
 ## Yerel geliştirme
 
 ```bash
