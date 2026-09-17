@@ -5,7 +5,7 @@ status: approved
 updated: 2026-09-17
 ---
 
-# Öncelikli 5 İçerik Türü
+# Öncelikli 5 + 2 İçerik Türü
 
 Bu seçim yalnızca beğeni veya görüntülenmeyi değil, potansiyel müşterinin soru sorması, yanıt vermesi, kaydetmesi, fiyat istemesi ve keşif talep etmesi gibi **nitelikli etkileşimleri** artırmayı hedefler.
 
@@ -120,12 +120,64 @@ Zorunlu yapı:
 > A: Antrasit modern — B: Ahşap görünümlü sıcak tasarım  
 > Seçiminizi işaretleyin.
 
+## Standart ve sürekli kullanılabilecek iki içerik
+
+### 6. Ürün veya hizmet tanıtımı
+
+Neden seçildi:
+
+- Markanın ne sattığını düzenli olarak açıklar.
+- Yeni takipçiler için temel ürün farkındalığı oluşturur.
+- Kampanya veya özel veri gerektirmeden sürekli üretilebilir.
+- Her ürün ve hizmet için kolayca çoğaltılabilir.
+
+Zorunlu yapı:
+
+- Ürün veya hizmet adı
+- Ne olduğunu anlatan tek cümle
+- Kullanım içindeki ana görsel
+- En önemli müşteri faydası
+- Tek CTA
+- Logo veya marka adı
+- Tek iletişim kanalı
+
+Örnek:
+
+> Bioklimatik Pergola  
+> Terasınızı dört mevsim kullanılabilir yaşam alanına dönüştüren motorlu tavan sistemi.  
+> Projeniz için ücretsiz keşif alın.
+
+### 7. Fayda odaklı içerik
+
+Neden seçildi:
+
+- Teknik özelliği müşterinin anlayacağı sonuca dönüştürür.
+- Aynı ürün için farklı faydalara odaklanan çok sayıda kreatif üretilebilir.
+- Satış baskısı oluşturmadan ürün ihtiyacı yaratır.
+- Hikâye ve durum formatlarında kısa mesajla çalışır.
+
+Zorunlu yapı:
+
+- Sonuç odaklı kısa başlık
+- Tek ana müşteri faydası
+- Faydayı gösteren kullanım sahnesi
+- Gerekirse tek destekleyici cümle
+- CTA ve hafif marka görünürlüğü
+
+Örnek:
+
+> Teras Keyfiniz Yağmurda da Devam Etsin  
+> Kontrollü tavan sistemiyle açık alanınızı dört mevsim kullanın.  
+> Alanınıza uygun çözümü öğrenin.
+
 ## Önerilen haftalık dağılım
 
 - 1 problem–çözüm
 - 1 öncesi–sonrası veya tamamlanan proje
 - 1 sık sorulan soru
 - 1 soru/anket
+- 1 ürün/hizmet tanıtımı
+- 1 fayda odaklı içerik
 - Gerektiğinde kampanya veya mevsimsel içerik
 
 Bu beş formatın her biri aynı ürünü farklı karar aşamalarında işler: problem farkındalığı, sonuç arzusu, güven, itiraz giderme ve doğrudan etkileşim.
