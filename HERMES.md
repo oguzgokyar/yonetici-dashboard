@@ -9,7 +9,7 @@ Bu dosya, Yönetici uygulamasını bir VPS üzerindeki mevcut Coolify kurulumuna
 - Dağıtım yöntemi: Git kaynağından Docker Compose
 - Compose dosyası: `/docker-compose.coolify.yml`
 - Uygulama servisi: `app`
-- İç port: `3000`
+- İç port: `APP_PORT` (varsayılan `3000`)
 - Kalıcı veri: `yonetici-data` volume → `/app/.data`
 - Sağlık kontrolü: `GET /api/health`
 - Otomatik Git deployment: kapalı
@@ -47,7 +47,7 @@ Bu dosya, Yönetici uygulamasını bir VPS üzerindeki mevcut Coolify kurulumuna
 4. Build Pack olarak `Docker Compose` seç.
 5. Compose Location değerini `/docker-compose.coolify.yml` yap.
 6. Coolify'ın Compose içindeki `app` servisini ve `yonetici-data` volume'unu algıladığını doğrula.
-7. Uygulama domainini `app` servisine, iç port `3000` üzerinden bağla ve HTTPS etkinleştir.
+7. VPS/Coolify ortamında uygun boş iç portu belirle. `APP_PORT` tanımlı değilse `3000` kullan. Uygulama domainini `app` servisine bu port üzerinden bağla ve HTTPS etkinleştir.
 8. Configuration → Webhooks alanından auth-required Deploy Webhook URL'sini al.
 9. Coolify Keys & Tokens alanında yalnızca `deploy` yetkili API token oluştur.
 10. Ortam değişkenlerini aşağıdaki tabloya göre ekle.
@@ -60,6 +60,7 @@ Bu dosya, Yönetici uygulamasını bir VPS üzerindeki mevcut Coolify kurulumuna
 | Değişken | Zorunlu | Değer |
 |---|---:|---|
 | `NODE_ENV` | Evet | `production` |
+| `APP_PORT` | Hayır | Boşsa `3000`; gerekirse uygun başka bir container iç portu |
 | `APP_ENCRYPTION_KEY` | Evet | Uzun ve kalıcı secret |
 | `SYSTEM_UPDATE_TOKEN` | Evet | Ayrı bir uzun yönetici secret'ı |
 | `GITHUB_REPOSITORY` | Evet | `oguzgokyar/yonetici-dashboard` |

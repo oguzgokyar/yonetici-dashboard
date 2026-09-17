@@ -18,7 +18,7 @@ Yerelde güncelleme ekranı Git deposundaki `origin/main` dalını kullanır. Ka
 1. Coolify'da özel GitHub deposunu GitHub App veya deploy key ile bağlayın.
 2. Kaynak olarak `main` dalını seçin.
 3. Build Pack olarak **Docker Compose** seçin ve Compose dosyası alanına `/docker-compose.coolify.yml` yazın.
-4. Uygulama domainini `app` servisine ve iç port `3000`'e bağlayın.
+4. Uygulama domainini `app` servisine ve `APP_PORT` ile seçtiğiniz iç porta bağlayın. Varsayılan `3000`'dir.
 5. Aşağıdaki ortam değişkenlerini Coolify üzerinden tanımlayın.
 6. Otomatik dağıtımı kapatın; güncellemeler uygulamadaki **Ayarlar → Sistem** sekmesinden başlatılır.
 
@@ -29,6 +29,8 @@ Yerelde güncelleme ekranı Git deposundaki `origin/main` dalını kullanır. Ka
 - `GITHUB_ACCESS_TOKEN`: Özel GitHub deposunda yalnızca Contents/Metadata okuma yetkili fine-grained token.
 - `COOLIFY_DEPLOY_WEBHOOK`: Coolify uygulamasındaki Configuration → Webhooks → Deploy Webhook adresi.
 - `COOLIFY_TOKEN`: Yalnızca `deploy` yetkili Coolify API token'ı.
+
+`APP_PORT` isteğe bağlıdır ve varsayılanı `3000`'dir. VPS yapılandırmanızda farklı bir iç port gerekiyorsa örneğin `APP_PORT=3100` kullanın ve Coolify domain hedef portunu da `3100` seçin. Compose host portu yayınlamadığı için yalnızca container içi servis portu değişir.
 
 `GITHUB_REPOSITORY` varsayılan olarak `oguzgokyar/yonetici-dashboard`, `GITHUB_BRANCH` ise `main` değerini kullanır.
 

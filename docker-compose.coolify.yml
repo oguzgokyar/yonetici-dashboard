@@ -6,7 +6,7 @@ services:
     environment:
       NODE_ENV: production
       HOSTNAME: 0.0.0.0
-      PORT: 3000
+      PORT: ${APP_PORT:-3000}
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?}
       SYSTEM_UPDATE_TOKEN: ${SYSTEM_UPDATE_TOKEN:?}
       GITHUB_REPOSITORY: ${GITHUB_REPOSITORY:-oguzgokyar/yonetici-dashboard}
@@ -18,7 +18,7 @@ services:
     volumes:
       - yonetici-data:/app/.data
     expose:
-      - "3000"
+      - "${APP_PORT:-3000}"
     restart: unless-stopped
 
 volumes:
