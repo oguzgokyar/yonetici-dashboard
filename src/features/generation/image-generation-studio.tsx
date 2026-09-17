@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import {
-  ArrowRight, Check, ChevronDown, Clock3, Download, History, ImageIcon, Info, LayoutTemplate, Lightbulb, LoaderCircle, Palette,
+  ArrowRight, Check, ChevronDown, Clock3, Download, History, ImageIcon, Info, Lightbulb, LoaderCircle,
   Plus, RefreshCw, Settings2, Sparkles, WandSparkles, X,
 } from "lucide-react";
 import { useProjects } from "@/features/projects/projects-context";
@@ -22,13 +22,13 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
   const { getProject } = useProjects();
   const project = getProject(projectId);
   const [prompt, setPrompt] = useState("");
+  const [contentType, setContentType] = useState("Otomatik");
   const [selectedFields, setSelectedFields] = useState<BrandKey[]>(["logo", "brandName", "website"]);
   const [platform, setPlatform] = useState("Instagram dikey gönderi");
   const [ratio, setRatio] = useState("4:5");
   const [purpose, setPurpose] = useState("Ürün tanıtımı");
   const [style, setStyle] = useState("Modern ve minimalist");
   const [provider, setProvider] = useState("Otomatik");
-  const [mode, setMode] = useState<"safe" | "free">("safe");
   const [count, setCount] = useState(2);
   const [message, setMessage] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -62,7 +62,7 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
     if (!prompt.trim()) { setMessage("Önce ürün veya içerik bilgisini prompt alanına yazın."); return; }
     setIdeasOpen(true); setIdeasView("suggested"); setIdeasLoading(true); setMessage("");
     try {
-      const response = await fetch("/api/ai/content-ideas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, prompt: prompt.trim() }) });
+      const response = await fetch("/api/ai/content-ideas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, prompt: prompt.trim(), contentType }) });
       const body = await response.json() as { ok: boolean; message?: string; ideas?: ContentIdea[] };
       if (!response.ok || !body.ok || !body.ideas) throw new Error(body.message || "İçerik fikirleri üretilemedi.");
       setIdeas((current) => [...body.ideas!, ...current]);
@@ -83,7 +83,7 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
     if (!prompt.trim()) { setMessage("Geliştirmek için önce bir prompt yazın veya içerik fikri seçin."); return; }
     setEnhancing(true); setMessage("");
     try {
-      const response = await fetch("/api/ai/prompts/enhance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, prompt: prompt.trim(), selectedFields, idea: activeIdea ? { title: activeIdea.title, concept: activeIdea.concept, visualDirection: activeIdea.visualDirection } : undefined }) });
+      const response = await fetch("/api/ai/prompts/enhance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, prompt: prompt.trim(), contentType, selectedFields, idea: activeIdea ? { title: activeIdea.title, concept: activeIdea.concept, visualDirection: activeIdea.visualDirection } : undefined }) });
       const body = await response.json() as { ok: boolean; prompt?: string; message?: string };
       if (!response.ok || !body.ok || !body.prompt) throw new Error(body.message || "Prompt geliştirilemedi.");
       setPrompt(body.prompt); setMessage("Prompt, seçilen marka kaynakları ve içerik fikrine göre geliştirildi.");
@@ -97,9 +97,9 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
     setGenerating(true); setMessage(""); setResults([]);
     const brand = project!.brand;
     const selectedBrand = selectedFields.filter((key) => brand[key]).map((key) => `${brandFields.find((item) => item.key === key)?.label}: ${brand[key]}`).join("; ");
-    const finalPrompt = `${prompt.trim()}\nReklam amacı: ${purpose}. Görsel stil: ${style}. Platform: ${platform}, oran: ${ratio}. ${mode === "safe" ? "Görselin içinde yazı veya yapay logo üretme; metin ve marka öğeleri sonradan eklenecek, yerleşim için temiz negatif alan bırak." : "Tamamlanmış bir sosyal medya reklam kreatifi oluştur."}${selectedBrand ? ` Marka bağlamı: ${selectedBrand}.` : ""}`;
+    const finalPrompt = `${prompt.trim()}\nİçerik tipi: ${contentType}. Reklam amacı: ${purpose}. Tercih edilen yorum: ${style}. Platform: ${platform}, oran: ${ratio}. Kayıtlı marka konseptini kesin biçimde koru. Görsel modelinin sahneye metin, logo, harf, sayı, renk kodu, filigran veya arayüz öğesi çizmesine izin verme; doğrulanmış marka kaynakları uygulama tarafından sonradan eklenecek.${selectedBrand ? ` Kullanılacak doğrulanmış marka kaynakları: ${selectedBrand}.` : ""}`;
     try {
-      const response = await fetch("/api/ai/images/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, prompt: finalPrompt, ratio, count, settings: { platform, purpose, style, mode, selectedFields } }) });
+      const response = await fetch("/api/ai/images/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, prompt: finalPrompt, ratio, count, settings: { platform, purpose, style, contentType, selectedFields } }) });
       const body = await response.json() as { ok: boolean; message?: string; model?: string; assets?: { id: string; url: string; mimeType: string }[] };
       if (!response.ok || !body.ok || !body.assets?.length) { setMessage(body.message || "Görsel üretilemedi."); return; }
       setResults(body.assets); setUsedModel(body.model || "");
@@ -110,7 +110,9 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
   return (
     <div className="generation-studio">
       <section className="generation-controls">
-        <div className="generation-control-header"><div><span>KREATİF BRİFİ</span><h2>Yeni görsel üret</h2></div><WandSparkles size={21} /></div>
+        <div className="generation-control-header"><div><span>HIZLI MOD</span><h2>Yeni görsel üret</h2></div><WandSparkles size={21} /></div>
+
+        <div className="brand-concept-status"><span style={{ background: available.primaryColor }}><Sparkles size={13} /></span><div><strong>{project.brandConcept.summary ? "Marka konsepti aktif" : "Temel marka konsepti"}</strong><small>{project.brandConcept.summary || "Marka bilgilerine göre güvenli görsel dil uygulanacak."}</small></div><Link href={`/projects/${projectId}/settings`}>Düzenle</Link></div>
 
         <div className="control-section">
           <div className="control-title"><span>Marka kaynakları</span><Link href={`/projects/${projectId}/settings`}>Düzenle</Link></div>
@@ -132,15 +134,8 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
           <button type="button" className="idea-button" onClick={suggestIdeas} disabled={ideasLoading}>{ideasLoading ? <LoaderCircle className="spin" size={15} /> : <Lightbulb size={15} />}{ideasLoading ? "Yeni fikirler hazırlanıyor" : "Öneri içerik fikri al"}</button>
         </div>
 
-        <div className="control-section">
-          <div className="control-title"><span>Üretim biçimi</span></div>
-          <div className="mode-switch">
-            <button type="button" className={mode === "safe" ? "active" : ""} onClick={() => setMode("safe")}><LayoutTemplate size={16} /><span><strong>Marka Güvenli</strong><small>Metin ve logo sonradan yerleşir</small></span></button>
-            <button type="button" className={mode === "free" ? "active" : ""} onClick={() => setMode("free")}><Palette size={16} /><span><strong>Serbest AI</strong><small>Tüm kreatifi AI üretir</small></span></button>
-          </div>
-        </div>
-
         <div className="attribute-grid">
+          <SelectField label="İçerik tipi" value={contentType} onChange={setContentType} options={["Otomatik", "Problem–çözüm", "Öncesi–sonrası", "Tamamlanan proje", "Sık sorulan soru", "Soru / etkileşim", "Ürün / hizmet tanıtımı", "Fayda odaklı"]} />
           <SelectField label="Platform" value={platform} onChange={(value) => { setPlatform(value); const map: Record<string,string> = { "Instagram dikey gönderi":"4:5", "Instagram Story / Reels":"9:16", "Instagram kare gönderi":"1:1", "Pinterest Pin":"2:3", "LinkedIn gönderisi":"1:1" }; setRatio(map[value] || "1:1"); }} options={["Instagram dikey gönderi", "Instagram Story / Reels", "Instagram kare gönderi", "Pinterest Pin", "LinkedIn gönderisi"]} />
           <SelectField label="Oran" value={ratio} onChange={setRatio} options={["1:1", "4:5", "9:16", "2:3", "16:9"]} />
           <SelectField label="Amaç" value={purpose} onChange={setPurpose} options={["Ürün tanıtımı", "Hizmet tanıtımı", "Kampanya / indirim", "Fayda odaklı", "Problem–çözüm", "Marka bilinirliği"]} />
@@ -159,7 +154,7 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
           <div className="empty-canvas"><div className="canvas-glow" style={{ background: available.primaryColor }} /><ImageIcon size={38} /><span><Sparkles size={13} />AI KREATİF STÜDYOSU</span></div>
           <h3>İlk kreatifinizi oluşturun</h3>
           <p>Soldaki briefi tamamlayın. Üretilen görseller burada yan yana görüntülenecek.</p>
-          <div className="active-brief"><span><Settings2 size={14} />{platform}</span><span>{ratio}</span><span>{mode === "safe" ? "Marka Güvenli" : "Serbest AI"}</span></div>
+          <div className="active-brief"><span><Settings2 size={14} />{platform}</span><span>{ratio}</span><span>Marka konsepti aktif</span></div>
         </div>}
       </section>
 

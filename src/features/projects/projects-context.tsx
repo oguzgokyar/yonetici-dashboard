@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { BrandConcept, emptyBrandConcept, normalizeBrandConcept } from "@/lib/brand-concept";
 
 export type BrandProfile = {
   brandName: string;
@@ -23,13 +24,14 @@ export type Project = {
   name: string;
   createdAt: string;
   brand: BrandProfile;
+  brandConcept: BrandConcept;
 };
 
 type ProjectsContextValue = {
   projects: Project[];
   ready: boolean;
   createProject: (name: string) => Project;
-  updateProject: (id: string, updates: Partial<Pick<Project, "name" | "brand">>) => void;
+  updateProject: (id: string, updates: Partial<Pick<Project, "name" | "brand" | "brandConcept">>) => void;
   deleteProject: (id: string) => void;
   getProject: (id: string) => Project | undefined;
 };
@@ -44,7 +46,7 @@ const emptyBrand: BrandProfile = {
 };
 
 function normalizeProject(project: Project): Project {
-  return { ...project, brand: { ...emptyBrand, ...project.brand } };
+  return { ...project, brand: { ...emptyBrand, ...project.brand }, brandConcept: normalizeBrandConcept(project.brandConcept) };
 }
 
 const initialProjects: Project[] = [
@@ -67,6 +69,7 @@ const initialProjects: Project[] = [
       secondaryColor: "#171826",
       defaultCta: "Projenizi konuşalım",
     },
+    brandConcept: { ...emptyBrandConcept, summary: "Yalın, yaratıcı ve kendinden emin; modern dijital markalara uygun ferah kompozisyonlar, güçlü tipografi ve kontrollü mor vurgular.", personality: "Yaratıcı, modern, güven veren", visualStyle: "Minimal, ferah, güçlü tipografik hiyerarşi", photographyStyle: "Doğal ışıklı modern çalışma ve yaşam alanları", updatedAt: "2026-09-17T00:00:00.000Z" },
   },
   {
     id: "atlas-coffee",
@@ -87,6 +90,7 @@ const initialProjects: Project[] = [
       secondaryColor: "#38271f",
       defaultCta: "Menüyü keşfet",
     },
+    brandConcept: emptyBrandConcept,
   },
 ];
 
@@ -141,6 +145,7 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
         name: name.trim(),
         createdAt: new Date().toISOString(),
         brand: emptyBrand,
+        brandConcept: emptyBrandConcept,
       };
       setProjects((current) => [project, ...current]);
       return project;

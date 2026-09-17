@@ -1,11 +1,12 @@
 import net from "node:net";
 import { getDatabase } from "@/lib/server/database";
 import { decryptSecret } from "@/lib/server/secrets";
+import { BrandConcept, normalizeBrandConcept } from "@/lib/brand-concept";
 
 export const runtime = "nodejs";
 
 type ProviderRow = { base_url: string; encrypted_api_key: string; text_model: string };
-type BrandResult = { brandName?: string; phone?: string; email?: string; address?: string; industry?: string; description?: string; audience?: string; tone?: string; primaryColor?: string; secondaryColor?: string; defaultCta?: string; logo?: string };
+type BrandResult = { brandName?: string; phone?: string; email?: string; address?: string; industry?: string; description?: string; audience?: string; tone?: string; primaryColor?: string; secondaryColor?: string; defaultCta?: string; logo?: string; brandConcept?: Partial<BrandConcept> };
 
 function safeWebsite(value: string) {
   const normalized = /^https?:\/\//i.test(value) ? value : `https://${value}`;
@@ -67,12 +68,13 @@ export async function POST(request: Request) {
     }
     if (!model) return Response.json({ ok: false, message: "Analiz için kullanılabilecek metin modeli bulunamadı." }, { status: 422 });
 
-    const prompt = `Aşağıdaki web sitesi içeriğini incele ve marka bilgilerini çıkar. Yalnızca içerikte açıkça bulunan veya güçlü biçimde çıkarılabilen bilgileri kullan; bilgi uydurma. Türkçe, kısa ve pazarlama çalışmalarına uygun yaz. Sadece geçerli JSON döndür. Alanlar: brandName, phone, email, address, industry, description, audience, tone, primaryColor, secondaryColor, defaultCta. Bulamadığın alanı boş string yap.\n\nSayfa başlığı: ${meta.title}\nMeta açıklaması: ${meta.description}\nURL: ${website.toString()}\n\nİçerik:\n${content}`;
+    const prompt = `Aşağıdaki web sitesi içeriğini incele; marka bilgilerini çıkar ve aynı anda kısa bir marka konsepti belirle. Yalnızca içerikte açıkça bulunan bilgileri kullan, iletişim bilgisi veya iddia uydurma. Görsel dil için tasarım, sektör ve kullanılan anlatımdan makul çıkarım yapabilirsin. Türkçe ve kısa yaz. Sadece geçerli JSON döndür.\n\nJSON yapısı: {"brandName":"","phone":"","email":"","address":"","industry":"","description":"","audience":"","tone":"","primaryColor":"#RRGGBB","secondaryColor":"#RRGGBB","defaultCta":"","brandConcept":{"summary":"tek paragraf kısa konsept","personality":"3-5 sıfat","visualStyle":"kısa tasarım dili","photographyStyle":"kısa fotoğraf yaklaşımı","primaryColor":"#RRGGBB","secondaryColor":"#RRGGBB","accentColor":"#RRGGBB"}}. Bulamadığın marka bilgi alanını boş string yap.\n\nSayfa başlığı: ${meta.title}\nMeta açıklaması: ${meta.description}\nURL: ${website.toString()}\n\nİçerik:\n${content}`;
     const aiResponse = await fetch(`${baseUrl}/chat/completions`, { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model, temperature: 0.2, max_tokens: 900, messages: [{ role: "system", content: "Sen bir marka araştırma uzmanısın. Yanıtın yalnızca JSON olmalı." }, { role: "user", content: prompt }] }), signal: AbortSignal.timeout(45_000) });
     const aiBody = await aiResponse.json() as { choices?: { message?: { content?: string } }[]; error?: { message?: string } };
     if (!aiResponse.ok) return Response.json({ ok: false, message: "AI analizi tamamlanamadı." }, { status: 502 });
     const result = parseJson(aiBody.choices?.[0]?.message?.content || "");
     if (meta.logo) result.logo = meta.logo;
+    result.brandConcept = normalizeBrandConcept({ ...result.brandConcept, primaryColor: result.brandConcept?.primaryColor || result.primaryColor, secondaryColor: result.brandConcept?.secondaryColor || result.secondaryColor, updatedAt: new Date().toISOString() });
     return Response.json({ ok: true, brand: result, model, source: website.toString() });
   } catch (error) {
     const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");

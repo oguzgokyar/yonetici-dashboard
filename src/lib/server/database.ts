@@ -9,6 +9,10 @@ fs.mkdirSync(dataDir, { recursive: true });
 const globalDatabase = globalThis as typeof globalThis & { __yoneticiDb?: DatabaseSync };
 
 function runMigrations(database: DatabaseSync) {
+  const projectColumns = database.prepare("PRAGMA table_info(projects)").all() as unknown as { name: string }[];
+  if (projectColumns.length && !projectColumns.some((column) => column.name === "brand_concept_json")) {
+    database.exec("ALTER TABLE projects ADD COLUMN brand_concept_json TEXT NOT NULL DEFAULT '{}'");
+  }
   database.exec(`
     CREATE TABLE IF NOT EXISTS content_ideas (
       id TEXT PRIMARY KEY,
@@ -48,7 +52,8 @@ export function getDatabase() {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      brand_json TEXT NOT NULL
+      brand_json TEXT NOT NULL,
+      brand_concept_json TEXT NOT NULL DEFAULT '{}'
     );
     CREATE TABLE IF NOT EXISTS generation_jobs (
       id TEXT PRIMARY KEY,

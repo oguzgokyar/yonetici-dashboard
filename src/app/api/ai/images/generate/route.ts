@@ -4,11 +4,14 @@ import path from "node:path";
 import { getDatabase } from "@/lib/server/database";
 import { decryptSecret } from "@/lib/server/secrets";
 import { applyBrandOverlay } from "@/lib/server/brand-overlay";
+import { brandConceptInstruction } from "@/lib/brand-concept";
+import { completeText, parseJsonResponse } from "@/lib/server/cliproxy-text";
 
 export const runtime = "nodejs";
 type ProviderRow = { base_url: string; encrypted_api_key: string; image_model: string };
 type ImageItem = { b64_json?: string; url?: string; mime_type?: string };
-type ProjectRow = { brand_json: string };
+type ProjectRow = { brand_json: string; brand_concept_json: string };
+type CreativePlan = { backgroundPrompt: string; headline: string; supportingText: string; cta: string };
 
 function dimensions(ratio: string) {
   if (ratio === "9:16" || ratio === "2:3") return "1024x1536";
@@ -30,11 +33,20 @@ export async function POST(request: Request) {
   const jobId = crypto.randomUUID();
   const now = new Date().toISOString();
   const database = getDatabase();
-  const project = database.prepare("SELECT brand_json FROM projects WHERE id = ?").get(input.projectId) as ProjectRow | undefined;
+  const project = database.prepare("SELECT brand_json, brand_concept_json FROM projects WHERE id = ?").get(input.projectId) as ProjectRow | undefined;
   if (!project) return Response.json({ ok: false, message: "Proje bulunamadı." }, { status: 404 });
   const brand = JSON.parse(project.brand_json) as Record<string, string>;
+  const brandConcept = JSON.parse(project.brand_concept_json || "{}") as Record<string, string>;
   const selectedFields = Array.isArray(input.settings?.selectedFields) ? input.settings.selectedFields.filter((item): item is string => typeof item === "string") : [];
-  database.prepare("INSERT INTO generation_jobs (id, project_id, type, provider, model, status, prompt, request_json, created_at) VALUES (?, ?, 'image', 'cliproxy', '', 'running', ?, ?, ?)").run(jobId, input.projectId, input.prompt.trim(), JSON.stringify(input.settings || {}), now);
+  let creativePlan: CreativePlan = { backgroundPrompt: input.prompt.trim(), headline: "", supportingText: "", cta: brand.defaultCta || "" };
+  try {
+    const { content } = await completeText("Sen Türkçe sosyal medya reklam kreatifleri hazırlayan bir metin yazarı ve sanat direktörüsün. Yalnızca geçerli JSON döndür.", `Kullanıcı briefini, görsel zeminden ayrı ve güvenli bir kreatif plana dönüştür. Görselde gösterilecek bütün metinler doğal ve doğru Türkçe olmalı. İngilizce veya başka dil kullanma; renk kodlarını, teknik prompt ifadelerini, kamera terimlerini ve marka konsepti yönergelerini görünür metne taşıma. Verilmeyen fiyat, indirim, garanti, istatistik veya iddia uydurma. Başlık en fazla 55, destek metni 110, CTA 30 karakter olsun. Arka plan promptunda hiçbir yazı, logo, harf, sayı, tabela, ikon veya filigran isteme.\n\nBrief:\n${input.prompt.trim()}\n\nMarka: ${brand.brandName || ""}\nSektör: ${brand.industry || ""}\nVarsayılan CTA: ${brand.defaultCta || "Detaylı bilgi alın"}\n\nJSON: {"backgroundPrompt":"yalnızca sahne, kompozisyon, ışık ve atmosferi anlatan Türkçe prompt","headline":"Türkçe reklam başlığı","supportingText":"Türkçe kısa destek metni","cta":"Türkçe CTA"}`, { temperature: 0.25, maxTokens: 700 });
+    const parsed = parseJsonResponse<Partial<CreativePlan>>(content);
+    creativePlan = { backgroundPrompt: parsed.backgroundPrompt?.trim() || creativePlan.backgroundPrompt, headline: parsed.headline?.trim().slice(0, 80) || "", supportingText: parsed.supportingText?.trim().slice(0, 180) || "", cta: parsed.cta?.trim().slice(0, 45) || creativePlan.cta };
+  } catch { /* A clean no-text fallback is safer than model-generated typography. */ }
+  const finalPrompt = `${creativePlan.backgroundPrompt}\n\nZORUNLU MARKA SANAT YÖNETİMİ:\n${brandConceptInstruction(brandConcept)}\nBu konsepti renk, atmosfer ve kompozisyon boyunca tutarlı uygula. Yalnızca temiz, fotoğrafik veya illüstratif görsel zemini üret. GÖRSELİN İÇİNDE HİÇBİR YAZI ÜRETME: harf, kelime, başlık, açıklama, sayı, telefon, URL, renk kodu, etiket, tabela, logo, ikon, filigran veya arayüz öğesi bulunmasın. Metin ve gerçek logo uygulama tarafından sonradan eklenecek.`;
+  const requestSettings = { ...(input.settings || {}), brandConcept, creativePlan };
+  database.prepare("INSERT INTO generation_jobs (id, project_id, type, provider, model, status, prompt, request_json, created_at) VALUES (?, ?, 'image', 'cliproxy', '', 'running', ?, ?, ?)").run(jobId, input.projectId, finalPrompt, JSON.stringify(requestSettings), now);
 
   try {
     const apiKey = decryptSecret(provider.encrypted_api_key);
@@ -53,7 +65,7 @@ export async function POST(request: Request) {
     if (/gemini.*image/i.test(model)) {
       const nativeBase = new URL(baseUrl).origin;
       const amount = Math.min(Math.max(input.count || 1, 1), 4);
-      const responses = await Promise.all(Array.from({ length: amount }, () => fetch(`${nativeBase}/v1beta/models/${encodeURIComponent(model)}:generateContent`, { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: input.prompt!.trim() }] }], generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio: geminiRatio(input.ratio || "1:1") } } }), signal: AbortSignal.timeout(180_000) })));
+      const responses = await Promise.all(Array.from({ length: amount }, () => fetch(`${nativeBase}/v1beta/models/${encodeURIComponent(model)}:generateContent`, { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: finalPrompt }] }], generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio: geminiRatio(input.ratio || "1:1") } } }), signal: AbortSignal.timeout(180_000) })));
       for (const response of responses) {
         const body = await response.json() as { candidates?: { content?: { parts?: { inlineData?: { data?: string; mimeType?: string }; inline_data?: { data?: string; mime_type?: string } }[] } }[]; error?: { message?: string } };
         if (!response.ok) throw new Error(body.error?.message || `CliProxyAPI ${response.status} yanıtı verdi.`);
@@ -63,7 +75,7 @@ export async function POST(request: Request) {
         }
       }
     } else {
-      const response = await fetch(`${baseUrl}/images/generations`, { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model, prompt: input.prompt.trim(), n: Math.min(Math.max(input.count || 1, 1), 4), size: dimensions(input.ratio || "1:1"), response_format: "b64_json" }), signal: AbortSignal.timeout(180_000) });
+      const response = await fetch(`${baseUrl}/images/generations`, { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model, prompt: finalPrompt, n: Math.min(Math.max(input.count || 1, 1), 4), size: dimensions(input.ratio || "1:1"), response_format: "b64_json" }), signal: AbortSignal.timeout(180_000) });
       const body = await response.json() as { data?: ImageItem[]; error?: { message?: string } };
       if (!response.ok) throw new Error(body.error?.message || `CliProxyAPI ${response.status} yanıtı verdi.`);
       imageItems = body.data || [];
@@ -85,7 +97,7 @@ export async function POST(request: Request) {
         bytes = Buffer.from(await remote.arrayBuffer());
       } else continue;
       if (selectedFields.length) {
-        const branded = await applyBrandOverlay(bytes, brand, selectedFields);
+        const branded = await applyBrandOverlay(bytes, brand, selectedFields, brandConcept, creativePlan);
         bytes = branded.bytes;
       }
       const finalMimeType = selectedFields.length ? "image/png" : mimeType;
