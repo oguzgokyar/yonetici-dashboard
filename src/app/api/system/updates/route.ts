@@ -5,6 +5,12 @@ export const dynamic = "force-dynamic";
 
 const updateState = globalThis as typeof globalThis & { __yoneticiUpdateRunning?: boolean };
 
+function authorized(request: Request) {
+  const configuredToken = process.env.SYSTEM_UPDATE_TOKEN;
+  if (!configuredToken) return process.env.NODE_ENV !== "production";
+  return request.headers.get("x-update-token") === configuredToken;
+}
+
 function messageFrom(error: unknown) {
   if (!(error instanceof Error)) return "Güncelleme işlemi tamamlanamadı.";
   const stderr = (error as Error & { stderr?: string }).stderr?.trim();
@@ -20,6 +26,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (!authorized(request)) return Response.json({ ok: false, message: "Güncelleme yetkisi doğrulanamadı. Sunucudaki SYSTEM_UPDATE_TOKEN ile devam edin." }, { status: 401 });
   const input = await request.json().catch(() => ({})) as { action?: "check" | "update" };
   if (!input.action || !["check", "update"].includes(input.action)) return Response.json({ ok: false, message: "Geçersiz işlem." }, { status: 400 });
   if (updateState.__yoneticiUpdateRunning) return Response.json({ ok: false, message: "Başka bir güncelleme işlemi devam ediyor." }, { status: 409 });

@@ -10,6 +10,7 @@ npm run dev
 ```
 
 Kalıcı uygulama verileri `.data/` dizininde tutulur ve GitHub'a gönderilmez. Üretimde `APP_ENCRYPTION_KEY` değişkenini güçlü ve kalıcı bir anahtarla tanımlayın.
+Üretim sunucusunda güncelleme işlemlerini korumak için ayrı bir güçlü `SYSTEM_UPDATE_TOKEN` değeri tanımlayın.
 
 ## Sunucu güncellemeleri
 

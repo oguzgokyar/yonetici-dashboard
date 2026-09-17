@@ -12,6 +12,7 @@ export function SystemUpdates() {
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState<"loading" | "check" | "update" | null>("loading");
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [adminToken, setAdminToken] = useState("");
 
   useEffect(() => {
     fetch("/api/system/updates").then((response) => response.json()).then((data) => {
@@ -22,7 +23,7 @@ export function SystemUpdates() {
   async function run(action: "check" | "update") {
     setBusy(action); setResult(null);
     try {
-      const response = await fetch("/api/system/updates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
+      const response = await fetch("/api/system/updates", { method: "POST", headers: { "Content-Type": "application/json", ...(adminToken ? { "x-update-token": adminToken } : {}) }, body: JSON.stringify({ action }) });
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.message || "İşlem tamamlanamadı.");
       setStatus(data.status);
@@ -41,6 +42,7 @@ export function SystemUpdates() {
         <div><span><CloudDownload size={15} /> GitHub / main</span><strong>{status?.latestCommit || "Henüz kontrol edilmedi"}</strong><small>{status?.latestMessage || "Kontrol ederek son sürümü alın"}</small></div>
       </div>
       <div className="repository-line"><GitBranch size={15} /><span><strong>{status?.branch || "Bağlı değil"}</strong><small>{status?.remoteUrl || "GitHub origin adresi bulunamadı"}</small></span>{status?.updateAvailable ? <b className="status-badge update">{status.behind} güncelleme</b> : status?.repositoryReady && status.latestCommit ? <b className="status-badge current"><Check size={12} /> Güncel</b> : null}</div>
+      <label className="update-token">Yönetici güncelleme anahtarı<input type="password" value={adminToken} onChange={(event) => setAdminToken(event.target.value)} placeholder="Üretim sunucusunda zorunlu" autoComplete="off" /><small>Bu değer kaydedilmez; yalnızca bu güncelleme isteğiyle sunucuya gönderilir.</small></label>
       {(status?.dirty || (status?.ahead ?? 0) > 0) && <div className="update-warning"><AlertTriangle size={16} /><span>{status?.dirty ? "Sunucuda yerel dosya değişiklikleri var. Güncellemeden önce bunları temizleyin." : "Sunucu dalı GitHub'dan ileride; otomatik güncelleme güvenlik için kapalı."}</span></div>}
       {result && <div className={`connection-result ${result.ok ? "success" : "error"}`}>{result.ok ? <Check size={16} /> : <AlertTriangle size={16} />}<span><strong>{result.ok ? "İşlem tamamlandı" : "İşlem durduruldu"}</strong><small>{result.message}</small></span></div>}
       <div className="update-actions"><button className="button secondary" onClick={() => run("check")} disabled={Boolean(busy) || !status?.repositoryReady || !status.remoteUrl}>{busy === "check" ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />}{busy === "check" ? "Kontrol ediliyor" : "Güncellemeleri kontrol et"}</button><button className="button primary" onClick={() => run("update")} disabled={Boolean(busy) || blocked || !status?.updateAvailable}>{busy === "update" ? <LoaderCircle className="spin" size={16} /> : <CloudDownload size={16} />}{busy === "update" ? "Güncelleniyor" : "Kararlı sürüme güncelle"}</button></div>
