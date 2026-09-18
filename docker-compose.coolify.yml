@@ -17,6 +17,8 @@ services:
       SOURCE_COMMIT: ${SOURCE_COMMIT:-unknown}
     volumes:
       - yonetici-data:/app/.data
+    ports:
+      - "${HOST_PORT:-3100}:${APP_PORT:-3000}"
     expose:
       - "${APP_PORT:-3000}"
     restart: unless-stopped
