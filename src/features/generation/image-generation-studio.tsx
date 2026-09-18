@@ -2,15 +2,17 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowRight, Check, ChevronDown, Clock3, Download, History, ImageIcon, Info, Lightbulb, LoaderCircle,
-  Plus, RefreshCw, Settings2, Sparkles, WandSparkles, X,
+  ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Download, History, ImageIcon, Info, Lightbulb, LoaderCircle,
+  Maximize2, Pencil, Plus, RefreshCw, Settings2, Sparkles, Trash2, WandSparkles, X,
 } from "lucide-react";
 import { useProjects } from "@/features/projects/projects-context";
 
 type BrandKey = "logo" | "brandName" | "phone" | "email" | "address" | "website";
 type ContentIdea = { id: string; sourcePrompt: string; title: string; concept: string; visualDirection: string; suggestedPrompt: string; status: "suggested" | "used"; createdAt: string; usedAt: string | null };
+type GeneratedAsset = { id: string; url: string; mimeType: string; jobId?: string; model?: string; prompt?: string; createdAt?: string; qaScore?: number };
+type RunningJob = { id: string; model: string; prompt: string; createdAt: string; progress: { phase?: string; completed?: number; total?: number; detail?: string; updatedAt?: string } };
 
 const brandFields: { key: BrandKey; label: string }[] = [
   { key: "logo", label: "Logo" }, { key: "brandName", label: "Marka adı" },
@@ -32,7 +34,15 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
   const [count, setCount] = useState(2);
   const [message, setMessage] = useState("");
   const [generating, setGenerating] = useState(false);
-  const [results, setResults] = useState<{ id: string; url: string; mimeType: string }[]>([]);
+  const [results, setResults] = useState<GeneratedAsset[]>([]);
+  const [history, setHistory] = useState<GeneratedAsset[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [runningJobs, setRunningJobs] = useState<RunningJob[]>([]);
+  const [lightboxId, setLightboxId] = useState<string | null>(null);
+  const [editTarget, setEditTarget] = useState<GeneratedAsset | null>(null);
+  const [editInstruction, setEditInstruction] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [usedModel, setUsedModel] = useState("");
   const [ideas, setIdeas] = useState<ContentIdea[]>([]);
   const [ideasOpen, setIdeasOpen] = useState(false);
@@ -42,11 +52,68 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
   const [activeIdea, setActiveIdea] = useState<ContentIdea | null>(null);
 
   const available = useMemo(() => project?.brand, [project]);
+  const currentIds = useMemo(() => new Set(results.map((item) => item.id)), [results]);
+  const previousAssets = useMemo(() => history.filter((item) => !currentIds.has(item.id)), [history, currentIds]);
+  const viewable = useMemo(() => [...results, ...previousAssets], [results, previousAssets]);
+  const lightboxIndex = lightboxId ? viewable.findIndex((item) => item.id === lightboxId) : -1;
+  const activeJob = runningJobs[0];
+  const isProducing = generating || runningJobs.length > 0;
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const response = await fetch(`/api/ai/images?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" });
+      const body = await response.json() as { ok: boolean; assets?: GeneratedAsset[]; runningJobs?: RunningJob[] };
+      if (body.ok && body.assets) setHistory(body.assets);
+      if (body.ok && runningJobs.length > 0 && !(body.runningJobs || []).length && body.assets?.length) setResults(body.assets.slice(0, Math.max(1, count)));
+      if (body.ok) setRunningJobs(body.runningJobs || []);
+    } catch { setMessage("Önceki görseller alınamadı."); }
+    finally { setHistoryLoading(false); }
+  }, [projectId, runningJobs.length, count]);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/ai/images?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" }).then((response) => response.json()).then((body: { ok: boolean; assets?: GeneratedAsset[]; runningJobs?: RunningJob[] }) => {
+      if (active && body.ok && body.assets) setHistory(body.assets);
+      if (active && body.ok) setRunningJobs(body.runningJobs || []);
+    }).catch(() => { if (active) setMessage("Önceki görseller alınamadı."); }).finally(() => { if (active) setHistoryLoading(false); });
+    return () => { active = false; };
+  }, [projectId]);
+  useEffect(() => {
+    if (!runningJobs.length && !generating) return;
+    const timer = window.setInterval(() => { void loadHistory(); }, 3000);
+    return () => window.clearInterval(timer);
+  }, [runningJobs.length, generating, loadHistory]);
   if (!project || !available) return <div className="overview-loading" />;
 
   function toggle(key: BrandKey) {
     if (!available?.[key]) return;
     setSelectedFields((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
+  }
+
+  async function deleteAsset(asset: GeneratedAsset) {
+    if (!window.confirm("Bu görsel kalıcı olarak silinsin mi?")) return;
+    setDeletingId(asset.id); setMessage("");
+    try {
+      const response = await fetch("/api/ai/images", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, assetId: asset.id }) });
+      const body = await response.json() as { ok: boolean; message?: string };
+      if (!response.ok || !body.ok) throw new Error(body.message || "Görsel silinemedi.");
+      setResults((current) => current.filter((item) => item.id !== asset.id)); setHistory((current) => current.filter((item) => item.id !== asset.id));
+      if (lightboxId === asset.id) setLightboxId(null);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Görsel silinemedi."); }
+    finally { setDeletingId(null); }
+  }
+
+  async function editAsset() {
+    if (!editTarget || !editInstruction.trim()) return;
+    setEditing(true); setMessage("");
+    try {
+      const response = await fetch("/api/ai/images/edit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, assetId: editTarget.id, instruction: editInstruction.trim() }) });
+      const body = await response.json() as { ok: boolean; message?: string; asset?: GeneratedAsset };
+      if (!response.ok || !body.ok || !body.asset) throw new Error(body.message || "Görsel düzenlenemedi.");
+      setResults([body.asset]); setHistory((current) => [body.asset!, ...current]); setEditTarget(null); setEditInstruction(""); setMessage("Düzenlenen görsel yeni sürüm olarak kaydedildi.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Görsel düzenlenemedi."); }
+    finally { setEditing(false); }
   }
 
   async function loadIdeas(open = true) {
@@ -97,12 +164,12 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
     setGenerating(true); setMessage(""); setResults([]);
     const brand = project!.brand;
     const selectedBrand = selectedFields.filter((key) => brand[key]).map((key) => `${brandFields.find((item) => item.key === key)?.label}: ${brand[key]}`).join("; ");
-    const finalPrompt = `${prompt.trim()}\nİçerik tipi: ${contentType}. Reklam amacı: ${purpose}. Tercih edilen yorum: ${style}. Platform: ${platform}, oran: ${ratio}. Kayıtlı marka konseptini kesin biçimde koru. Görsel modelinin sahneye metin, logo, harf, sayı, renk kodu, filigran veya arayüz öğesi çizmesine izin verme; doğrulanmış marka kaynakları uygulama tarafından sonradan eklenecek.${selectedBrand ? ` Kullanılacak doğrulanmış marka kaynakları: ${selectedBrand}.` : ""}`;
+    const finalPrompt = `${prompt.trim()}\nİçerik tipi: ${contentType}. Reklam amacı: ${purpose}. Tercih edilen yorum: ${style}. Platform: ${platform}, oran: ${ratio}. Kayıtlı marka konseptini kesin biçimde koru. Bitmiş reklam kreatifini metinleri ve seçilen marka kaynaklarıyla birlikte özgün bir kompozisyon olarak render et; sabit şablon kullanma.${selectedBrand ? ` Kullanılacak doğrulanmış marka kaynakları: ${selectedBrand}.` : ""}`;
     try {
       const response = await fetch("/api/ai/images/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, prompt: finalPrompt, ratio, count, settings: { platform, purpose, style, contentType, selectedFields } }) });
       const body = await response.json() as { ok: boolean; message?: string; model?: string; assets?: { id: string; url: string; mimeType: string }[] };
       if (!response.ok || !body.ok || !body.assets?.length) { setMessage(body.message || "Görsel üretilemedi."); return; }
-      setResults(body.assets); setUsedModel(body.model || "");
+      setResults(body.assets); setUsedModel(body.model || ""); await loadHistory();
     } catch { setMessage("Görsel üretim isteği tamamlanamadı."); }
     finally { setGenerating(false); }
   }
@@ -145,18 +212,34 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
         </div>
 
         {message && <div className="generation-notice"><Info size={15} /><span>{message}</span></div>}
-        <button type="button" className="generate-button" onClick={generate} disabled={generating}>{generating ? <LoaderCircle className="spin" size={18} /> : <Sparkles size={18} />}{generating ? "Görsel üretiliyor" : "Görsel üret"}<span>{count} varyasyon</span></button>
+        <button type="button" className="generate-button" onClick={generate} disabled={isProducing}>{isProducing ? <LoaderCircle className="spin" size={18} /> : <Sparkles size={18} />}{isProducing ? "Üretim devam ediyor" : "Görsel üret"}<span>{isProducing ? `${activeJob?.progress.completed || 0}/${activeJob?.progress.total || count}` : `${count} varyasyon`}</span></button>
       </section>
 
       <section className="generation-results">
         <div className="results-toolbar"><div><h2>Üretilen görseller</h2><span>Bu projeye ait kreatifler</span></div><div className="result-tabs"><button className="active">Son üretim</button><button>Geçmiş</button></div></div>
-        {results.length ? <div className="generated-gallery">{results.map((result) => <article className="generated-card" key={result.id}><div className="generated-image"><Image src={result.url} alt="AI ile üretilen reklam kreatifi" fill sizes="(max-width: 760px) 100vw, 40vw" unoptimized /></div><div><span>{usedModel || "CliProxyAPI"}</span><a href={result.url} download={`kreatif-${result.id}.png`}><Download size={14} />İndir</a></div></article>)}</div> : <div className="results-empty">
+        {isProducing && <ProductionStatus job={activeJob} requestedCount={count} />}
+        {results.length > 0 && <div className="generated-gallery">{results.map((result) => <CreativeCard key={result.id} asset={result} model={result.model || usedModel} deleting={deletingId === result.id} onView={() => setLightboxId(result.id)} onEdit={() => { setEditTarget(result); setEditInstruction(""); }} onDelete={() => void deleteAsset(result)} />)}</div>}
+        {!results.length && !isProducing && <div className="results-empty">
           <div className="empty-canvas"><div className="canvas-glow" style={{ background: available.primaryColor }} /><ImageIcon size={38} /><span><Sparkles size={13} />AI KREATİF STÜDYOSU</span></div>
           <h3>İlk kreatifinizi oluşturun</h3>
           <p>Soldaki briefi tamamlayın. Üretilen görseller burada yan yana görüntülenecek.</p>
           <div className="active-brief"><span><Settings2 size={14} />{platform}</span><span>{ratio}</span><span>Marka konsepti aktif</span></div>
         </div>}
       </section>
+
+      <section className="generation-history">
+        <div className="history-heading"><div><span><History size={16} /></span><div><h2>Önceki üretilen görseller</h2><p>Bu projede üretilen ve düzenlenen kreatifler kalıcı olarak saklanır.</p></div></div><button type="button" className="button secondary" onClick={() => void loadHistory()} disabled={historyLoading}>{historyLoading ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}Yenile</button></div>
+        {historyLoading && !history.length ? <div className="history-loading"><LoaderCircle className="spin" size={20} />Görsel arşivi yükleniyor</div> : previousAssets.length ? <div className="history-gallery">{previousAssets.map((asset) => <CreativeCard key={asset.id} asset={asset} deleting={deletingId === asset.id} onView={() => setLightboxId(asset.id)} onEdit={() => { setEditTarget(asset); setEditInstruction(""); }} onDelete={() => void deleteAsset(asset)} />)}</div> : <div className="history-empty"><ImageIcon size={23} /><span>Henüz önceki üretim bulunmuyor.</span></div>}
+      </section>
+
+      {lightboxIndex >= 0 && <div className="creative-lightbox" role="dialog" aria-modal="true" aria-label="Görsel önizleme" onMouseDown={(event) => { if (event.target === event.currentTarget) setLightboxId(null); }}>
+        <button type="button" className="lightbox-close" onClick={() => setLightboxId(null)} aria-label="Kapat"><X size={22} /></button>
+        {viewable.length > 1 && <button type="button" className="lightbox-nav previous" onClick={() => setLightboxId(viewable[(lightboxIndex - 1 + viewable.length) % viewable.length].id)} aria-label="Önceki görsel"><ChevronLeft size={26} /></button>}
+        <div className="lightbox-content"><Image src={viewable[lightboxIndex].url} alt="Tam ekran reklam kreatifi" fill sizes="100vw" unoptimized priority /><div><span>{lightboxIndex + 1} / {viewable.length}</span><a href={viewable[lightboxIndex].url} download={`kreatif-${viewable[lightboxIndex].id}.png`}><Download size={15} />İndir</a><button type="button" onClick={() => { setEditTarget(viewable[lightboxIndex]); setEditInstruction(""); setLightboxId(null); }}><Pencil size={15} />Düzenle</button></div></div>
+        {viewable.length > 1 && <button type="button" className="lightbox-nav next" onClick={() => setLightboxId(viewable[(lightboxIndex + 1) % viewable.length].id)} aria-label="Sonraki görsel"><ChevronRight size={26} /></button>}
+      </div>}
+
+      {editTarget && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !editing) setEditTarget(null); }}><section className="modal creative-edit-modal" role="dialog" aria-modal="true" aria-labelledby="creative-edit-title"><button className="icon-button modal-close" type="button" onClick={() => setEditTarget(null)} disabled={editing} aria-label="Kapat"><X size={18} /></button><div className="modal-icon"><Pencil size={20} /></div><h2 id="creative-edit-title">Görseli AI ile düzenle</h2><p>Değişmesini istediğiniz kısmı yazın. Orijinal görsel korunur ve düzenleme yeni sürüm olarak kaydedilir.</p><div className="edit-preview"><Image src={editTarget.url} alt="Düzenlenecek kreatif" fill sizes="160px" unoptimized /></div><label className="field-label">Düzenleme talimatı<textarea value={editInstruction} onChange={(event) => setEditInstruction(event.target.value)} placeholder="Örn. Başlığı biraz büyüt, logonun kontrastını artır ve arka planı gündüz atmosferine çevir." autoFocus /></label><div className="modal-actions"><button type="button" className="button secondary" onClick={() => setEditTarget(null)} disabled={editing}>Vazgeç</button><button type="button" className="button primary" onClick={() => void editAsset()} disabled={editing || !editInstruction.trim()}>{editing ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />}{editing ? "Düzenleniyor" : "Yeni sürüm oluştur"}</button></div></section></div>}
 
       {ideasOpen && <div className="modal-backdrop idea-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIdeasOpen(false); }}><section className="idea-modal" role="dialog" aria-modal="true" aria-labelledby="idea-modal-title">
         <button className="icon-button idea-modal-close" type="button" onClick={() => setIdeasOpen(false)} aria-label="Kapat"><X size={18} /></button>
@@ -167,6 +250,17 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
       </section></div>}
     </div>
   );
+}
+
+function CreativeCard({ asset, model, deleting, onView, onEdit, onDelete }: { asset: GeneratedAsset; model?: string; deleting: boolean; onView: () => void; onEdit: () => void; onDelete: () => void }) {
+  return <article className="generated-card"><button type="button" className="generated-image" onClick={onView} aria-label="Görseli tam ekran aç"><Image src={asset.url} alt="AI ile üretilen reklam kreatifi" fill sizes="(max-width: 760px) 100vw, 30vw" unoptimized /><span><Maximize2 size={15} />Tam ekran</span></button><div className="creative-card-footer"><span>{asset.createdAt ? new Date(asset.createdAt).toLocaleDateString("tr-TR") : model || "CliProxyAPI"}</span><div><button type="button" onClick={onEdit} title="Düzenle"><Pencil size={14} /></button><a href={asset.url} download={`kreatif-${asset.id}.png`} title="İndir"><Download size={14} /></a><button type="button" className="danger" onClick={onDelete} disabled={deleting} title="Sil">{deleting ? <LoaderCircle className="spin" size={14} /> : <Trash2 size={14} />}</button></div></div></article>;
+}
+
+function ProductionStatus({ job, requestedCount }: { job?: RunningJob; requestedCount: number }) {
+  const phase = job?.progress.phase || "planning"; const completed = job?.progress.completed || 0; const total = job?.progress.total || requestedCount;
+  const phases = [{ key: "planning", label: "Kreatif planı" }, { key: "rendering", label: "AI render" }, { key: "checking", label: "Kalite kontrolü" }, { key: "correcting", label: "İyileştirme" }];
+  const currentIndex = Math.max(0, phases.findIndex((item) => item.key === phase));
+  return <div className="production-status"><div className="production-visual"><div className="production-orbit"><Sparkles size={25} /></div><span className="production-scan" /></div><div className="production-copy"><span>ÜRETİM DEVAM EDİYOR</span><h3>{job?.progress.detail || "Kreatif fikir ve sanat yönetimi hazırlanıyor"}</h3><p>Sayfadan ayrılabilirsiniz. Üretim sunucuda devam eder ve tamamlandığında görsel arşivine otomatik eklenir.</p><div className="production-steps">{phases.map((item, index) => <span key={item.key} className={index < currentIndex ? "done" : index === currentIndex ? "active" : ""}><i>{index < currentIndex ? <Check size={10} /> : index + 1}</i>{item.label}</span>)}</div><div className="production-progress"><span style={{ width: `${Math.max(8, Math.min(100, total ? (completed / total) * 100 : 8))}%` }} /></div><small>{completed}/{total} görsel tamamlandı {job?.model ? `• ${job.model}` : ""}</small></div></div>;
 }
 
 function SelectField({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {

@@ -6,13 +6,19 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "remotion:studio": "remotion studio src/remotion/index.ts"
   },
   "dependencies": {
+    "@remotion/bundler": "4.0.484",
+    "@remotion/cli": "4.0.484",
+    "@remotion/player": "4.0.484",
+    "@remotion/renderer": "4.0.484",
     "lucide-react": "^0.468.0",
     "next": "^16.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "remotion": "4.0.484",
     "sharp": "^0.35.4"
   },
   "devDependencies": {

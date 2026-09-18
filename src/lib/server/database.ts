@@ -13,6 +13,11 @@ function runMigrations(database: DatabaseSync) {
   if (projectColumns.length && !projectColumns.some((column) => column.name === "brand_concept_json")) {
     database.exec("ALTER TABLE projects ADD COLUMN brand_concept_json TEXT NOT NULL DEFAULT '{}'");
   }
+  const providerColumns = database.prepare("PRAGMA table_info(ai_provider_configs)").all() as unknown as { name: string }[];
+  if (providerColumns.length && !providerColumns.some((column) => column.name === "vision_model")) database.exec("ALTER TABLE ai_provider_configs ADD COLUMN vision_model TEXT NOT NULL DEFAULT ''");
+  if (providerColumns.length && !providerColumns.some((column) => column.name === "edit_model")) database.exec("ALTER TABLE ai_provider_configs ADD COLUMN edit_model TEXT NOT NULL DEFAULT ''");
+  const jobColumns = database.prepare("PRAGMA table_info(generation_jobs)").all() as unknown as { name: string }[];
+  if (jobColumns.length && !jobColumns.some((column) => column.name === "progress_json")) database.exec("ALTER TABLE generation_jobs ADD COLUMN progress_json TEXT NOT NULL DEFAULT '{}'");
   database.exec(`
     CREATE TABLE IF NOT EXISTS content_ideas (
       id TEXT PRIMARY KEY,
@@ -45,6 +50,8 @@ export function getDatabase() {
       encrypted_api_key TEXT,
       text_model TEXT NOT NULL DEFAULT '',
       image_model TEXT NOT NULL DEFAULT '',
+      vision_model TEXT NOT NULL DEFAULT '',
+      edit_model TEXT NOT NULL DEFAULT '',
       priority INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL
     );
@@ -65,6 +72,7 @@ export function getDatabase() {
       prompt TEXT NOT NULL,
       request_json TEXT NOT NULL DEFAULT '{}',
       response_json TEXT NOT NULL DEFAULT '{}',
+      progress_json TEXT NOT NULL DEFAULT '{}',
       error TEXT,
       created_at TEXT NOT NULL,
       completed_at TEXT

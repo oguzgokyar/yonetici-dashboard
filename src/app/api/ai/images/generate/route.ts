@@ -1,114 +1,112 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { getDatabase } from "@/lib/server/database";
-import { decryptSecret } from "@/lib/server/secrets";
-import { applyBrandOverlay } from "@/lib/server/brand-overlay";
+import sharp from "sharp";
 import { brandConceptInstruction } from "@/lib/brand-concept";
 import { completeText, parseJsonResponse } from "@/lib/server/cliproxy-text";
+import { getDatabase } from "@/lib/server/database";
+import { decryptSecret } from "@/lib/server/secrets";
+import { inspectCreative, loadMedia, MediaInput, renderCreative } from "@/lib/server/cliproxy-creative";
 
 export const runtime = "nodejs";
-type ProviderRow = { base_url: string; encrypted_api_key: string; image_model: string };
-type ImageItem = { b64_json?: string; url?: string; mime_type?: string };
+type ProviderRow = { base_url: string; encrypted_api_key: string; text_model: string; image_model: string; vision_model: string; edit_model: string };
 type ProjectRow = { brand_json: string; brand_concept_json: string };
-type CreativePlan = { backgroundPrompt: string; headline: string; supportingText: string; cta: string };
+type CreativePlan = { conceptName: string; headline: string; supportingText: string; cta: string; artDirection: string; rationale: string };
+type Attempt = { number: number; model: string; qaModel: string; qa: { passed: boolean; score: number; issues: string[]; correction: string } | null };
 
-function dimensions(ratio: string) {
-  if (ratio === "9:16" || ratio === "2:3") return "1024x1536";
-  if (ratio === "16:9") return "1536x1024";
-  if (ratio === "4:5") return "1024x1536";
-  return "1024x1024";
+const labels: Record<string, string> = { brandName: "Marka adı", phone: "Telefon", email: "E-posta", website: "Web sitesi", address: "Adres" };
+const ratios = new Set(["1:1", "4:5", "9:16", "2:3", "16:9"]);
+function clean(value: unknown, max: number) { return typeof value === "string" ? value.trim().slice(0, max) : ""; }
+function normalizePlans(value: unknown, amount: number) {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => {
+    const item = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
+    return { conceptName: clean(item.conceptName, 80), headline: clean(item.headline, 70), supportingText: clean(item.supportingText, 180), cta: clean(item.cta, 40), artDirection: clean(item.artDirection, 3000), rationale: clean(item.rationale, 500) };
+  }).filter((item) => item.conceptName && item.headline && item.supportingText && item.cta && item.artDirection).slice(0, amount);
 }
-
-function geminiRatio(ratio: string) {
-  return ["1:1", "4:5", "9:16", "2:3", "16:9"].includes(ratio) ? ratio : "1:1";
+async function availableModels(baseUrl: string, apiKey: string) {
+  const response = await fetch(`${baseUrl}/models`, { headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(12_000) });
+  if (!response.ok) return [];
+  const body = await response.json() as { data?: { id?: string }[] };
+  return body.data?.map((item) => item.id).filter((id): id is string => Boolean(id)) || [];
+}
+function requiredBrandLines(brand: Record<string, string>, selected: string[]) {
+  return selected.filter((key) => key !== "logo" && brand[key]).map((key) => `${labels[key] || key}: “${brand[key]}”`);
+}
+function updateProgress(jobId: string, phase: string, completed: number, total: number, detail: string) {
+  getDatabase().prepare("UPDATE generation_jobs SET progress_json=? WHERE id=?").run(JSON.stringify({ phase, completed, total, detail, updatedAt: new Date().toISOString() }), jobId);
+}
+function renderPrompt(plan: CreativePlan, brief: string, brand: Record<string, string>, concept: Record<string, string>, selected: string[], correction = "") {
+  const brandLines = requiredBrandLines(brand, selected);
+  return `Bitmiş, profesyonel bir sosyal medya reklam kreatifi render et. Tasarımı sen kur; hazır şablon, sabit alt bant, standart iletişim kartı veya tekrarlanan yerleşim kullanma. Fotoğraf, tipografi, logo ve marka bilgilerini tek bir özgün kompozisyonda bütünleştir.\n\nKREATİF BRİEFİ:\n${brief}\n\nSANAT YÖNETİMİ:\n${plan.artDirection}\n${brandConceptInstruction(concept)}\n\nGÖRSELDE HARF HARF AYNEN YER ALACAK TÜRKÇE METİNLER:\nBaşlık: “${plan.headline}”\nDestek metni: “${plan.supportingText}”\nCTA: “${plan.cta}”${brandLines.length ? `\n${brandLines.join("\n")}` : ""}\n\nKESİN ÜRETİM KURALLARI:\n- Yukarıda tırnak içinde verilen metinlerin yazımını değiştirme, çevirme, kısaltma veya yeni metin ekleme. Tırnak işaretleri yalnızca sınırı gösterir; onları görsele basma.\n- Görünen bütün yazılar yalnızca Türkçe olsun; renk kodu, tasarım notu, lorem ipsum, sahte iletişim bilgisi, filigran ve anlamsız karakter üretme.\n- Puntoyu çıktı ölçüsüne göre seç; başlık ilk bakışta, destek ve iletişim metinleri telefonda yakınlaştırmadan okunabilsin.\n- Her metin ve logo bulunduğu zemine karşı güçlü kontrast taşısın. Gerekirse tasarıma uygun aydınlık/koyu güvenli alan, lokal gradient, ince kontur veya doğal gölge kullan.\n${selected.includes("logo") ? "- Logo referans olarak eklenmiştir. Logoyu yeniden yazma veya bozma; oranını koru ve tasarımla doğal biçimde bütünleştir.\n" : ""}- Marka konseptini kesin uygula fakat tasarımı bir şablona sıkıştırma.\n- Çıktı yalnızca bitmiş reklam görseli olsun.${correction ? `\n\nÖNCEKİ RENDER KALİTE KONTROLÜNDEN GEÇMEDİ. Kompozisyonu iyileştirerek şu sorunları kesin düzelt:\n${correction}` : ""}`;
 }
 
 export async function POST(request: Request) {
   const input = await request.json() as { projectId?: string; prompt?: string; ratio?: string; count?: number; model?: string; settings?: Record<string, unknown> };
   if (!input.projectId || !input.prompt?.trim()) return Response.json({ ok: false, message: "Proje ve prompt gerekli." }, { status: 400 });
-  const provider = getDatabase().prepare("SELECT base_url, encrypted_api_key, image_model FROM ai_provider_configs WHERE provider = 'cliproxy' AND enabled = 1").get() as ProviderRow | undefined;
-  if (!provider?.base_url || !provider.encrypted_api_key) return Response.json({ ok: false, message: "CliProxyAPI ayarı kayıtlı veya etkin değil." }, { status: 409 });
-
-  const jobId = crypto.randomUUID();
-  const now = new Date().toISOString();
   const database = getDatabase();
-  const project = database.prepare("SELECT brand_json, brand_concept_json FROM projects WHERE id = ?").get(input.projectId) as ProjectRow | undefined;
+  const provider = database.prepare("SELECT base_url, encrypted_api_key, text_model, image_model, vision_model, edit_model FROM ai_provider_configs WHERE provider='cliproxy' AND enabled=1").get() as ProviderRow | undefined;
+  if (!provider?.base_url || !provider.encrypted_api_key) return Response.json({ ok: false, message: "CliProxyAPI ayarı kayıtlı veya etkin değil." }, { status: 409 });
+  const project = database.prepare("SELECT brand_json, brand_concept_json FROM projects WHERE id=?").get(input.projectId) as ProjectRow | undefined;
   if (!project) return Response.json({ ok: false, message: "Proje bulunamadı." }, { status: 404 });
+
   const brand = JSON.parse(project.brand_json) as Record<string, string>;
-  const brandConcept = JSON.parse(project.brand_concept_json || "{}") as Record<string, string>;
-  const selectedFields = Array.isArray(input.settings?.selectedFields) ? input.settings.selectedFields.filter((item): item is string => typeof item === "string") : [];
-  let creativePlan: CreativePlan = { backgroundPrompt: input.prompt.trim(), headline: "", supportingText: "", cta: brand.defaultCta || "" };
+  const concept = JSON.parse(project.brand_concept_json || "{}") as Record<string, string>;
+  const selected = Array.isArray(input.settings?.selectedFields) ? input.settings.selectedFields.filter((item): item is string => typeof item === "string" && ["logo", "brandName", "phone", "email", "website", "address"].includes(item) && Boolean(brand[item])) : [];
+  const amount = Math.min(Math.max(input.count || 1, 1), 4);
+  const ratio = ratios.has(input.ratio || "") ? input.ratio! : "1:1";
+  const apiKey = decryptSecret(provider.encrypted_api_key); const baseUrl = provider.base_url.replace(/\/+$/, "");
+  const models = await availableModels(baseUrl, apiKey);
+  const renderModel = input.model || provider.image_model || models.find((id) => /gemini-3\.1-flash-image|gemini-3-pro-image|gemini-2\.5-flash-image/i.test(id)) || models.find((id) => /gpt-image|image/i.test(id)) || "";
+  const visionModel = provider.vision_model || provider.text_model || models.find((id) => /gemini.*(?:pro|flash)(?!.*image)|gpt-4\.1|gpt-5/i.test(id)) || renderModel;
+  const editModel = provider.edit_model || renderModel;
+  if (!renderModel) return Response.json({ ok: false, message: "Render modeli bulunamadı. Sistem Ayarları > API Yönetimi bölümünden görsel modelini seçin." }, { status: 409 });
+  const logo = selected.includes("logo") ? await loadMedia(brand.logo) : null;
+  if (selected.includes("logo") && !logo) return Response.json({ ok: false, message: "Seçilen marka logosu render modeline hazırlanamadı. Proje Ayarları'ndan logoyu yenileyin." }, { status: 422 });
+
+  const jobId = crypto.randomUUID(); const now = new Date().toISOString();
+  database.prepare("INSERT INTO generation_jobs (id, project_id, type, provider, model, status, prompt, request_json, progress_json, created_at) VALUES (?, ?, 'image', 'cliproxy', ?, 'running', ?, ?, ?, ?)").run(jobId, input.projectId, renderModel, input.prompt.trim(), JSON.stringify({ ...(input.settings || {}), ratio, selectedFields: selected }), JSON.stringify({ phase: "planning", completed: 0, total: amount, detail: "Kreatif fikir ve sanat yönetimi hazırlanıyor", updatedAt: now }), now);
+
+  const plannerPrompt = `Aynı brief için ${amount} farklı reklam kreatifi planla. Yerleşim koordinatı veya şablon tarif etme; render modeline özgür ama uygulanabilir sanat yönetimi ver. Her varyasyon farklı görsel fikir ve kompozisyon kullansın. Görünen metin yalnızca doğal Türkçe olsun. Başlık en fazla 55, destek metni 120, CTA 28 karakter olsun. Uydurma iddia, sayı veya iletişim bilgisi yazma.\n\nBrief: ${input.prompt.trim()}\nMarka: ${brand.brandName || ""}\nSektör: ${brand.industry || ""}\nHedef kitle: ${brand.audience || ""}\nTon: ${brand.tone || ""}\nVarsayılan CTA: ${brand.defaultCta || "Detaylı bilgi alın"}\n${brandConceptInstruction(concept)}\n\nYalnızca JSON dizi döndür: [{"conceptName":"...","headline":"...","supportingText":"...","cta":"...","artDirection":"özgün sahne, kompozisyon, tipografi yaklaşımı, görsel hiyerarşi, marka entegrasyonu, ışık ve kontrast tarifi","rationale":"..."}]`;
+  let plans: CreativePlan[] = [];
   try {
-    const { content } = await completeText("Sen Türkçe sosyal medya reklam kreatifleri hazırlayan bir metin yazarı ve sanat direktörüsün. Yalnızca geçerli JSON döndür.", `Kullanıcı briefini, görsel zeminden ayrı ve güvenli bir kreatif plana dönüştür. Görselde gösterilecek bütün metinler doğal ve doğru Türkçe olmalı. İngilizce veya başka dil kullanma; renk kodlarını, teknik prompt ifadelerini, kamera terimlerini ve marka konsepti yönergelerini görünür metne taşıma. Verilmeyen fiyat, indirim, garanti, istatistik veya iddia uydurma. Başlık en fazla 55, destek metni 110, CTA 30 karakter olsun. Arka plan promptunda hiçbir yazı, logo, harf, sayı, tabela, ikon veya filigran isteme.\n\nBrief:\n${input.prompt.trim()}\n\nMarka: ${brand.brandName || ""}\nSektör: ${brand.industry || ""}\nVarsayılan CTA: ${brand.defaultCta || "Detaylı bilgi alın"}\n\nJSON: {"backgroundPrompt":"yalnızca sahne, kompozisyon, ışık ve atmosferi anlatan Türkçe prompt","headline":"Türkçe reklam başlığı","supportingText":"Türkçe kısa destek metni","cta":"Türkçe CTA"}`, { temperature: 0.25, maxTokens: 700 });
-    const parsed = parseJsonResponse<Partial<CreativePlan>>(content);
-    creativePlan = { backgroundPrompt: parsed.backgroundPrompt?.trim() || creativePlan.backgroundPrompt, headline: parsed.headline?.trim().slice(0, 80) || "", supportingText: parsed.supportingText?.trim().slice(0, 180) || "", cta: parsed.cta?.trim().slice(0, 45) || creativePlan.cta };
-  } catch { /* A clean no-text fallback is safer than model-generated typography. */ }
-  const finalPrompt = `${creativePlan.backgroundPrompt}\n\nZORUNLU MARKA SANAT YÖNETİMİ:\n${brandConceptInstruction(brandConcept)}\nBu konsepti renk, atmosfer ve kompozisyon boyunca tutarlı uygula. Yalnızca temiz, fotoğrafik veya illüstratif görsel zemini üret. GÖRSELİN İÇİNDE HİÇBİR YAZI ÜRETME: harf, kelime, başlık, açıklama, sayı, telefon, URL, renk kodu, etiket, tabela, logo, ikon, filigran veya arayüz öğesi bulunmasın. Metin ve gerçek logo uygulama tarafından sonradan eklenecek.`;
-  const requestSettings = { ...(input.settings || {}), brandConcept, creativePlan };
-  database.prepare("INSERT INTO generation_jobs (id, project_id, type, provider, model, status, prompt, request_json, created_at) VALUES (?, ?, 'image', 'cliproxy', '', 'running', ?, ?, ?)").run(jobId, input.projectId, finalPrompt, JSON.stringify(requestSettings), now);
+    const { content } = await completeText("Sen Türkçe reklam kreatifleri yöneten kıdemli bir kreatif direktörsün. Hazır şablon seçmez, render modeline sanat yönetimi ve kesin metin sözleşmesi verirsin. Yalnızca geçerli JSON döndür.", plannerPrompt, { temperature: 0.8, maxTokens: 4200 });
+    plans = normalizePlans(parseJsonResponse<unknown>(content), amount);
+  } catch { /* handled below */ }
+  if (plans.length !== amount) {
+    database.prepare("UPDATE generation_jobs SET status='failed', error=?, completed_at=? WHERE id=?").run("Kreatif direktör modeli geçerli üretim planı oluşturamadı.", new Date().toISOString(), jobId);
+    return Response.json({ ok: false, message: "Kreatif direktör modeli geçerli üretim planı oluşturamadı." }, { status: 502 });
+  }
+
+  const requestState = { ...(input.settings || {}), ratio, selectedFields: selected, plans, pipeline: { directorModel: provider.text_model, renderModel, visionModel, editModel, maxAttempts: 2 } };
+  database.prepare("UPDATE generation_jobs SET request_json=? WHERE id=?").run(JSON.stringify(requestState), jobId);
 
   try {
-    const apiKey = decryptSecret(provider.encrypted_api_key);
-    const baseUrl = provider.base_url.replace(/\/+$/, "");
-    let model = input.model || provider.image_model;
-    if (!model) {
-      const modelResponse = await fetch(`${baseUrl}/models`, { headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(10_000) });
-      const modelBody = await modelResponse.json() as { data?: { id?: string }[] };
-      const ids = modelBody.data?.map((item) => item.id).filter((id): id is string => Boolean(id)) || [];
-      model = ids.find((id) => /gemini-3\.1-flash-image/i.test(id)) || ids.find((id) => /gpt-image|grok-imagine|image/i.test(id)) || "";
-    }
-    if (!model) throw new Error("Görsel üretim modeli bulunamadı.");
-
-    database.prepare("UPDATE generation_jobs SET model = ? WHERE id = ?").run(model, jobId);
-    let imageItems: ImageItem[] = [];
-    if (/gemini.*image/i.test(model)) {
-      const nativeBase = new URL(baseUrl).origin;
-      const amount = Math.min(Math.max(input.count || 1, 1), 4);
-      const responses = await Promise.all(Array.from({ length: amount }, () => fetch(`${nativeBase}/v1beta/models/${encodeURIComponent(model)}:generateContent`, { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: finalPrompt }] }], generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio: geminiRatio(input.ratio || "1:1") } } }), signal: AbortSignal.timeout(180_000) })));
-      for (const response of responses) {
-        const body = await response.json() as { candidates?: { content?: { parts?: { inlineData?: { data?: string; mimeType?: string }; inline_data?: { data?: string; mime_type?: string } }[] } }[]; error?: { message?: string } };
-        if (!response.ok) throw new Error(body.error?.message || `CliProxyAPI ${response.status} yanıtı verdi.`);
-        for (const part of body.candidates?.[0]?.content?.parts || []) {
-          const inline = part.inlineData || (part.inline_data ? { data: part.inline_data.data, mimeType: part.inline_data.mime_type } : undefined);
-          if (inline?.data) imageItems.push({ b64_json: inline.data, mime_type: inline.mimeType || "image/png" });
-        }
+    const assetDir = path.join(process.cwd(), ".data", "assets"); fs.mkdirSync(assetDir, { recursive: true });
+    const assets: { id: string; url: string; mimeType: string; qaScore: number }[] = []; const allAttempts: Attempt[][] = [];
+    for (const [planIndex, plan] of plans.entries()) {
+      const attempts: Attempt[] = []; let current: MediaInput | null = null; let correction = ""; let finalScore = 0;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const model = attempt === 1 ? renderModel : editModel;
+        updateProgress(jobId, attempt === 1 ? "rendering" : "correcting", planIndex, amount, attempt === 1 ? `${planIndex + 1}. kreatif render ediliyor` : `${planIndex + 1}. kreatif kalite kontrolüne göre düzeltiliyor`);
+        current = await renderCreative({ baseUrl, apiKey, model, prompt: renderPrompt(plan, input.prompt.trim(), brand, concept, selected, correction), ratio, references: logo ? [logo] : [], previous: attempt > 1 ? current || undefined : undefined });
+        updateProgress(jobId, "checking", planIndex, amount, `${planIndex + 1}. kreatif okunabilirlik ve marka uyumu için kontrol ediliyor`);
+        const checklist = `Zorunlu başlık: “${plan.headline}”. Zorunlu destek metni: “${plan.supportingText}”. Zorunlu CTA: “${plan.cta}”. ${requiredBrandLines(brand, selected).join(". ")}. ${selected.includes("logo") ? "Verilen marka logosu doğru ve okunur görünmeli." : "Logo zorunlu değil."}`;
+        let qa;
+        try { qa = await inspectCreative({ baseUrl, apiKey, model: visionModel, image: current, checklist }); }
+        catch (error) { qa = { passed: false, score: 0, issues: [error instanceof Error ? `Görsel kontrolü çalışmadı: ${error.message}` : "Görsel kontrolü çalışmadı."], correction: "Tüm zorunlu Türkçe metinleri ve logoyu yüksek kontrastla, büyük ve eksiksiz biçimde yeniden render et." }; }
+        attempts.push({ number: attempt, model, qaModel: visionModel, qa }); finalScore = qa.score;
+        if (qa.passed && qa.score >= 75) break;
+        correction = `${qa.issues.join("; ")}\n${qa.correction}`;
       }
-    } else {
-      const response = await fetch(`${baseUrl}/images/generations`, { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model, prompt: finalPrompt, n: Math.min(Math.max(input.count || 1, 1), 4), size: dimensions(input.ratio || "1:1"), response_format: "b64_json" }), signal: AbortSignal.timeout(180_000) });
-      const body = await response.json() as { data?: ImageItem[]; error?: { message?: string } };
-      if (!response.ok) throw new Error(body.error?.message || `CliProxyAPI ${response.status} yanıtı verdi.`);
-      imageItems = body.data || [];
+      if (!current) throw new Error("Render modeli görsel oluşturamadı.");
+      const id = crypto.randomUUID(); const bytes = await sharp(current.bytes).png().toBuffer();
+      fs.writeFileSync(path.join(assetDir, `${id}.png`), bytes); fs.writeFileSync(path.join(assetDir, `${id}.json`), JSON.stringify({ mimeType: "image/png", extension: "png" }));
+      assets.push({ id, url: `/api/assets/${id}`, mimeType: "image/png", qaScore: finalScore }); allAttempts.push(attempts);
+      updateProgress(jobId, "rendering", planIndex + 1, amount, `${planIndex + 1}/${amount} kreatif tamamlandı`);
     }
-    if (!imageItems.length) throw new Error("Servis kullanılabilir görsel döndürmedi.");
-
-    const assetDir = path.join(process.cwd(), ".data", "assets");
-    fs.mkdirSync(assetDir, { recursive: true });
-    const assets: { id: string; url: string; mimeType: string }[] = [];
-    for (const item of imageItems) {
-      const id = crypto.randomUUID();
-      const mimeType = item.mime_type || "image/png";
-      const extension = mimeType.includes("jpeg") ? "jpg" : mimeType.includes("webp") ? "webp" : "png";
-      let bytes: Buffer;
-      if (item.b64_json) bytes = Buffer.from(item.b64_json, "base64");
-      else if (item.url) {
-        const remote = await fetch(item.url, { signal: AbortSignal.timeout(30_000) });
-        if (!remote.ok) throw new Error("Üretilen görsel indirilemedi.");
-        bytes = Buffer.from(await remote.arrayBuffer());
-      } else continue;
-      if (selectedFields.length) {
-        const branded = await applyBrandOverlay(bytes, brand, selectedFields, brandConcept, creativePlan);
-        bytes = branded.bytes;
-      }
-      const finalMimeType = selectedFields.length ? "image/png" : mimeType;
-      const finalExtension = selectedFields.length ? "png" : extension;
-      fs.writeFileSync(path.join(assetDir, `${id}.${finalExtension}`), bytes);
-      fs.writeFileSync(path.join(assetDir, `${id}.json`), JSON.stringify({ mimeType: finalMimeType, extension: finalExtension }));
-      assets.push({ id, url: `/api/assets/${id}`, mimeType: finalMimeType });
-    }
-    if (!assets.length) throw new Error("Servis kullanılabilir görsel döndürmedi.");
-    database.prepare("UPDATE generation_jobs SET status='complete', response_json=?, completed_at=? WHERE id=?").run(JSON.stringify({ assets }), new Date().toISOString(), jobId);
-    return Response.json({ ok: true, jobId, model, assets });
+    database.prepare("UPDATE generation_jobs SET status='complete', response_json=?, progress_json=?, completed_at=? WHERE id=?").run(JSON.stringify({ assets, attempts: allAttempts }), JSON.stringify({ phase: "complete", completed: amount, total: amount, detail: "Kreatifler hazır", updatedAt: new Date().toISOString() }), new Date().toISOString(), jobId);
+    return Response.json({ ok: true, jobId, model: renderModel, assets });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Görsel üretilemedi.";
     database.prepare("UPDATE generation_jobs SET status='failed', error=?, completed_at=? WHERE id=?").run(message.slice(0, 1000), new Date().toISOString(), jobId);
