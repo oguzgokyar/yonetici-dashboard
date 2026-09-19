@@ -60,7 +60,13 @@ type RecentAsset = {
   createdAt?: string;
 };
 
-export function PublishingStudio({ projectId }: { projectId: string }) {
+export function PublishingStudio({
+  projectId,
+  initialAssetId,
+}: {
+  projectId: string;
+  initialAssetId?: string;
+}) {
   const [posts, setPosts] = useState<PostRecord[]>([]);
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,7 +121,7 @@ export function PublishingStudio({ projectId }: { projectId: string }) {
     }
   }
 
-  async function loadRecentAssets() {
+  async function loadRecentAssets(targetId?: string) {
     setLoadingAssets(true);
     try {
       const [imgRes, vidRes] = await Promise.all([
@@ -137,11 +143,16 @@ export function PublishingStudio({ projectId }: { projectId: string }) {
         });
       }
       setRecentAssets(items);
-      if (items.length > 0 && !selectedMedia) {
+
+      const target = targetId ? items.find((i) => i.id === targetId) : null;
+      if (target) {
+        setSelectedMedia(target);
+        if (target.prompt) setCaption(target.prompt);
+        if (target.type === "video") setPostType("reel");
+      } else if (items.length > 0 && !selectedMedia) {
         setSelectedMedia(items[0]);
-        if (items[0].prompt) {
-          setCaption(items[0].prompt);
-        }
+        if (items[0].prompt) setCaption(items[0].prompt);
+        if (items[0].type === "video") setPostType("reel");
       }
     } catch {
       // ignore
@@ -152,7 +163,13 @@ export function PublishingStudio({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     loadData();
-  }, [projectId]);
+    if (initialAssetId) {
+      setModalOpen(true);
+      loadRecentAssets(initialAssetId);
+      const d = new Date(Date.now() + 24 * 3600 * 1000);
+      setScheduledAt(d.toISOString().slice(0, 16));
+    }
+  }, [projectId, initialAssetId]);
 
   function openCreateModal() {
     setModalOpen(true);

@@ -1,6 +1,13 @@
 import { PublishingStudio } from "@/features/publishing/publishing-studio";
 
-export default async function Page({ params }: { params: Promise<{ projectId: string }> }) {
+export default async function Page({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ projectId: string }>;
+  searchParams?: Promise<{ assetId?: string }>;
+}) {
   const { projectId } = await params;
-  return <PublishingStudio projectId={projectId} />;
+  const sp = searchParams ? await searchParams : {};
+  return <PublishingStudio projectId={projectId} initialAssetId={sp.assetId} />;
 }

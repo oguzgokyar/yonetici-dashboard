@@ -126,7 +126,7 @@ export function VideoGenerationStudio({ projectId }: { projectId: string }) {
 
       <section className="video-history">
         <div className="history-heading"><div><span><Clapperboard size={16} /></span><div><h2>Üretilen videolar</h2><p>Local Remotion çıktıları</p></div></div></div>
-        {videos.length ? <div className="video-history-grid">{videos.map((video) => <article key={video.id}><video src={video.url} controls preload="metadata" /><div><span>{video.durationSeconds || 8} sn · {video.motionStyle || "premium"}</span><a href={video.url} download={`motion-kreatif-${video.id}.mp4`}><Download size={14} />İndir</a><Link href={`/projects/${projectId}/publishing`} style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--accent, #612bd3)", fontWeight: 600, fontSize: "11px" }}><Send size={13} />Planla</Link></div></article>)}</div> : <div className="history-empty"><Clapperboard size={23} /><span>Henüz video üretilmedi.</span></div>}
+        {videos.length ? <div className="video-history-grid">{videos.map((video) => <article key={video.id}><video src={video.url} controls preload="metadata" /><div><span>{video.durationSeconds || 8} sn · {video.motionStyle || "premium"}</span><a href={video.url} download={`motion-kreatif-${video.id}.mp4`}><Download size={14} />İndir</a><Link href={`/projects/${projectId}/publishing?assetId=${video.id}`} style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--accent, #612bd3)", fontWeight: 600, fontSize: "11px" }}><Send size={13} />Planla</Link></div></article>)}</div> : <div className="history-empty"><Clapperboard size={23} /><span>Henüz video üretilmedi.</span></div>}
       </section>
     </div>
   );

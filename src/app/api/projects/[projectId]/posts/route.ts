@@ -86,18 +86,47 @@ export async function POST(request: Request, context: Context) {
   let mimeType = contentType === "video" ? "video/mp4" : "image/png";
 
   const dataDir = path.join(process.cwd(), ".data");
+  const assetDir = path.join(dataDir, "assets");
+  const videoDir = path.join(dataDir, "video-renders");
 
-  // Check assetId for video
-  if (body.assetId) {
-    const videoPath = path.join(dataDir, "video-renders", `${body.assetId}.mp4`);
-    if (fs.existsSync(videoPath)) {
-      fileBuffer = fs.readFileSync(videoPath);
-      filename = `motion-creative-${body.assetId}.mp4`;
-      mimeType = "video/mp4";
+  // Helper to extract UUID from a string
+  const uuidRegex = /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i;
+  let candidateId = body.assetId?.trim();
+  if (!candidateId && body.mediaUrl) {
+    const match = body.mediaUrl.match(uuidRegex);
+    if (match) candidateId = match[0];
+  }
+
+  // A. Check in .data/assets (Images)
+  if (candidateId) {
+    const metaPath = path.join(assetDir, `${candidateId}.json`);
+    if (fs.existsSync(metaPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, "utf8")) as { mimeType?: string; extension?: string };
+        const ext = meta.extension || "png";
+        const imgPath = path.join(assetDir, `${candidateId}.${ext}`);
+        if (fs.existsSync(imgPath)) {
+          fileBuffer = fs.readFileSync(imgPath);
+          filename = `creative-${candidateId}.${ext}`;
+          mimeType = meta.mimeType || (ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "image/png");
+        }
+      } catch (err) {
+        console.error("Error loading asset from .data/assets:", err);
+      }
+    }
+
+    // B. Check in .data/video-renders (Videos)
+    if (!fileBuffer) {
+      const vidPath = path.join(videoDir, `${candidateId}.mp4`);
+      if (fs.existsSync(vidPath)) {
+        fileBuffer = fs.readFileSync(vidPath);
+        filename = `video-${candidateId}.mp4`;
+        mimeType = "video/mp4";
+      }
     }
   }
 
-  // Check mediaUrl
+  // C. Check mediaUrl formats (data URI, relative path, or external URL)
   if (!fileBuffer && body.mediaUrl) {
     const mediaUrl = body.mediaUrl.trim();
     if (mediaUrl.startsWith("data:")) {
@@ -111,11 +140,28 @@ export async function POST(request: Request, context: Context) {
       }
     } else if (mediaUrl.startsWith("/api/videos/")) {
       const vidId = mediaUrl.replace("/api/videos/", "").replace(/\.mp4$/i, "");
-      const videoPath = path.join(dataDir, "video-renders", `${vidId}.mp4`);
+      const videoPath = path.join(videoDir, `${vidId}.mp4`);
       if (fs.existsSync(videoPath)) {
         fileBuffer = fs.readFileSync(videoPath);
         filename = `video-${vidId}.mp4`;
         mimeType = "video/mp4";
+      }
+    } else if (mediaUrl.startsWith("/api/assets/")) {
+      const assetId = mediaUrl.replace("/api/assets/", "");
+      const metaPath = path.join(assetDir, `${assetId}.json`);
+      if (fs.existsSync(metaPath)) {
+        try {
+          const meta = JSON.parse(fs.readFileSync(metaPath, "utf8")) as { mimeType?: string; extension?: string };
+          const ext = meta.extension || "png";
+          const imgPath = path.join(assetDir, `${assetId}.${ext}`);
+          if (fs.existsSync(imgPath)) {
+            fileBuffer = fs.readFileSync(imgPath);
+            filename = `creative-${assetId}.${ext}`;
+            mimeType = meta.mimeType || "image/png";
+          }
+        } catch {
+          // ignore
+        }
       }
     } else if (mediaUrl.startsWith("http://") || mediaUrl.startsWith("https://")) {
       try {
@@ -131,6 +177,9 @@ export async function POST(request: Request, context: Context) {
       }
     }
   }
+
+  // Update actual content type based on resolved mimeType
+  const resolvedContentType = mimeType.startsWith("video/") ? "video" : "image";
 
   if (!fileBuffer || fileBuffer.length === 0) {
     return Response.json(
@@ -162,7 +211,7 @@ export async function POST(request: Request, context: Context) {
         postId,
         projectId,
         body.title || "İsimsiz Gönderi",
-        contentType,
+        resolvedContentType,
         body.mediaUrl || "",
         caption,
         hashtags,
@@ -212,7 +261,7 @@ export async function POST(request: Request, context: Context) {
         postId,
         projectId,
         body.title || "İsimsiz Gönderi",
-        contentType,
+        resolvedContentType,
         postizMedia.path,
         caption,
         hashtags,
@@ -256,7 +305,7 @@ export async function POST(request: Request, context: Context) {
         postId,
         projectId,
         body.title || "İsimsiz Gönderi",
-        contentType,
+        resolvedContentType,
         postizMedia.path,
         caption,
         hashtags,
