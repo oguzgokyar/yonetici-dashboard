@@ -517,7 +517,11 @@ export function PublishingStudio({
                       onMouseOut={(e) => (e.target as HTMLVideoElement).pause()}
                     />
                   ) : (
-                    <img src={post.mediaUrl} alt={post.title} />
+                    <img
+                      src={post.mediaUrl.startsWith("/api/assets/") ? `${post.mediaUrl}?thumb=1` : post.mediaUrl}
+                      alt={post.title}
+                      loading="lazy"
+                    />
                   )}
 
                   <div className="publishing-badge-top-left">
@@ -706,7 +710,11 @@ export function PublishingStudio({
                                   <Video size={18} />
                                 </div>
                               ) : (
-                                <img src={asset.url} alt="" />
+                                <img
+                                  src={asset.url.startsWith("/api/assets/") ? `${asset.url}?thumb=1` : asset.url}
+                                  alt=""
+                                  loading="lazy"
+                                />
                               )}
                               <span>{asset.type === "video" ? "MP4" : "IMG"}</span>
                             </button>
