@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   Bell, ChevronDown, Clapperboard, FolderKanban, Image, LayoutDashboard, PanelsTopLeft,
-  Menu, Palette, PanelLeftClose, PanelLeftOpen, Pin, Plus, Search, Send, Settings, Sparkles, X,
+  Menu, Palette, PanelLeftClose, PanelLeftOpen, Pin, Plus, Search, Send, Settings, Share2, Sparkles, X,
 } from "lucide-react";
 import { useProjects } from "@/features/projects/projects-context";
 
@@ -22,6 +22,7 @@ const projectNavigation = [
   { label: "Görsel Üret", href: "/image-generation", icon: Image },
   { label: "Video Üret", href: "/video-generation", icon: Clapperboard },
   { label: "Paylaşım Planı", href: "/publishing", icon: Send },
+  { label: "Hesaplar", href: "/accounts", icon: Share2 },
   { label: "Pinterest", href: "/pinterest", icon: Pin },
 ];
 

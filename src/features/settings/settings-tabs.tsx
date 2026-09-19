@@ -12,7 +12,7 @@ export function SettingsTabs() {
 
   return <div className="system-settings">
     <div className="settings-tabs" role="tablist" aria-label="Sistem ayarları bölümleri">
-      <button type="button" role="tab" aria-selected={activeTab === "api"} className={activeTab === "api" ? "active" : ""} onClick={() => setActiveTab("api")}><Bot size={17} /><span><strong>API Yönetimi</strong><small>AI sağlayıcıları ve modeller</small></span></button>
+      <button type="button" role="tab" aria-selected={activeTab === "api"} className={activeTab === "api" ? "active" : ""} onClick={() => setActiveTab("api")}><Bot size={17} /><span><strong>API Yönetimi</strong><small>AI ve Sosyal Medya (Postiz) servisleri</small></span></button>
       <button type="button" role="tab" aria-selected={activeTab === "system"} className={activeTab === "system" ? "active" : ""} onClick={() => setActiveTab("system")}><Settings2 size={17} /><span><strong>Sistem</strong><small>Uygulama ve güncellemeler</small></span></button>
     </div>
 

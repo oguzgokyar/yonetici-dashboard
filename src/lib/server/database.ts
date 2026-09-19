@@ -32,6 +32,29 @@ function runMigrations(database: DatabaseSync) {
       used_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_content_ideas_project_created ON content_ideas(project_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS integration_configs (
+      service TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 0,
+      base_url TEXT NOT NULL DEFAULT '',
+      encrypted_api_key TEXT,
+      settings_json TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS project_social_accounts (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      service TEXT NOT NULL DEFAULT 'postiz',
+      integration_id TEXT NOT NULL,
+      name TEXT NOT NULL DEFAULT '',
+      identifier TEXT NOT NULL DEFAULT '',
+      profile TEXT NOT NULL DEFAULT '',
+      picture TEXT NOT NULL DEFAULT '',
+      disabled INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(project_id, integration_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_social_accounts_project ON project_social_accounts(project_id);
   `);
 }
 
