@@ -57,6 +57,12 @@ type RecentAsset = {
   type: "image" | "video";
   url: string;
   prompt?: string;
+  idea?: {
+    id?: string;
+    title?: string;
+    concept?: string;
+  };
+  sourceTopic?: string;
   createdAt?: string;
 };
 
@@ -84,6 +90,11 @@ export function PublishingStudio({
   const [selectedMedia, setSelectedMedia] = useState<RecentAsset | null>(null);
   const [customMediaUrl, setCustomMediaUrl] = useState("");
   const [mediaSourceTab, setMediaSourceTab] = useState<"recent" | "custom">("recent");
+
+  // AI Copy Generator State
+  const [aiStyle, setAiStyle] = useState<"sales" | "story" | "educational" | "punchy">("sales");
+  const [generatingCopy, setGeneratingCopy] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
   // Recent generated assets
   const [recentAssets, setRecentAssets] = useState<RecentAsset[]>([]);
@@ -121,6 +132,61 @@ export function PublishingStudio({
     }
   }
 
+  function applyAssetSelection(asset: RecentAsset) {
+    setSelectedMedia(asset);
+    if (asset.type === "video") setPostType("reel");
+    setCopyFeedback(null);
+
+    // If an idea was chosen during generation, use it
+    if (asset.idea?.title || asset.idea?.concept) {
+      setTitle(asset.idea.title || "");
+      setCaption(asset.idea.concept || "");
+    } else if (asset.sourceTopic) {
+      setTitle(asset.sourceTopic.slice(0, 50));
+      setCaption(asset.sourceTopic);
+    } else {
+      const clean = (asset.prompt || "")
+        .split("\nİçerik tipi:")[0]
+        .split("\nPlatform:")[0]
+        .trim();
+      setTitle(clean.slice(0, 50));
+      setCaption(clean);
+    }
+  }
+
+  async function generateAiCopy() {
+    setGeneratingCopy(true);
+    setCopyFeedback(null);
+    setError(null);
+    try {
+      const response = await fetch("/api/ai/posts/generate-copy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId,
+          postType,
+          style: aiStyle,
+          idea: selectedMedia?.idea,
+          sourceTopic: selectedMedia?.sourceTopic || caption || title,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result.ok || !result.copy) {
+        throw new Error(result.message || "Metin üretilemedi.");
+      }
+
+      if (result.copy.title) setTitle(result.copy.title);
+      if (result.copy.caption) setCaption(result.copy.caption);
+      if (result.copy.hashtags) setHashtags(result.copy.hashtags);
+      setCopyFeedback("Sosyal medya metni ve etiketler AI ile başarıyla üretildi.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setGeneratingCopy(false);
+    }
+  }
+
   async function loadRecentAssets(targetId?: string) {
     setLoadingAssets(true);
     try {
@@ -132,27 +198,57 @@ export function PublishingStudio({
       const items: RecentAsset[] = [];
       if (imgRes && imgRes.ok) {
         const imgData = await imgRes.json();
-        (imgData.assets || []).forEach((a: { id: string; url: string; prompt?: string; createdAt?: string }) => {
-          items.push({ id: a.id, type: "image", url: a.url, prompt: a.prompt, createdAt: a.createdAt });
-        });
+        (imgData.assets || []).forEach(
+          (a: {
+            id: string;
+            url: string;
+            prompt?: string;
+            idea?: { id?: string; title?: string; concept?: string };
+            sourceTopic?: string;
+            createdAt?: string;
+          }) => {
+            items.push({
+              id: a.id,
+              type: "image",
+              url: a.url,
+              prompt: a.prompt,
+              idea: a.idea,
+              sourceTopic: a.sourceTopic,
+              createdAt: a.createdAt,
+            });
+          }
+        );
       }
       if (vidRes && vidRes.ok) {
         const vidData = await vidRes.json();
-        (vidData.videos || []).forEach((v: { id: string; url: string; prompt?: string; createdAt?: string }) => {
-          items.push({ id: v.id, type: "video", url: v.url || `/api/videos/${v.id}`, prompt: v.prompt, createdAt: v.createdAt });
-        });
+        (vidData.videos || []).forEach(
+          (v: {
+            id: string;
+            url: string;
+            prompt?: string;
+            idea?: { id?: string; title?: string; concept?: string };
+            sourceTopic?: string;
+            createdAt?: string;
+          }) => {
+            items.push({
+              id: v.id,
+              type: "video",
+              url: v.url || `/api/videos/${v.id}`,
+              prompt: v.prompt,
+              idea: v.idea,
+              sourceTopic: v.sourceTopic,
+              createdAt: v.createdAt,
+            });
+          }
+        );
       }
       setRecentAssets(items);
 
       const target = targetId ? items.find((i) => i.id === targetId) : null;
       if (target) {
-        setSelectedMedia(target);
-        if (target.prompt) setCaption(target.prompt);
-        if (target.type === "video") setPostType("reel");
+        applyAssetSelection(target);
       } else if (items.length > 0 && !selectedMedia) {
-        setSelectedMedia(items[0]);
-        if (items[0].prompt) setCaption(items[0].prompt);
-        if (items[0].type === "video") setPostType("reel");
+        applyAssetSelection(items[0]);
       }
     } catch {
       // ignore
@@ -601,11 +697,7 @@ export function PublishingStudio({
                             <button
                               key={asset.id}
                               type="button"
-                              onClick={() => {
-                                setSelectedMedia(asset);
-                                if (asset.prompt && !caption) setCaption(asset.prompt);
-                                if (asset.type === "video") setPostType("reel");
-                              }}
+                              onClick={() => applyAssetSelection(asset)}
                               className={`media-picker-item ${isSelected ? "selected" : ""}`}
                             >
                               {asset.type === "video" ? (
@@ -702,16 +794,68 @@ export function PublishingStudio({
                 </label>
               </div>
 
-              {/* Caption & Hashtags */}
-              <label className="field-label">
-                4. Açıklama &amp; Reklam Metni
-                <textarea
-                  rows={3}
-                  value={caption}
-                  onChange={(e) => setCaption(e.target.value)}
-                  placeholder="İçerik açıklamasını girin..."
-                />
-              </label>
+              {/* Caption & Hashtags with AI Assistant */}
+              <div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px", marginBottom: "6px" }}>
+                  <label className="field-label" style={{ margin: 0, fontWeight: 700 }}>
+                    4. Açıklama &amp; Reklam Metni
+                  </label>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <select
+                      value={aiStyle}
+                      onChange={(e) => setAiStyle(e.target.value as any)}
+                      style={{
+                        height: "28px",
+                        border: "1px solid #dedfe6",
+                        borderRadius: "8px",
+                        padding: "0 8px",
+                        background: "white",
+                        fontSize: "11px",
+                      }}
+                    >
+                      <option value="sales">🎯 Satış &amp; Teklif</option>
+                      <option value="story">📖 Hikâye Anlatımı</option>
+                      <option value="educational">💡 Eğitici &amp; Değer</option>
+                      <option value="punchy">⚡ Kısa &amp; Çarpıcı</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={generateAiCopy}
+                      disabled={generatingCopy}
+                      className="button secondary"
+                      style={{ height: "28px", fontSize: "11px", padding: "0 10px", color: "var(--primary)" }}
+                    >
+                      {generatingCopy ? <LoaderCircle className="spin" size={13} /> : <Sparkles size={13} />}
+                      {generatingCopy ? "Üretiliyor..." : "AI ile Metin Üret"}
+                    </button>
+                  </div>
+                </div>
+
+                {selectedMedia?.idea ? (
+                  <div style={{ padding: "6px 10px", background: "#f3f0ff", borderRadius: "8px", border: "1px solid #e1dcff", marginBottom: "8px", fontSize: "11px", color: "#5647d7" }}>
+                    <strong>Seçilen İçerik Fikri:</strong> {selectedMedia.idea.title}
+                  </div>
+                ) : selectedMedia?.sourceTopic ? (
+                  <div style={{ padding: "6px 10px", background: "#f8f8fc", borderRadius: "8px", border: "1px solid #e2e3ea", marginBottom: "8px", fontSize: "11px", color: "#555866" }}>
+                    <strong>Ana Konu:</strong> {selectedMedia.sourceTopic}
+                  </div>
+                ) : null}
+
+                {copyFeedback && (
+                  <div style={{ fontSize: "11px", color: "#278862", marginBottom: "6px", display: "flex", alignItems: "center", gap: "4px" }}>
+                    <CheckCircle2 size={12} /> {copyFeedback}
+                  </div>
+                )}
+
+                <div className="field-label">
+                  <textarea
+                    rows={4}
+                    value={caption}
+                    onChange={(e) => setCaption(e.target.value)}
+                    placeholder="Sosyal medyada takipçilerin göreceği açıklama metni..."
+                  />
+                </div>
+              </div>
 
               <label className="field-label">
                 Hashtag'ler
@@ -719,7 +863,7 @@ export function PublishingStudio({
                   type="text"
                   value={hashtags}
                   onChange={(e) => setHashtags(e.target.value)}
-                  placeholder="#pergola #tente #mimarlık"
+                  placeholder="#marka #reels #keşfet"
                   style={{ fontFamily: "monospace" }}
                 />
               </label>

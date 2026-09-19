@@ -165,8 +165,29 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
     const brand = project!.brand;
     const selectedBrand = selectedFields.filter((key) => brand[key]).map((key) => `${brandFields.find((item) => item.key === key)?.label}: ${brand[key]}`).join("; ");
     const finalPrompt = `${prompt.trim()}\nİçerik tipi: ${contentType}. Reklam amacı: ${purpose}. Tercih edilen yorum: ${style}. Platform: ${platform}, oran: ${ratio}. Kayıtlı marka konseptini kesin biçimde koru. Bitmiş reklam kreatifini metinleri ve seçilen marka kaynaklarıyla birlikte özgün bir kompozisyon olarak render et; sabit şablon kullanma.${selectedBrand ? ` Kullanılacak doğrulanmış marka kaynakları: ${selectedBrand}.` : ""}`;
+    const sourceTopic = activeIdea ? activeIdea.sourcePrompt : prompt.trim();
     try {
-      const response = await fetch("/api/ai/images/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, prompt: finalPrompt, ratio, count, settings: { platform, purpose, style, contentType, selectedFields } }) });
+      const response = await fetch("/api/ai/images/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId,
+          prompt: finalPrompt,
+          ratio,
+          count,
+          settings: {
+            platform,
+            purpose,
+            style,
+            contentType,
+            selectedFields,
+            idea: activeIdea
+              ? { id: activeIdea.id, title: activeIdea.title, concept: activeIdea.concept }
+              : undefined,
+            sourceTopic,
+          },
+        }),
+      });
       const body = await response.json() as { ok: boolean; message?: string; model?: string; assets?: { id: string; url: string; mimeType: string }[] };
       if (!response.ok || !body.ok || !body.assets?.length) { setMessage(body.message || "Görsel üretilemedi."); return; }
       setResults(body.assets); setUsedModel(body.model || ""); await loadHistory();

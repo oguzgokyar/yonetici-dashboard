@@ -42,9 +42,32 @@ export async function GET(request: Request) {
   if (!projectId) return Response.json({ ok: false, message: "Proje gerekli." }, { status: 400 });
   const rows = getDatabase().prepare("SELECT id, request_json, response_json, created_at, completed_at FROM generation_jobs WHERE project_id=? AND type='video' AND status='complete' ORDER BY created_at DESC LIMIT 50").all(projectId) as unknown as VideoJobRow[];
   const videos = rows.map((row) => {
-    const requestState = JSON.parse(row.request_json) as { sourceAssetId?: string; durationSeconds?: number; motionStyle?: string };
-    const responseState = JSON.parse(row.response_json) as { url?: string };
-    return { id: row.id, url: responseState.url || `/api/videos/${row.id}`, sourceAssetId: requestState.sourceAssetId, durationSeconds: requestState.durationSeconds, motionStyle: requestState.motionStyle, createdAt: row.completed_at || row.created_at };
+    let idea: { id?: string; title?: string; concept?: string } | undefined;
+    let sourceTopic: string | undefined;
+    let sourceAssetId: string | undefined;
+    let durationSeconds: number | undefined;
+    let motionStyle: string | undefined;
+
+    try {
+      const requestState = JSON.parse(row.request_json || "{}");
+      sourceAssetId = requestState.sourceAssetId;
+      durationSeconds = requestState.durationSeconds;
+      motionStyle = requestState.motionStyle;
+      idea = requestState.idea;
+      sourceTopic = requestState.sourceTopic;
+    } catch { /* ignore */ }
+
+    const responseState = JSON.parse(row.response_json || "{}");
+    return {
+      id: row.id,
+      url: responseState.url || `/api/videos/${row.id}`,
+      sourceAssetId,
+      durationSeconds,
+      motionStyle,
+      idea,
+      sourceTopic,
+      createdAt: row.completed_at || row.created_at,
+    };
   });
   return Response.json({ ok: true, videos });
 }
@@ -62,7 +85,20 @@ export async function POST(request: Request) {
 
   const brand = JSON.parse(project.brand_json || "{}") as { primaryColor?: string };
   const id = crypto.randomUUID(); const now = new Date().toISOString();
-  const requestState = { sourceAssetId: asset.id, packageId: input.packageId, durationSeconds, motionStyle, renderer: "local-remotion", composition: "AnimatedCreative" };
+
+  // Inherit idea and sourceTopic from the source image generation job
+  const imageJob = database.prepare("SELECT request_json FROM generation_jobs WHERE project_id=? AND type='image' AND response_json LIKE ?").get(input.projectId, `%"id":"${asset.id}"%`) as { request_json?: string } | undefined;
+  let idea: { id?: string; title?: string; concept?: string } | undefined;
+  let sourceTopic: string | undefined;
+  if (imageJob?.request_json) {
+    try {
+      const req = JSON.parse(imageJob.request_json);
+      idea = req.idea;
+      sourceTopic = req.sourceTopic;
+    } catch { /* ignore */ }
+  }
+
+  const requestState = { sourceAssetId: asset.id, packageId: input.packageId, durationSeconds, motionStyle, renderer: "local-remotion", composition: "AnimatedCreative", idea, sourceTopic };
   database.prepare("INSERT INTO generation_jobs (id, project_id, type, provider, model, status, prompt, request_json, created_at) VALUES (?, ?, 'video', 'local', 'remotion-4.0.484', 'rendering', ?, ?, ?)").run(id, input.projectId, `Kreatifi ${durationSeconds} saniyelik ${motionStyle} motion postere dönüştür`, JSON.stringify(requestState), now);
 
   try {

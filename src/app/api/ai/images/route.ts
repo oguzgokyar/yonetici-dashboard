@@ -4,7 +4,7 @@ import { getDatabase } from "@/lib/server/database";
 
 export const runtime = "nodejs";
 type Asset = { id: string; url: string; mimeType: string; qaScore?: number };
-type JobRow = { id: string; model: string; prompt: string; status: string; response_json: string; progress_json: string; created_at: string; completed_at: string | null };
+type JobRow = { id: string; model: string; prompt: string; status: string; request_json: string; response_json: string; progress_json: string; created_at: string; completed_at: string | null };
 
 function assetsFrom(value: string) {
   try { const parsed = JSON.parse(value) as { assets?: Asset[] }; return Array.isArray(parsed.assets) ? parsed.assets : []; }
@@ -14,8 +14,26 @@ function assetsFrom(value: string) {
 export async function GET(request: Request) {
   const projectId = new URL(request.url).searchParams.get("projectId")?.trim();
   if (!projectId) return Response.json({ ok: false, message: "Proje gerekli." }, { status: 400 });
-  const rows = getDatabase().prepare("SELECT id, model, prompt, status, response_json, progress_json, created_at, completed_at FROM generation_jobs WHERE project_id=? AND type='image' AND status IN ('running','complete') ORDER BY created_at DESC LIMIT 100").all(projectId) as unknown as JobRow[];
-  const assets = rows.filter((row) => row.status === "complete").flatMap((row) => assetsFrom(row.response_json).map((asset) => ({ ...asset, jobId: row.id, model: row.model, prompt: row.prompt, createdAt: row.completed_at || row.created_at })));
+  const rows = getDatabase().prepare("SELECT id, model, prompt, status, request_json, response_json, progress_json, created_at, completed_at FROM generation_jobs WHERE project_id=? AND type='image' AND status IN ('running','complete') ORDER BY created_at DESC LIMIT 100").all(projectId) as unknown as JobRow[];
+  const assets = rows.filter((row) => row.status === "complete").flatMap((row) => {
+    let idea: { id?: string; title?: string; concept?: string } | undefined;
+    let sourceTopic: string | undefined;
+    try {
+      const req = JSON.parse(row.request_json || "{}");
+      if (req.idea && typeof req.idea === "object") idea = req.idea;
+      if (typeof req.sourceTopic === "string" && req.sourceTopic.trim()) sourceTopic = req.sourceTopic.trim();
+    } catch { /* ignore */ }
+
+    return assetsFrom(row.response_json).map((asset) => ({
+      ...asset,
+      jobId: row.id,
+      model: row.model,
+      prompt: row.prompt,
+      idea,
+      sourceTopic,
+      createdAt: row.completed_at || row.created_at,
+    }));
+  });
   const runningJobs = rows.filter((row) => row.status === "running").map((row) => { let progress = {}; try { progress = JSON.parse(row.progress_json || "{}"); } catch { /* use empty progress */ } return { id: row.id, model: row.model, prompt: row.prompt, createdAt: row.created_at, progress }; });
   return Response.json({ ok: true, assets, runningJobs });
 }
