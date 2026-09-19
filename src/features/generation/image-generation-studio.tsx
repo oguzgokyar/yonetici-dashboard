@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Download, History, ImageIcon, Info, Lightbulb, LoaderCircle,
-  Maximize2, Pencil, Plus, RefreshCw, Settings2, Sparkles, Trash2, WandSparkles, X,
+  Maximize2, Pencil, Plus, RefreshCw, Send, Settings2, Sparkles, Trash2, WandSparkles, X,
 } from "lucide-react";
 import { useProjects } from "@/features/projects/projects-context";
 
@@ -218,7 +218,7 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
       <section className="generation-results">
         <div className="results-toolbar"><div><h2>Üretilen görseller</h2><span>Bu projeye ait kreatifler</span></div><div className="result-tabs"><button className="active">Son üretim</button><button>Geçmiş</button></div></div>
         {isProducing && <ProductionStatus job={activeJob} requestedCount={count} />}
-        {results.length > 0 && <div className="generated-gallery">{results.map((result) => <CreativeCard key={result.id} asset={result} model={result.model || usedModel} deleting={deletingId === result.id} onView={() => setLightboxId(result.id)} onEdit={() => { setEditTarget(result); setEditInstruction(""); }} onDelete={() => void deleteAsset(result)} />)}</div>}
+        {results.length > 0 && <div className="generated-gallery">{results.map((result) => <CreativeCard key={result.id} asset={result} model={result.model || usedModel} deleting={deletingId === result.id} projectId={projectId} onView={() => setLightboxId(result.id)} onEdit={() => { setEditTarget(result); setEditInstruction(""); }} onDelete={() => void deleteAsset(result)} />)}</div>}
         {!results.length && !isProducing && <div className="results-empty">
           <div className="empty-canvas"><div className="canvas-glow" style={{ background: available.primaryColor }} /><ImageIcon size={38} /><span><Sparkles size={13} />AI KREATİF STÜDYOSU</span></div>
           <h3>İlk kreatifinizi oluşturun</h3>
@@ -229,13 +229,13 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
 
       <section className="generation-history">
         <div className="history-heading"><div><span><History size={16} /></span><div><h2>Önceki üretilen görseller</h2><p>Bu projede üretilen ve düzenlenen kreatifler kalıcı olarak saklanır.</p></div></div><button type="button" className="button secondary" onClick={() => void loadHistory()} disabled={historyLoading}>{historyLoading ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}Yenile</button></div>
-        {historyLoading && !history.length ? <div className="history-loading"><LoaderCircle className="spin" size={20} />Görsel arşivi yükleniyor</div> : previousAssets.length ? <div className="history-gallery">{previousAssets.map((asset) => <CreativeCard key={asset.id} asset={asset} deleting={deletingId === asset.id} onView={() => setLightboxId(asset.id)} onEdit={() => { setEditTarget(asset); setEditInstruction(""); }} onDelete={() => void deleteAsset(asset)} />)}</div> : <div className="history-empty"><ImageIcon size={23} /><span>Henüz önceki üretim bulunmuyor.</span></div>}
+        {historyLoading && !history.length ? <div className="history-loading"><LoaderCircle className="spin" size={20} />Görsel arşivi yükleniyor</div> : previousAssets.length ? <div className="history-gallery">{previousAssets.map((asset) => <CreativeCard key={asset.id} asset={asset} deleting={deletingId === asset.id} projectId={projectId} onView={() => setLightboxId(asset.id)} onEdit={() => { setEditTarget(asset); setEditInstruction(""); }} onDelete={() => void deleteAsset(asset)} />)}</div> : <div className="history-empty"><ImageIcon size={23} /><span>Henüz önceki üretim bulunmuyor.</span></div>}
       </section>
 
       {lightboxIndex >= 0 && <div className="creative-lightbox" role="dialog" aria-modal="true" aria-label="Görsel önizleme" onMouseDown={(event) => { if (event.target === event.currentTarget) setLightboxId(null); }}>
         <button type="button" className="lightbox-close" onClick={() => setLightboxId(null)} aria-label="Kapat"><X size={22} /></button>
         {viewable.length > 1 && <button type="button" className="lightbox-nav previous" onClick={() => setLightboxId(viewable[(lightboxIndex - 1 + viewable.length) % viewable.length].id)} aria-label="Önceki görsel"><ChevronLeft size={26} /></button>}
-        <div className="lightbox-content"><Image src={viewable[lightboxIndex].url} alt="Tam ekran reklam kreatifi" fill sizes="100vw" unoptimized priority /><div><span>{lightboxIndex + 1} / {viewable.length}</span><a href={viewable[lightboxIndex].url} download={`kreatif-${viewable[lightboxIndex].id}.png`}><Download size={15} />İndir</a><button type="button" onClick={() => { setEditTarget(viewable[lightboxIndex]); setEditInstruction(""); setLightboxId(null); }}><Pencil size={15} />Düzenle</button></div></div>
+        <div className="lightbox-content"><Image src={viewable[lightboxIndex].url} alt="Tam ekran reklam kreatifi" fill sizes="100vw" unoptimized priority /><div><span>{lightboxIndex + 1} / {viewable.length}</span><a href={viewable[lightboxIndex].url} download={`kreatif-${viewable[lightboxIndex].id}.png`}><Download size={15} />İndir</a><button type="button" onClick={() => { setEditTarget(viewable[lightboxIndex]); setEditInstruction(""); setLightboxId(null); }}><Pencil size={15} />Düzenle</button><Link href={`/projects/${projectId}/publishing`} className="button ghost" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><Send size={15} />Planla</Link></div></div>
         {viewable.length > 1 && <button type="button" className="lightbox-nav next" onClick={() => setLightboxId(viewable[(lightboxIndex + 1) % viewable.length].id)} aria-label="Sonraki görsel"><ChevronRight size={26} /></button>}
       </div>}
 
@@ -252,8 +252,8 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
   );
 }
 
-function CreativeCard({ asset, model, deleting, onView, onEdit, onDelete }: { asset: GeneratedAsset; model?: string; deleting: boolean; onView: () => void; onEdit: () => void; onDelete: () => void }) {
-  return <article className="generated-card"><button type="button" className="generated-image" onClick={onView} aria-label="Görseli tam ekran aç"><Image src={asset.url} alt="AI ile üretilen reklam kreatifi" fill sizes="(max-width: 760px) 100vw, 30vw" unoptimized /><span><Maximize2 size={15} />Tam ekran</span></button><div className="creative-card-footer"><span>{asset.createdAt ? new Date(asset.createdAt).toLocaleDateString("tr-TR") : model || "CliProxyAPI"}</span><div><button type="button" onClick={onEdit} title="Düzenle"><Pencil size={14} /></button><a href={asset.url} download={`kreatif-${asset.id}.png`} title="İndir"><Download size={14} /></a><button type="button" className="danger" onClick={onDelete} disabled={deleting} title="Sil">{deleting ? <LoaderCircle className="spin" size={14} /> : <Trash2 size={14} />}</button></div></div></article>;
+function CreativeCard({ asset, model, deleting, projectId, onView, onEdit, onDelete }: { asset: GeneratedAsset; model?: string; deleting: boolean; projectId?: string; onView: () => void; onEdit: () => void; onDelete: () => void }) {
+  return <article className="generated-card"><button type="button" className="generated-image" onClick={onView} aria-label="Görseli tam ekran aç"><Image src={asset.url} alt="AI ile üretilen reklam kreatifi" fill sizes="(max-width: 760px) 100vw, 30vw" unoptimized /><span><Maximize2 size={15} />Tam ekran</span></button><div className="creative-card-footer"><span>{asset.createdAt ? new Date(asset.createdAt).toLocaleDateString("tr-TR") : model || "CliProxyAPI"}</span><div><button type="button" onClick={onEdit} title="Düzenle"><Pencil size={14} /></button><a href={asset.url} download={`kreatif-${asset.id}.png`} title="İndir"><Download size={14} /></a>{projectId && <Link href={`/projects/${projectId}/publishing`} title="Paylaşım Planına Ekle"><Send size={14} /></Link>}<button type="button" className="danger" onClick={onDelete} disabled={deleting} title="Sil">{deleting ? <LoaderCircle className="spin" size={14} /> : <Trash2 size={14} />}</button></div></div></article>;
 }
 
 function ProductionStatus({ job, requestedCount }: { job?: RunningJob; requestedCount: number }) {

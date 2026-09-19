@@ -55,6 +55,28 @@ function runMigrations(database: DatabaseSync) {
       UNIQUE(project_id, integration_id)
     );
     CREATE INDEX IF NOT EXISTS idx_project_social_accounts_project ON project_social_accounts(project_id);
+    CREATE TABLE IF NOT EXISTS content_posts (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      title TEXT NOT NULL DEFAULT '',
+      content_type TEXT NOT NULL,
+      media_url TEXT NOT NULL DEFAULT '',
+      local_path TEXT NOT NULL DEFAULT '',
+      caption TEXT NOT NULL DEFAULT '',
+      hashtags TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'draft',
+      schedule_type TEXT NOT NULL DEFAULT 'now',
+      scheduled_at TEXT,
+      integration_id TEXT NOT NULL DEFAULT '',
+      post_type TEXT NOT NULL DEFAULT 'post',
+      postiz_post_id TEXT,
+      postiz_media_id TEXT,
+      release_url TEXT,
+      error_message TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_content_posts_project_created ON content_posts(project_id, created_at DESC);
   `);
 }
 

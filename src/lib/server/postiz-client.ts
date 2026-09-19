@@ -151,3 +151,133 @@ export async function fetchPostizIntegrations(): Promise<PostizIntegration[]> {
 
   return (await response.json()) as PostizIntegration[];
 }
+
+export type PostizUploadedMedia = {
+  id: string;
+  name: string;
+  path: string;
+};
+
+export async function uploadMediaToPostiz(
+  fileBuffer: Buffer,
+  filename: string,
+  mimeType: string
+): Promise<PostizUploadedMedia> {
+  const { baseUrl, apiKey, enabled } = getPostizStoredConfig();
+  if (!enabled || !apiKey) {
+    throw new Error("Postiz entegrasyonu etkin değil veya API anahtarı eksik.");
+  }
+
+  const boundary = `----PostizUploadBoundary${Date.now()}`;
+  const crlf = "\r\n";
+  const header =
+    `--${boundary}${crlf}` +
+    `Content-Disposition: form-data; name="file"; filename="${filename}"${crlf}` +
+    `Content-Type: ${mimeType}${crlf}${crlf}`;
+  const footer = `${crlf}--${boundary}--${crlf}`;
+
+  const payload = Buffer.concat([
+    Buffer.from(header, "utf-8"),
+    fileBuffer,
+    Buffer.from(footer, "utf-8"),
+  ]);
+
+  const url = `${baseUrl}/public/v1/upload`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: apiKey,
+      "Content-Type": `multipart/form-data; boundary=${boundary}`,
+      Accept: "application/json",
+    },
+    body: payload,
+    signal: AbortSignal.timeout(60_000),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new Error(`Postiz medya yükleme hatası (${response.status}): ${errorText}`);
+  }
+
+  return (await response.json()) as PostizUploadedMedia;
+}
+
+export type CreatePostizPostParams = {
+  type: "now" | "schedule" | "draft";
+  date?: string; // ISO 8601 UTC
+  integrationId: string;
+  caption: string;
+  media?: { id: string; path: string }[];
+  postType?: "post" | "reel" | "story";
+};
+
+export async function createPostizPost(
+  params: CreatePostizPostParams
+): Promise<{ postId: string; integration: string }[]> {
+  const { baseUrl, apiKey, enabled } = getPostizStoredConfig();
+  if (!enabled || !apiKey) {
+    throw new Error("Postiz entegrasyonu etkin değil veya API anahtarı eksik.");
+  }
+
+  const scheduleDate = params.date || new Date(Date.now() + 60_000).toISOString();
+  const postType = params.postType || "post";
+
+  const payload = {
+    type: params.type,
+    date: scheduleDate,
+    shortLink: false,
+    tags: [],
+    posts: [
+      {
+        integration: { id: params.integrationId },
+        value: [
+          {
+            content: params.caption,
+            image: params.media || [],
+          },
+        ],
+        settings: {
+          post_type: postType,
+        },
+      },
+    ],
+  };
+
+  const url = `${baseUrl}/public/v1/posts`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: apiKey,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    const message = Array.isArray(errData.message)
+      ? errData.message.join(", ")
+      : errData.message || `HTTP ${response.status}`;
+    throw new Error(`Postiz gönderi oluşturma hatası: ${message}`);
+  }
+
+  return (await response.json()) as { postId: string; integration: string }[];
+}
+
+export async function deletePostizPost(postId: string): Promise<boolean> {
+  const { baseUrl, apiKey, enabled } = getPostizStoredConfig();
+  if (!enabled || !apiKey) return false;
+
+  const url = `${baseUrl}/public/v1/posts/${postId}`;
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      Authorization: apiKey,
+    },
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  return response.ok;
+}
