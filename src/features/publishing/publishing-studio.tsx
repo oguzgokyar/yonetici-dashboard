@@ -19,6 +19,7 @@ import {
   Send,
   Settings,
   Share2,
+  Sparkles,
   Trash2,
   Video,
   X,
