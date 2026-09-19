@@ -7,7 +7,6 @@ import {
   CircleAlert,
   ExternalLink,
   Instagram,
-  Link2,
   LoaderCircle,
   Plus,
   RefreshCw,
@@ -116,38 +115,31 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
 
   if (loading) {
     return (
-      <div className="panel flex items-center justify-center py-16 text-center text-muted-foreground">
-        <LoaderCircle className="spin mb-2" size={24} />
-        <p>Sosyal medya hesapları yükleniyor...</p>
-      </div>
+      <div className="overview-loading" style={{ minHeight: "380px" }} />
     );
   }
 
   const connectedIds = new Set(data?.connected.map((c) => c.integrationId) || []);
   const unlinkedAvailable = (data?.available || []).filter((item) => !connectedIds.has(item.id));
+  const connectedCount = data?.connected.length || 0;
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Top Banner / Info */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-card p-5 text-card-foreground shadow-sm">
+    <>
+      {/* 1. Page Intro */}
+      <section className="page-intro">
         <div>
-          <div className="flex items-center gap-2">
-            <Share2 size={20} className="text-[#612bd3]" />
-            <h2 className="text-lg font-bold">Sosyal Medya Hesapları</h2>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Bu markaya ait paylaşımların gideceği Postiz sosyal medya hesaplarını eşleştirin.
-          </p>
+          <h2>Sosyal Medya Hesapları</h2>
+          <p>Bu markaya ait paylaşımların yayınlanacağı aktif kanalları yönetin ve Postiz ile senkronize edin.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div style={{ display: "flex", gap: "8px" }}>
           <button
             type="button"
             onClick={loadAccounts}
-            className="button secondary text-xs"
+            className="button secondary"
             title="Yenile"
             disabled={loading}
           >
-            <RefreshCw size={14} className={loading ? "spin" : ""} />
+            <RefreshCw size={15} className={loading ? "spin" : ""} />
             Yenile
           </button>
           {data?.postizWebUrl && (
@@ -155,89 +147,120 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
               href={data.postizWebUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="button primary text-xs flex items-center gap-1.5"
+              className="button primary"
             >
-              <ExternalLink size={14} />
+              <ExternalLink size={15} />
               Postiz Paneli ↗
             </a>
           )}
         </div>
-      </div>
+      </section>
 
-      {/* Alerts */}
-      {!data?.postizConfigured && (
-        <div className="connection-result error flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/10 p-4 text-amber-600 dark:text-amber-400">
-          <CircleAlert size={18} className="shrink-0 mt-0.5" />
-          <div className="flex-1 text-xs">
-            <strong>Postiz API Bağlantısı Gerekli</strong>
-            <p className="mt-1">
-              Sosyal medya hesaplarınızı eşleştirmek için önce Sistem Ayarları &gt; API Yönetimi &gt; Postiz bölümünden API anahtarınızı tanımlamalısınız.
-            </p>
-            <Link href="/settings" className="button secondary mt-3 inline-flex text-xs">
-              <Settings size={14} className="mr-1" />
-              API Yönetimine Git
-            </Link>
+      {/* 2. Metrics Bar */}
+      <section className="metric-grid">
+        <div className="metric-card">
+          <div className="metric-icon violet"><Share2 size={19} /></div>
+          <div>
+            <span>Bağlı Hesap</span>
+            <strong>{connectedCount}</strong>
+            <small>Aktif Kanal</small>
           </div>
         </div>
+
+        <div className="metric-card">
+          <div className="metric-icon blue"><Instagram size={19} /></div>
+          <div>
+            <span>Platformlar</span>
+            <strong>{connectedCount > 0 ? "Instagram" : "—"}</strong>
+            <small>Reels, Story, Feed</small>
+          </div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-icon green"><CheckCircle2 size={19} /></div>
+          <div>
+            <span>Postiz API</span>
+            <strong>{data?.postizConfigured ? "Aktif" : "Eksik"}</strong>
+            <small>{data?.postizConfigured ? "VPS İçi Canlı" : "Anahtar Gerekli"}</small>
+          </div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-icon orange"><Plus size={19} /></div>
+          <div>
+            <span>Eşlenebilir</span>
+            <strong>{unlinkedAvailable.length}</strong>
+            <small>Postiz Hesabı</small>
+          </div>
+        </div>
+      </section>
+
+      {/* Postiz Not Configured Warning */}
+      {!data?.postizConfigured && (
+        <section className="setup-banner" style={{ margin: "16px 0" }}>
+          <div className="setup-icon" style={{ background: "#fff2e8", color: "#d67c34" }}>
+            <CircleAlert size={20} />
+          </div>
+          <div>
+            <strong>Postiz API Bağlantısı Tanımlanmamış</strong>
+            <p>Sosyal medya hesaplarınızı eşleştirmek için önce Sistem Ayarları &gt; API Yönetimi bölümünden Postiz anahtarınızı kaydedin.</p>
+          </div>
+          <Link href="/settings" className="button secondary">
+            <Settings size={15} />
+            API Yönetimine Git
+          </Link>
+        </section>
       )}
 
+      {/* Feedback Alerts */}
       {error && (
-        <div className="connection-result error flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-500">
+        <div className="connection-result error" style={{ margin: "12px 0" }}>
           <CircleAlert size={16} />
-          <span>{error}</span>
+          <span><strong>Hata</strong><small>{error}</small></span>
         </div>
       )}
-
       {successMessage && (
-        <div className="connection-result success flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs text-emerald-600">
+        <div className="connection-result success" style={{ margin: "12px 0" }}>
           <CheckCircle2 size={16} />
-          <span>{successMessage}</span>
+          <span><strong>Başarılı</strong><small>{successMessage}</small></span>
         </div>
       )}
 
-      {/* 1. Projeye Bağlı Hesaplar */}
-      <section className="panel">
+      {/* 3. Projeye Bağlı Aktif Hesaplar */}
+      <section className="panel" style={{ marginTop: "18px" }}>
         <div className="panel-header">
           <div>
             <h3>Projeye Bağlı Hesaplar</h3>
             <p>Bu markanın içeriklerinin doğrudan yayınlanacağı aktif hesaplar</p>
           </div>
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-            {data?.connected.length || 0} Bağlı
+          <span className="badge-pill success">
+            {connectedCount} Aktif
           </span>
         </div>
 
-        {data?.connected && data.connected.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-            {data.connected.map((account) => (
-              <div
-                key={account.id}
-                className="flex items-center justify-between gap-4 p-4 rounded-xl border bg-background hover:border-primary/40 transition-colors"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  {account.picture ? (
-                    <img
-                      src={account.picture}
-                      alt={account.name}
-                      className="w-11 h-11 rounded-full object-cover border"
-                    />
-                  ) : (
-                    <div className="w-11 h-11 rounded-full bg-[#612bd3]/10 text-[#612bd3] flex items-center justify-center font-bold">
-                      <Instagram size={20} />
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <strong className="text-sm font-semibold truncate">{account.name || "İsimsiz"}</strong>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 font-medium">
-                        Aktif
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {account.profile ? `@${account.profile}` : account.identifier}
-                    </p>
-                    <span className="text-[10px] text-muted-foreground/80 flex items-center gap-1 mt-0.5">
-                      <Instagram size={11} /> {account.identifier === "instagram-standalone" ? "Instagram Standalone" : "Instagram Business"}
+        {connectedCount > 0 ? (
+          <div className="accounts-grid">
+            {data?.connected.map((account) => (
+              <div key={account.id} className="account-card">
+                {account.picture ? (
+                  <img
+                    src={account.picture}
+                    alt={account.name}
+                    className="account-avatar"
+                  />
+                ) : (
+                  <div className="account-avatar-placeholder">
+                    <Instagram size={20} />
+                  </div>
+                )}
+                <div className="account-info">
+                  <h4 className="account-name">{account.name || "İsimsiz"}</h4>
+                  <span className="account-meta">
+                    {account.profile ? `@${account.profile}` : account.identifier}
+                  </span>
+                  <div style={{ marginTop: "4px" }}>
+                    <span className="badge-pill success">
+                      <CheckCircle2 size={10} /> Bağlı
                     </span>
                   </div>
                 </div>
@@ -246,7 +269,8 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
                   type="button"
                   onClick={() => unlinkAccount(account.id)}
                   disabled={actionLoading === `unlink-${account.id}`}
-                  className="button ghost text-xs text-red-500 hover:bg-red-500/10 hover:text-red-600 p-2 rounded-lg"
+                  className="icon-button"
+                  style={{ color: "#d83d45" }}
                   title="Bağlantıyı Kaldır"
                 >
                   {actionLoading === `unlink-${account.id}` ? (
@@ -259,90 +283,86 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
             ))}
           </div>
         ) : (
-          <div className="panel-empty mt-4 flex flex-col items-center justify-center p-8 text-center border border-dashed rounded-xl">
-            <Share2 size={32} className="text-muted-foreground/40 mb-3" />
-            <strong className="text-sm">Henüz bir hesap bağlanmadı</strong>
-            <p className="text-xs text-muted-foreground max-w-sm mt-1">
-              Bu markaya ait bir sosyal medya hesabı bağlamak için aşağıdaki Postiz listesinden seçim yapabilirsiniz.
-            </p>
+          <div className="panel-empty" style={{ minHeight: "180px" }}>
+            <div style={{ background: "#f0edff", color: "#6757e8" }}>
+              <Share2 size={24} />
+            </div>
+            <strong>Henüz bir hesap bağlanmadı</strong>
+            <p>Aşağıdaki Postiz listesinden bir sosyal medya hesabını bu markayla eşleştirebilirsiniz.</p>
           </div>
         )}
       </section>
 
-      {/* 2. Postiz'de Yetkilendirilmiş Kullanılabilir Hesaplar */}
+      {/* 4. Postiz'de Yetkilendirilmiş Kullanılabilir Hesaplar */}
       {data?.postizConfigured && (
-        <section className="panel">
+        <section className="panel" style={{ marginTop: "18px" }}>
           <div className="panel-header">
             <div>
               <h3>Postiz'den Hesap Eşle</h3>
               <p>Postiz hesabınızda tanımlı olan ancak bu projeye henüz atanmamış hesaplar</p>
             </div>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+            <span className="badge-pill info">
               {unlinkedAvailable.length} Kullanılabilir
             </span>
           </div>
 
           {unlinkedAvailable.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <div className="accounts-grid">
               {unlinkedAvailable.map((integration) => (
-                <div
-                  key={integration.id}
-                  className="flex items-center justify-between gap-4 p-4 rounded-xl border bg-background hover:border-primary/40 transition-colors"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    {integration.picture ? (
-                      <img
-                        src={integration.picture}
-                        alt={integration.name}
-                        className="w-10 h-10 rounded-full object-cover border"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
-                        <Instagram size={18} />
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <strong className="text-sm font-semibold truncate block">{integration.name}</strong>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {integration.profile ? `@${integration.profile}` : integration.identifier}
-                      </p>
+                <div key={integration.id} className="account-card">
+                  {integration.picture ? (
+                    <img
+                      src={integration.picture}
+                      alt={integration.name}
+                      className="account-avatar"
+                    />
+                  ) : (
+                    <div className="account-avatar-placeholder" style={{ background: "#f0f1f5", color: "#747785" }}>
+                      <Instagram size={20} />
                     </div>
+                  )}
+                  <div className="account-info">
+                    <h4 className="account-name">{integration.name}</h4>
+                    <span className="account-meta">
+                      {integration.profile ? `@${integration.profile}` : integration.identifier}
+                    </span>
                   </div>
 
                   <button
                     type="button"
                     onClick={() => linkAccount(integration.id)}
                     disabled={actionLoading === `link-${integration.id}`}
-                    className="button secondary text-xs flex items-center gap-1.5"
+                    className="button secondary"
+                    style={{ height: "34px", padding: "0 10px", fontSize: "11px" }}
                   >
                     {actionLoading === `link-${integration.id}` ? (
-                      <LoaderCircle className="spin" size={14} />
+                      <LoaderCircle className="spin" size={13} />
                     ) : (
-                      <Plus size={14} />
+                      <Plus size={13} />
                     )}
-                    Projeye Bağla
+                    Eşle
                   </button>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="mt-4 p-6 text-center text-xs text-muted-foreground border border-dashed rounded-xl">
-              {data.available.length === 0 ? (
-                <div>
-                  <p className="font-medium">Postiz'de bağlı herhangi bir sosyal medya hesabı bulunamadı.</p>
-                  <p className="mt-1">Yeni bir hesap bağlamak için Postiz panelini açıp Instagram veya Facebook yetkilendirmesi yapın.</p>
-                </div>
-              ) : (
-                <p>Postiz'deki tüm hesaplar bu projeyle zaten eşleştirilmiş durumda.</p>
-              )}
+            <div className="panel-empty" style={{ minHeight: "160px" }}>
+              <div><CheckCircle2 size={22} /></div>
+              <strong>{data.available.length === 0 ? "Postiz'de bağlı hesap bulunamadı" : "Tüm hesaplar eşleştirildi"}</strong>
+              <p>
+                {data.available.length === 0
+                  ? "Yeni bir Instagram hesabı bağlamak için Postiz panelini açıp yetkilendirme yapın."
+                  : "Postiz'deki tüm hesaplar bu projeyle zaten eşleştirilmiş durumda."}
+              </p>
               {data.postizWebUrl && (
                 <a
                   href={data.postizWebUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="button secondary mt-3 inline-flex text-xs"
+                  className="button secondary"
+                  style={{ marginTop: "12px", height: "34px", fontSize: "11px" }}
                 >
-                  <ExternalLink size={14} className="mr-1" />
+                  <ExternalLink size={13} />
                   Postiz'de Yeni Hesap Bağla
                 </a>
               )}
@@ -350,6 +370,6 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
           )}
         </section>
       )}
-    </div>
+    </>
   );
 }

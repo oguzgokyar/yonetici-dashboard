@@ -104,3 +104,59 @@ button { cursor:pointer; }
 @media(max-width:1050px){.video-studio{grid-template-columns:340px 1fr}.video-history-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:760px){.video-studio{grid-template-columns:1fr}.video-preview-panel{min-height:auto}.video-history-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.video-controls{padding:18px}.video-preview-panel,.video-history{padding:18px}}
 @media(max-width:430px){.video-history-grid{grid-template-columns:1fr}}
+
+/* --- Accounts & Publishing Custom Design System --- */
+.accounts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-top:16px}
+.account-card{min-height:92px;background:white;border:1px solid var(--border);border-radius:14px;padding:16px;display:flex;align-items:center;gap:13px;transition:.18s ease}
+.account-card:hover{transform:translateY(-2px);border-color:#dcd8ff;box-shadow:0 10px 26px #2929420a}
+.account-avatar{width:44px;height:44px;border-radius:50%;object-fit:cover;flex:none;border:1px solid var(--border)}
+.account-avatar-placeholder{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:#f0edff;color:#6757e8;flex:none}
+.account-info{display:grid;gap:3px;min-width:0;flex:1}
+.account-name{font:700 13px "Manrope";margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.account-meta{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge-pill{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:700;padding:3px 8px;border-radius:12px;width:max-content}
+.badge-pill.success{background:#effaf5;color:#278862}
+.badge-pill.info{background:#eff6ff;color:#2563eb}
+.badge-pill.warning{background:#fffbeb;color:#b45309}
+.badge-pill.error{background:#fff1f2;color:#e11d48}
+.badge-pill.neutral{background:#f1f2f6;color:#64748b}
+
+.publishing-toolbar{display:flex;align-items:center;justify-content:space-between;margin:22px 0 16px;gap:14px;flex-wrap:wrap}
+.segmented-filter{display:flex;gap:4px;padding:4px;background:#ececf2;border-radius:11px;width:max-content}
+.segmented-filter button{border:0;background:transparent;padding:6px 14px;font-size:11px;font-weight:600;color:#7a7d8b;border-radius:8px;transition:.15s ease}
+.segmented-filter button.active{background:white;color:var(--primary);box-shadow:0 2px 8px #25263b12}
+.publishing-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:16px;margin-top:16px}
+.publishing-card{background:white;border:1px solid var(--border);border-radius:15px;overflow:hidden;display:flex;flex-direction:column;transition:.18s ease;box-shadow:0 3px 12px #24253d05}
+.publishing-card:hover{transform:translateY(-2px);border-color:#dcd8ff;box-shadow:0 12px 32px #24253d0b}
+.publishing-media{position:relative;aspect-ratio:16/9;background:#12131b;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.publishing-media img,.publishing-media video{width:100%;height:100%;object-fit:cover}
+.publishing-badge-top-left{position:absolute;top:10px;left:10px;z-index:2}
+.publishing-badge-top-right{position:absolute;top:10px;right:10px;z-index:2}
+.publishing-body{padding:16px;display:flex;flex-direction:column;gap:7px;flex:1}
+.publishing-account-row{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)}
+.publishing-account-row img{width:18px;height:18px;border-radius:50%;object-fit:cover}
+.publishing-title{font:700 13px "Manrope";margin:0;color:var(--text)}
+.publishing-caption{font-size:11px;color:#555868;line-height:1.55;margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.publishing-tags{font-size:10px;color:var(--primary);font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.publishing-footer{margin-top:auto;padding-top:12px;border-top:1px solid #f0f0f4;display:flex;align-items:center;justify-content:space-between;font-size:10px;color:var(--muted)}
+
+.schedule-modal{width:min(660px,96vw);max-height:88vh;overflow-y:auto;padding:26px}
+.media-picker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px;max-height:190px;overflow-y:auto;padding:6px;background:#f8f8fc;border-radius:12px;border:1px solid #e7e8ee}
+.media-picker-item{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;border:2px solid transparent;cursor:pointer;padding:0;background:#e2e3ea;transition:.15s ease}
+.media-picker-item:hover{opacity:.9}
+.media-picker-item.selected{border-color:var(--primary);box-shadow:0 0 0 2px #6d5dfc33;transform:scale(.96)}
+.media-picker-item img,.media-picker-item video{width:100%;height:100%;object-fit:cover}
+.media-picker-item span{position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:700;background:#000000a0;color:white;padding:1px 4px;border-radius:4px}
+.account-select-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;margin-top:8px}
+.account-select-chip{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:11px;background:white;cursor:pointer;text-align:left;transition:.15s ease}
+.account-select-chip:hover{border-color:#cfc9ff}
+.account-select-chip.selected{border-color:var(--primary);background:#f7f5ff}
+.account-select-chip img{width:28px;height:28px;border-radius:50%;object-fit:cover}
+.account-select-chip strong{font-size:11px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-select-chip small{font-size:9px;color:var(--muted);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+@media(max-width:760px){
+  .accounts-grid{grid-template-columns:1fr}
+  .publishing-grid{grid-template-columns:1fr}
+  .account-select-grid{grid-template-columns:1fr}
+}
