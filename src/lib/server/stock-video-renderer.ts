@@ -102,7 +102,82 @@ export async function renderFramedStockVideo(
   const originalVol = typeof options.originalVolume === "number" ? options.originalVolume : 1.0;
   const musicVol = typeof options.musicVolume === "number" ? options.musicVolume : 0.5;
 
-  // Generate an overlay image with headline / subtitle / badges if text exists
+  // Frame Style Geometry & Shadows to match Remotion preview
+  let fgW = 994; // 92% of 1080
+  let fgH = 1690; // 88% of 1920
+  let rx = 24;
+  let borderW = 3;
+  let borderAlpha = 0.55;
+  let shadowBlur = 24;
+  let shadowOpacity = 0.6;
+  let glowOpacity = 0;
+
+  if (frameStyle === "blur_padding") {
+    fgW = 994;
+    fgH = 1690;
+    rx = 24;
+    borderW = 3;
+    borderAlpha = 0.55;
+    shadowBlur = 24;
+    shadowOpacity = 0.6;
+  } else if (frameStyle === "modern_card") {
+    fgW = 950;
+    fgH = 1574;
+    rx = 32;
+    borderW = 4;
+    borderAlpha = 0.88;
+    shadowBlur = 30;
+    shadowOpacity = 0.7;
+    glowOpacity = 0.35;
+  } else if (frameStyle === "split_screen") {
+    fgW = 1015;
+    fgH = 1306;
+    rx = 20;
+    borderW = 3;
+    borderAlpha = 0.44;
+    shadowBlur = 20;
+    shadowOpacity = 0.6;
+  } else if (frameStyle === "minimal_glow") {
+    fgW = 1036;
+    fgH = 1805;
+    rx = 16;
+    borderW = 2;
+    borderAlpha = 1.0;
+    shadowBlur = 15;
+    shadowOpacity = 0.5;
+    glowOpacity = 0.4;
+  }
+
+  const fgX = Math.round((1080 - fgW) / 2);
+  const fgY = Math.round((1920 - fgH) / 2);
+
+  const sharp = (await import("sharp")).default;
+
+  // 1. Generate foreground video rounded corner alpha mask
+  const maskSvgPath = path.join(tempDir, `${renderId}_fg_mask.png`);
+  const maskSvg = `
+    <svg width="${fgW}" height="${fgH}" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="${fgW}" height="${fgH}" rx="${rx}" fill="#ffffff" />
+    </svg>
+  `;
+  await sharp(Buffer.from(maskSvg)).png().toFile(maskSvgPath);
+
+  // 2. Generate frame border and shadow overlay
+  const borderSvgPath = path.join(tempDir, `${renderId}_fg_border.png`);
+  const borderSvg = `
+    <svg width="1080" height="1920" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="card_shadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="18" stdDeviation="${shadowBlur}" flood-color="#000000" flood-opacity="${shadowOpacity}"/>
+          ${glowOpacity > 0 ? `<feDropShadow dx="0" dy="0" stdDeviation="15" flood-color="${accentColor}" flood-opacity="${glowOpacity}"/>` : ""}
+        </filter>
+      </defs>
+      <rect x="${fgX}" y="${fgY}" width="${fgW}" height="${fgH}" rx="${rx}" fill="none" stroke="${accentColor}" stroke-width="${borderW}" stroke-opacity="${borderAlpha}" filter="url(#card_shadow)" />
+    </svg>
+  `;
+  await sharp(Buffer.from(borderSvg)).png().toFile(borderSvgPath);
+
+  // 3. Generate headline card overlay (matching Remotion preview)
   const overlaySvgPath = path.join(tempDir, `${renderId}_overlay.png`);
   let hasTextOverlay = false;
 
@@ -110,62 +185,74 @@ export async function renderFramedStockVideo(
   const subText = (options.subtitle || "").trim();
   const headlineColor = options.headlineColor || "#ffffff";
   const subtitleColor = options.subtitleColor || "#cbd5e1";
-  const headlineBgColor = options.headlineBgColor || "#000000";
-  const logoSize = Math.max(60, Math.min(options.logoSize || 140, 260));
+  const headlineBgColor = options.headlineBgColor || "rgba(10, 12, 20, 0.82)";
+  const logoSize = Math.max(60, Math.min(options.logoSize || 130, 260));
 
   if (titleText || subText) {
     hasTextOverlay = true;
-    const sharp = (await import("sharp")).default;
 
-    const svgWidth = 1080;
-    const svgHeight = 1920;
-
-    let headlineY = 160;
-    let cardHeight = 180;
-    if (frameStyle === "split_screen") {
-      headlineY = 140;
-      cardHeight = 240;
-    } else if (frameStyle === "blur_padding") {
-      headlineY = 200;
+    function wrapText(str: string, maxChars = 24): string[] {
+      const words = str.split(/\s+/);
+      const lines: string[] = [];
+      let current = "";
+      for (const w of words) {
+        if ((current + " " + w).trim().length > maxChars) {
+          if (current) lines.push(current);
+          current = w;
+        } else {
+          current = current ? current + " " + w : w;
+        }
+      }
+      if (current) lines.push(current);
+      return lines;
     }
 
+    const titleLines = wrapText(titleText, 24);
+    const subLines = wrapText(subText, 34);
+
+    const titleTspans = titleLines.map((line, idx) =>
+      `<tspan x="540" dy="${idx === 0 ? 0 : 42}">${escapeXml(line)}</tspan>`
+    ).join("");
+
+    const subTspans = subLines.map((line, idx) =>
+      `<tspan x="540" dy="${idx === 0 ? 0 : 28}">${escapeXml(line)}</tspan>`
+    ).join("");
+
+    const cardW = 900;
+    const cardX = (1080 - cardW) / 2;
+    const cardY = frameStyle === "split_screen" ? 70 : 120;
+    const cardH = 46 + titleLines.length * 42 + (subLines.length ? subLines.length * 28 + 16 : 0);
+
     const svg = `
-      <svg width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" xmlns="http://www.w3.org/2000/svg">
+      <svg width="1080" height="1920" xmlns="http://www.w3.org/2000/svg">
         <defs>
-          <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
-            <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.6"/>
+          <filter id="text_card_shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="16" stdDeviation="22" flood-color="#000000" flood-opacity="0.6"/>
+            <feDropShadow dx="0" dy="0" stdDeviation="10" flood-color="${accentColor}" flood-opacity="0.2"/>
           </filter>
         </defs>
-        ${
-          titleText
-            ? `
-          <g filter="url(#shadow)">
-            <rect x="80" y="${headlineY - 50}" width="920" height="${subText ? cardHeight + 40 : cardHeight}" rx="28" fill="${headlineBgColor}" fill-opacity="0.82" stroke="${accentColor}" stroke-width="3" />
-            <text x="540" y="${headlineY + 40}" font-family="sans-serif" font-size="46" font-weight="bold" fill="${headlineColor}" text-anchor="middle" dominant-baseline="middle">
-              ${escapeXml(titleText)}
+        <g filter="url(#text_card_shadow)">
+          <rect x="${cardX}" y="${cardY}" width="${cardW}" height="${cardH}" rx="22" fill="${headlineBgColor}" stroke="${accentColor}" stroke-width="2" stroke-opacity="0.5" />
+          <text x="540" y="${cardY + 48}" font-family="sans-serif" font-size="34" font-weight="800" fill="${headlineColor}" text-anchor="middle">
+            ${titleTspans}
+          </text>
+          ${subLines.length ? `
+            <text x="540" y="${cardY + 52 + titleLines.length * 42 + 8}" font-family="sans-serif" font-size="20" font-weight="500" fill="${subtitleColor}" text-anchor="middle">
+              ${subTspans}
             </text>
-            ${
-              subText
-                ? `<text x="540" y="${headlineY + 110}" font-family="sans-serif" font-size="28" font-weight="500" fill="${subtitleColor}" text-anchor="middle" dominant-baseline="middle">
-                    ${escapeXml(subText)}
-                  </text>`
-                : ""
-            }
-          </g>`
-            : ""
-        }
+          ` : ""}
+        </g>
       </svg>
     `;
 
     await sharp(Buffer.from(svg)).png().toFile(overlaySvgPath);
   }
 
-  // Handle Logo
+  // 4. Handle Logo with drop shadow
   let logoPngPath = "";
   const rawLogo = options.logoUrl || brand.logo;
   if (rawLogo && logoPosition !== "none") {
     try {
-      const sharp = (await import("sharp")).default;
       logoPngPath = path.join(tempDir, `${renderId}_logo.png`);
       let logoBuf: Buffer | null = null;
       if (rawLogo.startsWith("data:")) {
@@ -179,8 +266,9 @@ export async function renderFramedStockVideo(
       }
 
       if (logoBuf) {
+        const logoMaxH = Math.round(logoSize * 0.7);
         await sharp(logoBuf)
-          .resize({ width: logoSize, height: logoSize, fit: "inside" })
+          .resize({ width: logoSize, height: logoMaxH, fit: "inside" })
           .png()
           .toFile(logoPngPath);
       }
@@ -207,8 +295,12 @@ export async function renderFramedStockVideo(
   }
 
   // Build FFmpeg inputs and filter complex
-  const inputs: string[] = ["-i", localPath];
-  let filterStreamIdx = 1;
+  const inputs: string[] = [
+    "-i", localPath,
+    "-i", maskSvgPath,
+    "-i", borderSvgPath,
+  ];
+  let filterStreamIdx = 3;
 
   let overlayInputIdx = -1;
   if (hasTextOverlay) {
@@ -229,38 +321,14 @@ export async function renderFramedStockVideo(
   }
 
   // Compose video filters
-  const filterParts: string[] = [];
-  let currentVideoOut = "v_base";
-
-  if (frameStyle === "blur_padding") {
-    // 9:16 target with blurred background and centered sharp foreground
-    filterParts.push(
-      "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=30:5[bg]",
-      "[0:v]scale=980:1740:force_original_aspect_ratio=decrease[fg]",
-      "[bg][fg]overlay=(W-w)/2:(H-h)/2[v_base]"
-    );
-  } else if (frameStyle === "split_screen") {
-    // Split screen: Top banner header, centered video, bottom banner footer
-    filterParts.push(
-      "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=40:8,eq=brightness=-0.2[bg]",
-      "[0:v]scale=1000:1360:force_original_aspect_ratio=decrease[fg]",
-      "[bg][fg]overlay=(W-w)/2:(H-h)/2[v_base]"
-    );
-  } else if (frameStyle === "modern_card") {
-    // Modern card with padding and subtle shadow/color
-    filterParts.push(
-      "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=35:6,eq=brightness=-0.15[bg]",
-      "[0:v]scale=940:1680:force_original_aspect_ratio=decrease[fg]",
-      "[bg][fg]overlay=(W-w)/2:(H-h)/2[v_base]"
-    );
-  } else {
-    // Minimal glow: video scaled with minimal padding
-    filterParts.push(
-      "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:4[bg]",
-      "[0:v]scale=1020:1820:force_original_aspect_ratio=decrease[fg]",
-      "[bg][fg]overlay=(W-w)/2:(H-h)/2[v_base]"
-    );
-  }
+  const filterParts: string[] = [
+    "[0:v]scale=1240:2200:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=32:5,eq=brightness=-0.18:saturation=1.2[bg]",
+    `[0:v]scale=${fgW}:${fgH}:force_original_aspect_ratio=increase,crop=${fgW}:${fgH}[fg_raw]`,
+    "[fg_raw][1:v]alphamerge[fg_rounded]",
+    `[bg][fg_rounded]overlay=${fgX}:${fgY}[v_fg]`,
+    "[v_fg][2:v]overlay=0:0[v_frame]",
+  ];
+  let currentVideoOut = "v_frame";
 
   // Overlay text banner if exists
   if (overlayInputIdx >= 0) {
@@ -271,20 +339,20 @@ export async function renderFramedStockVideo(
 
   // Overlay logo if exists
   if (logoInputIdx >= 0) {
-    let logoX = "W-w-50";
-    let logoY = "50";
+    let logoX = "W-w-40";
+    let logoY = "40";
     if (logoPosition === "top_left") {
-      logoX = "50";
-      logoY = "50";
+      logoX = "40";
+      logoY = "40";
     } else if (logoPosition === "bottom_left") {
-      logoX = "50";
-      logoY = "H-h-80";
+      logoX = "40";
+      logoY = "H-h-50";
     } else if (logoPosition === "bottom_right") {
-      logoX = "W-w-50";
-      logoY = "H-h-80";
+      logoX = "W-w-40";
+      logoY = "H-h-50";
     } else if (logoPosition === "bottom_center") {
       logoX = "(W-w)/2";
-      logoY = "H-h-80";
+      logoY = "H-h-50";
     }
     const nextOut = "v_logo";
     filterParts.push(`[${currentVideoOut}][${logoInputIdx}:v]overlay=${logoX}:${logoY}[${nextOut}]`);
@@ -458,6 +526,12 @@ export async function renderFramedStockVideo(
     throw new Error(`Video render işlemi başarısız oldu: ${errorMsg}`);
   } finally {
     // Cleanup temporary files
+    if (maskSvgPath && fs.existsSync(maskSvgPath)) {
+      fs.rmSync(maskSvgPath, { force: true });
+    }
+    if (borderSvgPath && fs.existsSync(borderSvgPath)) {
+      fs.rmSync(borderSvgPath, { force: true });
+    }
     if (overlaySvgPath && fs.existsSync(overlaySvgPath)) {
       fs.rmSync(overlaySvgPath, { force: true });
     }

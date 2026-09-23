@@ -62,23 +62,23 @@ type RenderedItem = {
 const frameStyles: { id: StockFrameStyle; name: string; desc: string }[] = [
   {
     id: "blur_padding",
-    name: "Modern Blur Kenarlık",
-    desc: "Yatay/kare videoyu arka plan bulanıklığıyla 9:16 Reels formatına dönüştürür",
+    name: "Modern Blur",
+    desc: "Bulanık Zemin",
   },
   {
     id: "modern_card",
-    name: "Şık Kart & Vurgu",
-    desc: "Yumuşak köşeli, zarif marka çerçeveli ve gölgeli vitrin düzeni",
+    name: "Şık Kart",
+    desc: "Kavisli Kenarlık",
   },
   {
     id: "split_screen",
-    name: "Bölünmüş Ekran (Header/Footer)",
-    desc: "Üstte kanca başlık alanı, ortada video, altta marka alanı",
+    name: "Bölünmüş",
+    desc: "Üst/Alt Başlık",
   },
   {
     id: "minimal_glow",
-    name: "Minimalist Işıltı",
-    desc: "Tam ekran video üzerine ince parlak marka çerçevesi",
+    name: "Minimal Işıltı",
+    desc: "İnce Parlak",
   },
 ];
 
@@ -104,6 +104,10 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
 
   // Selected video for customizer
   const [selectedVideoId, setSelectedVideoId] = useState<string>("");
+
+  // Pagination for stock videos
+  const PAGE_SIZE = 12;
+  const [currentPage, setCurrentPage] = useState<number>(1);
 
   // Editor states
   const [frameStyle, setFrameStyle] = useState<StockFrameStyle>("blur_padding");
@@ -256,6 +260,20 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
     }
   }
 
+  async function handleDeleteVideo(id: string) {
+    if (!confirm("Bu üretilen videoyu silmek istediğinize emin misiniz?")) return;
+    try {
+      const res = await fetch(`/api/videos/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setRenderedVideos((prev) => prev.filter((v) => v.id !== id));
+        if (lastRendered?.id === id) setLastRendered(null);
+        setFeedback("Video başarıyla silindi.");
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
@@ -273,6 +291,11 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
     const term = search.toLowerCase();
     return videos.filter((v) => v.name.toLowerCase().includes(term));
   }, [videos, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredVideos.length / PAGE_SIZE));
+  const paginatedVideos = useMemo(() => {
+    return filteredVideos.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  }, [filteredVideos, currentPage, PAGE_SIZE]);
 
   // Sync with Google Drive
   async function handleSync() {
@@ -472,10 +495,19 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                   type="text"
                   placeholder="Videolarda ara..."
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setCurrentPage(1);
+                  }}
                 />
                 {search && (
-                  <button type="button" onClick={() => setSearch("")}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearch("");
+                      setCurrentPage(1);
+                    }}
+                  >
                     <X size={12} />
                   </button>
                 )}
@@ -500,80 +532,115 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                   </button>
                 </div>
               ) : (
-                <div className="stock-video-grid">
-                  {filteredVideos.map((item) => {
-                    const isSelected = selectedVideo?.id === item.id;
-                    const mins = Math.floor(item.durationSeconds / 60);
-                    const secs = item.durationSeconds % 60;
-                    const durationLabel = `${mins > 0 ? `${mins}m ` : ""}${secs}s`;
+                <>
+                  <div className="stock-video-grid">
+                    {paginatedVideos.map((item) => {
+                      const isSelected = selectedVideo?.id === item.id;
+                      const mins = Math.floor(item.durationSeconds / 60);
+                      const secs = item.durationSeconds % 60;
+                      const durationLabel = `${mins > 0 ? `${mins}m ` : ""}${secs}s`;
 
-                    return (
-                      <article
-                        key={item.id}
-                        className={`stock-video-card ${isSelected ? "selected" : ""}`}
-                        onClick={() => setSelectedVideoId(item.id)}
-                      >
-                        <div className="stock-thumb-wrap">
-                          {item.thumbnailUrl ? (
-                            <Image
-                              src={item.thumbnailUrl}
-                              alt={item.name}
-                              fill
-                              sizes="(max-width: 768px) 50vw, 240px"
-                              unoptimized
-                            />
-                          ) : (
-                            <div className="stock-thumb-fallback">
-                              <Video size={28} />
+                      return (
+                        <article
+                          key={item.id}
+                          className={`stock-video-card ${isSelected ? "selected" : ""}`}
+                          onClick={() => setSelectedVideoId(item.id)}
+                        >
+                          <div className="stock-thumb-wrap">
+                            {item.thumbnailUrl ? (
+                              <Image
+                                src={item.thumbnailUrl}
+                                alt={item.name}
+                                fill
+                                sizes="(max-width: 768px) 50vw, 240px"
+                                unoptimized
+                              />
+                            ) : (
+                              <div className="stock-thumb-fallback">
+                                <Video size={28} />
+                              </div>
+                            )}
+                            <span className="stock-duration-tag">{durationLabel}</span>
+                            {isSelected && (
+                              <span className="stock-selected-tag">
+                                <Check size={12} />
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="stock-card-content">
+                            <strong title={item.name}>{item.name}</strong>
+                            <div className="stock-card-meta">
+                              <span>{item.width && item.height ? `${item.width}×${item.height}` : "HD"}</span>
+                              <span>·</span>
+                              <span>{item.sizeBytes ? `${(item.sizeBytes / (1024 * 1024)).toFixed(1)} MB` : ""}</span>
                             </div>
-                          )}
-                          <span className="stock-duration-tag">{durationLabel}</span>
-                          {isSelected && (
-                            <span className="stock-selected-tag">
-                              <Check size={12} />
-                            </span>
-                          )}
-                        </div>
 
-                        <div className="stock-card-content">
-                          <strong title={item.name}>{item.name}</strong>
-                          <div className="stock-card-meta">
-                            <span>{item.width && item.height ? `${item.width}×${item.height}` : "HD"}</span>
-                            <span>·</span>
-                            <span>{item.sizeBytes ? `${(item.sizeBytes / (1024 * 1024)).toFixed(1)} MB` : ""}</span>
+                            {/* Quick Actions */}
+                            <div className="stock-card-actions">
+                              {/* 1. Directly Share (Raw video) */}
+                              <Link
+                                href={`/projects/${projectId}/publishing?assetId=${item.id}`}
+                                className="stock-btn-share"
+                                title="Olduğu Gibi Paylaşım Planına Ekle"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Send size={12} />
+                                <span>Doğrudan Paylaş</span>
+                              </Link>
+
+                              {/* 2. Customize & Edit */}
+                              <button
+                                type="button"
+                                className={`stock-btn-edit ${isSelected ? "active" : ""}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedVideoId(item.id);
+                                }}
+                              >
+                                <Sparkles size={12} />
+                                <span>Özelleştir</span>
+                              </button>
+                            </div>
                           </div>
+                        </article>
+                      );
+                    })}
+                  </div>
 
-                          {/* Quick Actions */}
-                          <div className="stock-card-actions">
-                            {/* 1. Directly Share (Raw video) */}
-                            <Link
-                              href={`/projects/${projectId}/publishing?assetId=${item.id}`}
-                              className="stock-btn-share"
-                              title="Olduğu Gibi Paylaşım Planına Ekle"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Send size={12} />
-                              <span>Doğrudan Paylaş</span>
-                            </Link>
-
-                            {/* 2. Customize & Edit */}
-                            <button
-                              type="button"
-                              className={`stock-btn-edit ${isSelected ? "active" : ""}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedVideoId(item.id);
-                              }}
-                            >
-                              <Sparkles size={12} />
-                              <span>Özelleştir</span>
-                            </button>
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
+                  {/* Pagination Bar */}
+                  {totalPages > 1 && (
+                    <div className="stock-pagination-bar">
+                      <span className="stock-pagination-info">
+                        Toplam {filteredVideos.length} videodan {(currentPage - 1) * PAGE_SIZE + 1} -{" "}
+                        {Math.min(currentPage * PAGE_SIZE, filteredVideos.length)} arası
+                      </span>
+                      <div className="stock-pagination-btns">
+                        <button
+                          type="button"
+                          disabled={currentPage === 1}
+                          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                          className="button secondary"
+                          style={{ height: "30px", fontSize: "11px", padding: "0 10px" }}
+                        >
+                          ‹ Önceki
+                        </button>
+                        <span className="stock-page-indicator">
+                          {currentPage} / {totalPages}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={currentPage === totalPages}
+                          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                          className="button secondary"
+                          style={{ height: "30px", fontSize: "11px", padding: "0 10px" }}
+                        >
+                          Sonraki ›
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
@@ -593,7 +660,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                       <video src={rv.url} preload="metadata" controls muted />
                     </div>
                     <div className="stock-card-content">
-                      <strong>{rv.title || `Render-${rv.id.slice(0, 8)}`}</strong>
+                      <strong title={rv.title || rv.id}>{rv.title || `Render-${rv.id.slice(0, 8)}`}</strong>
                       <div className="stock-card-actions">
                         <Link
                           href={`/projects/${projectId}/publishing?assetId=${rv.id}`}
@@ -606,6 +673,14 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                           <Download size={12} />
                           <span>İndir</span>
                         </a>
+                        <button
+                          type="button"
+                          className="stock-btn-del"
+                          title="Videoyu Sil"
+                          onClick={() => void handleDeleteVideo(rv.id)}
+                        >
+                          <Trash2 size={12} />
+                        </button>
                       </div>
                     </div>
                   </article>
@@ -618,15 +693,15 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
         {/* Right Column: Customizer & Live Remotion Preview */}
         <section className="stock-customizer-panel">
           <div className="customizer-heading">
-            <div>
+            <div style={{ minWidth: 0, flex: 1 }}>
               <h3>
                 <Sparkles size={16} /> Video Özelleştirme &amp; Çerçeve
               </h3>
               <p>Reels/Story formatına uygun çerçeve, logo, başlık ve müzik miksajı.</p>
             </div>
             {selectedVideo && (
-              <span className="stock-badge-selected">
-                {selectedVideo.name.slice(0, 22)}...
+              <span className="stock-badge-selected" title={selectedVideo.name}>
+                {selectedVideo.name}
               </span>
             )}
           </div>
@@ -679,21 +754,21 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                 {/* 1. Frame Style */}
                 <div className="editor-group">
                   <label className="editor-label">
-                    <Layers size={14} /> Çerçeve Stili
+                    <Layers size={14} /> Çerçeve Düzeni
                   </label>
-                  <div className="frame-style-picker">
+                  <div className="frame-style-grid-2x2">
                     {frameStyles.map((fs) => (
                       <button
                         type="button"
                         key={fs.id}
-                        className={`frame-style-btn ${frameStyle === fs.id ? "selected" : ""}`}
+                        className={`frame-style-btn-compact ${frameStyle === fs.id ? "selected" : ""}`}
                         onClick={() => setFrameStyle(fs.id)}
                       >
-                        <div>
+                        <div className="frame-style-btn-text">
                           <strong>{fs.name}</strong>
                           <small>{fs.desc}</small>
                         </div>
-                        {frameStyle === fs.id && <Check size={14} />}
+                        {frameStyle === fs.id && <Check size={13} />}
                       </button>
                     ))}
                   </div>

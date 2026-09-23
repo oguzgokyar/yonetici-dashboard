@@ -202,7 +202,7 @@ button { cursor:pointer; }
 .customizer-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding-bottom:14px;border-bottom:1px solid #f0f0f4}
 .customizer-heading h3{margin:0 0 3px;font:700 15px "Manrope";display:flex;align-items:center;gap:6px;color:var(--text)}
 .customizer-heading p{margin:0;font-size:11px;color:var(--muted)}
-.stock-badge-selected{font-size:10px;background:#f1f0fc;color:var(--primary);padding:3px 8px;border-radius:8px;font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stock-badge-selected{font-size:10px;background:#f1f0fc;color:var(--primary);padding:3px 8px;border-radius:8px;font-weight:600;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
 
 .customizer-body{display:flex;flex-direction:column;gap:16px}
 .remotion-stage-wrap{position:relative;background:#0d0e16;border-radius:16px;padding:12px;overflow:hidden;display:flex;flex-direction:column;align-items:center}
@@ -276,6 +276,25 @@ button { cursor:pointer; }
 .stock-save-settings-bar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#f8f8fc;border-radius:12px;border:1px solid #e7e8f0;margin-top:4px}
 .stock-save-settings-bar strong{font-size:11px;color:var(--text);display:block}
 .stock-save-settings-bar p{margin:2px 0 0;font-size:9px;color:var(--muted)}
+
+/* 2x2 Frame Styles & Compact Customizer */
+.frame-style-grid-2x2{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.frame-style-btn-compact{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-radius:10px;border:1.5px solid #ececf4;background:#fbfbfd;cursor:pointer;transition:.15s ease;text-align:left}
+.frame-style-btn-compact:hover{border-color:#d5cfff;background:#faf9ff}
+.frame-style-btn-compact.selected{border-color:var(--primary);background:#f6f4ff;box-shadow:0 0 0 1px var(--primary)}
+.frame-style-btn-text strong{font-size:11px;font-weight:700;color:var(--text);display:block}
+.frame-style-btn-text small{font-size:9px;color:var(--muted);display:block;margin-top:1px}
+
+/* Delete Video Button */
+.stock-btn-del{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;border:1px solid #fee2e2;background:#fff1f2;color:#ef4444;cursor:pointer;transition:.15s ease;flex:none}
+.stock-btn-del:hover{background:#fee2e2;color:#dc2626}
+
+/* Pagination Bar */
+.stock-pagination-bar{display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding-top:14px;border-top:1px solid #ececf4;flex-wrap:wrap;gap:10px}
+.stock-pagination-info{font-size:11px;color:var(--muted)}
+.stock-pagination-btns{display:flex;align-items:center;gap:8px}
+.stock-page-indicator{font-size:11px;font-weight:700;color:var(--text);padding:0 4px}
+
 
 
 

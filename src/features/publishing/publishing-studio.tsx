@@ -55,7 +55,7 @@ type PostRecord = {
 type RecentAsset = {
   id: string;
   type: "image" | "video";
-  category: "image" | "video" | "stock";
+  category: "image" | "video" | "stock" | "stock_render";
   url: string;
   thumbnailUrl?: string;
   prompt?: string;
@@ -101,7 +101,7 @@ export function PublishingStudio({
   // Recent generated assets
   const [recentAssets, setRecentAssets] = useState<RecentAsset[]>([]);
   const [loadingAssets, setLoadingAssets] = useState(false);
-  const [modalMediaTab, setModalMediaTab] = useState<"image" | "video" | "stock">("image");
+  const [modalMediaTab, setModalMediaTab] = useState<"image" | "video" | "stock" | "stock_render">("image");
 
   // Status
   const [submitting, setSubmitting] = useState(false);
@@ -230,19 +230,22 @@ export function PublishingStudio({
           (v: {
             id: string;
             url: string;
+            title?: string;
+            isStockRender?: boolean;
             prompt?: string;
             idea?: { id?: string; title?: string; concept?: string };
             sourceTopic?: string;
             createdAt?: string;
           }) => {
+            const isStockRender = Boolean(v.isStockRender);
             items.push({
               id: v.id,
               type: "video",
-              category: "video",
+              category: isStockRender ? "stock_render" : "video",
               url: v.url || `/api/videos/${v.id}`,
-              prompt: v.prompt,
+              prompt: v.title || v.prompt || (isStockRender ? "Stok Üretim Video" : undefined),
               idea: v.idea,
-              sourceTopic: v.sourceTopic,
+              sourceTopic: v.title || v.sourceTopic,
               createdAt: v.createdAt,
             });
           }
@@ -722,8 +725,8 @@ export function PublishingStudio({
 
                 {mediaSourceTab === "recent" ? (
                   <div>
-                    {/* Category tabs: Görseller, Videolar, Stok Videolar */}
-                    <div className="segmented-filter" style={{ marginBottom: "10px" }}>
+                    {/* Category tabs: Görseller, Videolar, Stok Videolar, Stok Üretim */}
+                    <div className="segmented-filter" style={{ marginBottom: "10px", flexWrap: "wrap", gap: "4px" }}>
                       <button
                         type="button"
                         className={modalMediaTab === "image" ? "active" : ""}
@@ -744,6 +747,13 @@ export function PublishingStudio({
                         onClick={() => setModalMediaTab("stock")}
                       >
                         Stok Videolar ({recentAssets.filter((a) => a.category === "stock").length})
+                      </button>
+                      <button
+                        type="button"
+                        className={modalMediaTab === "stock_render" ? "active" : ""}
+                        onClick={() => setModalMediaTab("stock_render")}
+                      >
+                        ✨ Stok Üretim ({recentAssets.filter((a) => a.category === "stock_render").length})
                       </button>
                     </div>
 
@@ -779,7 +789,7 @@ export function PublishingStudio({
                                     loading="lazy"
                                   />
                                 )}
-                                <span>{asset.category === "stock" ? "STOK" : asset.type === "video" ? "MP4" : "IMG"}</span>
+                                <span>{asset.category === "stock_render" ? "ÜRETİM" : asset.category === "stock" ? "STOK" : asset.type === "video" ? "MP4" : "IMG"}</span>
                               </button>
                             );
                           })}
@@ -790,6 +800,7 @@ export function PublishingStudio({
                           {modalMediaTab === "image" && "Bu projede henüz üretilmiş görsel bulunamadı."}
                           {modalMediaTab === "video" && "Bu projede henüz üretilmiş video bulunamadı."}
                           {modalMediaTab === "stock" && "Bu projede henüz senkronize edilmiş stok video bulunamadı."}
+                          {modalMediaTab === "stock_render" && "Bu projede henüz stok içerikten üretilmiş video bulunamadı."}
                         </p>
                       </div>
                     )}

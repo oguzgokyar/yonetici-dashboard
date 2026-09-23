@@ -47,6 +47,7 @@ export async function GET(request: Request) {
     let sourceAssetId: string | undefined;
     let durationSeconds: number | undefined;
     let motionStyle: string | undefined;
+    let isStockRender = false;
 
     try {
       const requestState = JSON.parse(row.request_json || "{}");
@@ -55,14 +56,19 @@ export async function GET(request: Request) {
       motionStyle = requestState.motionStyle;
       idea = requestState.idea;
       sourceTopic = requestState.sourceTopic;
+      isStockRender = Boolean(
+        requestState.sourceStockVideoId || requestState.renderer === "ffmpeg-frame-engine"
+      );
     } catch { /* ignore */ }
 
     const responseState = JSON.parse(row.response_json || "{}");
     return {
       id: row.id,
       url: responseState.url || `/api/videos/${row.id}`,
+      title: responseState.title || (isStockRender ? "Stok Üretim Video" : undefined),
+      isStockRender,
       sourceAssetId,
-      durationSeconds,
+      durationSeconds: responseState.durationSeconds || durationSeconds,
       motionStyle,
       idea,
       sourceTopic,
