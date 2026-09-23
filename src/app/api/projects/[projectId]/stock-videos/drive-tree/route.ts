@@ -9,11 +9,16 @@ export async function GET(
 ) {
   const { projectId } = await context.params;
   const url = new URL(request.url);
-  const parentFolderId = url.searchParams.get("parentId")?.trim() || undefined;
+  const parentFolderId = url.searchParams.get("parentId")?.trim() || "root";
+  const parentName = url.searchParams.get("parentName")?.trim() || (parentFolderId === "root" ? "Drive" : "Klasör");
 
   try {
     const folders = await listDriveFolders(projectId, parentFolderId);
-    return Response.json({ ok: true, folders });
+    return Response.json({
+      ok: true,
+      current: { id: parentFolderId, name: parentName },
+      folders,
+    });
   } catch (err) {
     return Response.json(
       { ok: false, message: err instanceof Error ? err.message : String(err) },

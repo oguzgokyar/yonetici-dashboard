@@ -39,7 +39,7 @@ export async function GET(
   }
 
   try {
-    const { localPath } = await ensureCachedVideo(video.drive_file_id);
+    const { localPath } = await ensureCachedVideo(video.drive_file_id, projectId);
 
     // Update local_path in db if not set
     if (!video.local_path) {

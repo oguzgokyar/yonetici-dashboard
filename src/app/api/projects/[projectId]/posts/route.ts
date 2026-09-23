@@ -133,7 +133,7 @@ export async function POST(request: Request, context: Context) {
       if (stockRow) {
         try {
           const { ensureCachedVideo } = await import("@/lib/server/google-drive");
-          const { localPath } = await ensureCachedVideo(stockRow.drive_file_id);
+          const { localPath } = await ensureCachedVideo(stockRow.drive_file_id, projectId);
           if (fs.existsSync(localPath)) {
             fileBuffer = fs.readFileSync(localPath);
             filename = `stock-${stockRow.name}`;
@@ -167,7 +167,7 @@ export async function POST(request: Request, context: Context) {
         if (stockRow) {
           try {
             const { ensureCachedVideo } = await import("@/lib/server/google-drive");
-            const { localPath } = await ensureCachedVideo(stockRow.drive_file_id);
+            const { localPath } = await ensureCachedVideo(stockRow.drive_file_id, projectId);
             if (fs.existsSync(localPath)) {
               fileBuffer = fs.readFileSync(localPath);
               filename = `stock-${stockRow.name}`;

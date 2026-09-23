@@ -5,6 +5,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { getDatabase } from "@/lib/server/database";
 import { decryptSecret, encryptSecret } from "@/lib/server/secrets";
+import { buildDirectChildFolderQuery, chunkFolderIds } from "@/lib/stock-drive-architecture";
 
 const CACHE_DIR = path.join(process.cwd(), ".data", "stock-cache");
 
@@ -162,15 +163,14 @@ async function refreshGoogleAccessToken(tokenData: TokenData): Promise<{ tokenDa
 export async function getValidAccessToken(projectId?: string): Promise<string> {
   const db = getDatabase();
 
-  // 1. If projectId provided, check for active project_drive_accounts
+  // 1. If projectId provided, resolve the project's selected global Drive account
   if (projectId) {
     const accountRow = db
       .prepare(`
-        SELECT id, encrypted_token_json
-        FROM project_drive_accounts
-        WHERE project_id = ? AND is_active = 1
-        ORDER BY updated_at DESC
-        LIMIT 1
+        SELECT a.id, a.encrypted_token_json
+        FROM stock_drive_configs c
+        JOIN drive_accounts a ON a.id = c.account_id
+        WHERE c.project_id = ? AND c.account_id <> ''
       `)
       .get(projectId) as { id: string; encrypted_token_json: string } | undefined;
 
@@ -228,15 +228,9 @@ export async function getValidAccessToken(projectId?: string): Promise<string> {
  * If parentFolderId is supplied, lists direct child folders of that parent.
  * Otherwise lists top folders or all accessible folders.
  */
-export async function listDriveFolders(projectId?: string, parentFolderId?: string): Promise<DriveFolder[]> {
+export async function listDriveFolders(projectId?: string, parentFolderId = "root"): Promise<DriveFolder[]> {
   const accessToken = await getValidAccessToken(projectId);
-  const clauses: string[] = ["mimeType = 'application/vnd.google-apps.folder'", "trashed = false"];
-
-  if (parentFolderId && parentFolderId.trim()) {
-    clauses.push(`'${parentFolderId.trim()}' in parents`);
-  }
-
-  const q = clauses.join(" and ");
+  const q = buildDirectChildFolderQuery(parentFolderId);
   const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
     q
   )}&pageSize=100&fields=files(id,name,parents)&orderBy=name`;
@@ -321,42 +315,13 @@ export async function listDriveVideos(
     baseClauses.push(`name contains '${escaped}'`);
   }
 
-  // Handle multi-folder query
-  let finalQuery = baseClauses.join(" and ");
-
-  if (folderIds && folderIds.length > 0) {
-    if (folderIds.length === 1) {
-      finalQuery += ` and '${folderIds[0]}' in parents`;
-    } else {
-      // Google Drive API supports OR clauses inside parentheses
-      // E.g. and ('folder1' in parents or 'folder2' in parents)
-      // Chunk into batches of up to 25 to avoid Drive query length limits
-      const parentClauses = folderIds.slice(0, 30).map((id) => `'${id}' in parents`).join(" or ");
-      finalQuery += ` and (${parentClauses})`;
-    }
-  } else if (folderId && folderId.trim()) {
-    finalQuery += ` and '${folderId.trim()}' in parents`;
-  }
-
-  let url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
-    finalQuery
-  )}&pageSize=${pageSize}&fields=nextPageToken,files(id,name,mimeType,size,thumbnailLink,videoMediaMetadata,parents)&orderBy=name`;
-
-  if (pageToken) {
-    url += `&pageToken=${encodeURIComponent(pageToken)}`;
-  }
-
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-
-  if (!res.ok) {
-    throw new Error(`Google Drive videoları listelenemedi (${res.status}): ${await res.text()}`);
-  }
-
-  const data = (await res.json()) as {
-    nextPageToken?: string;
-    files?: Array<{
+  const targetFolderIds = folderIds?.length
+    ? folderIds
+    : folderId?.trim()
+      ? [folderId.trim()]
+      : [];
+  const folderBatches = targetFolderIds.length ? chunkFolderIds(targetFolderIds, 20) : [[]];
+  const filesById = new Map<string, {
       id: string;
       name: string;
       mimeType: string;
@@ -368,10 +333,53 @@ export async function listDriveVideos(
         durationMillis?: string;
       };
       parents?: string[];
-    }>;
-  };
+    }>();
+  let finalNextPageToken: string | undefined;
 
-  const files: DriveVideoFile[] = (data.files || []).map((file) => {
+  for (const folderBatch of folderBatches) {
+    let currentPageToken = pageToken;
+    do {
+      let finalQuery = baseClauses.join(" and ");
+      if (folderBatch.length === 1) {
+        finalQuery += ` and '${folderBatch[0]}' in parents`;
+      } else if (folderBatch.length > 1) {
+        const parentClauses = folderBatch.map((id) => `'${id}' in parents`).join(" or ");
+        finalQuery += ` and (${parentClauses})`;
+      }
+
+      let url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
+        finalQuery
+      )}&pageSize=${pageSize}&fields=nextPageToken,files(id,name,mimeType,size,thumbnailLink,videoMediaMetadata,parents)&orderBy=name`;
+      if (currentPageToken) url += `&pageToken=${encodeURIComponent(currentPageToken)}`;
+
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!res.ok) {
+        throw new Error(`Google Drive videoları listelenemedi (${res.status}): ${await res.text()}`);
+      }
+
+      const data = (await res.json()) as {
+        nextPageToken?: string;
+        files?: Array<{
+          id: string;
+          name: string;
+          mimeType: string;
+          size?: string;
+          thumbnailLink?: string;
+          videoMediaMetadata?: {
+            width?: number;
+            height?: number;
+            durationMillis?: string;
+          };
+          parents?: string[];
+        }>;
+      };
+      for (const file of data.files || []) filesById.set(file.id, file);
+      currentPageToken = data.nextPageToken;
+      finalNextPageToken = currentPageToken;
+    } while (currentPageToken);
+  }
+
+  const files: DriveVideoFile[] = Array.from(filesById.values()).map((file) => {
     let durationSeconds: number | undefined;
     if (file.videoMediaMetadata?.durationMillis) {
       durationSeconds = Math.round(Number.parseInt(file.videoMediaMetadata.durationMillis, 10) / 1000);
@@ -390,7 +398,7 @@ export async function listDriveVideos(
     };
   });
 
-  return { files, nextPageToken: data.nextPageToken };
+  return { files, nextPageToken: finalNextPageToken };
 }
 
 /**

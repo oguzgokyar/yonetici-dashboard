@@ -241,6 +241,19 @@ export async function POST(
         }
       }
 
+      const syncedFileIds = files.map((file) => file.id);
+      let removedCount = 0;
+      if (targetRootId) {
+        if (syncedFileIds.length === 0) {
+          removedCount = Number(db.prepare("DELETE FROM stock_videos WHERE project_id = ?").run(projectId).changes);
+        } else {
+          const placeholders = syncedFileIds.map(() => "?").join(",");
+          removedCount = Number(db.prepare(
+            `DELETE FROM stock_videos WHERE project_id = ? AND drive_file_id NOT IN (${placeholders})`
+          ).run(projectId, ...syncedFileIds).changes);
+        }
+      }
+
       // Mark sync status completed
       db.prepare(`
         UPDATE stock_drive_configs
@@ -253,10 +266,12 @@ export async function POST(
 
       return Response.json({
         ok: true,
-        message: `${files.length} video senkronize edildi (${addedCount} yeni / güncellendi).`,
+        message: `${files.length} video senkronize edildi, ${removedCount} kapsam dışı video kaldırıldı.`,
+        syncedCount: files.length,
         totalScanned: files.length,
         addedCount,
         updatedCount,
+        removedCount,
       });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);

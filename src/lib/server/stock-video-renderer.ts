@@ -85,7 +85,7 @@ export async function renderFramedStockVideo(
   }
 
   // Ensure local video is cached
-  const { localPath } = await ensureCachedVideo(stockRow.drive_file_id);
+  const { localPath } = await ensureCachedVideo(stockRow.drive_file_id, options.projectId);
 
   // Fetch project brand info for default colors / logo
   const projectRow = db

@@ -2,6 +2,7 @@ import "server-only";
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
+import { dedupeLegacyDriveAccounts } from "@/lib/stock-drive-architecture";
 
 const dataDir = path.join(process.cwd(), ".data");
 fs.mkdirSync(dataDir, { recursive: true });
@@ -108,6 +109,18 @@ function runMigrations(database: DatabaseSync) {
       error_message TEXT,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS drive_accounts (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      email TEXT NOT NULL DEFAULT '',
+      display_name TEXT NOT NULL DEFAULT '',
+      photo_link TEXT NOT NULL DEFAULT '',
+      encrypted_token_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_drive_accounts_email
+      ON drive_accounts(email) WHERE email <> '';
     CREATE TABLE IF NOT EXISTS project_drive_accounts (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -219,6 +232,18 @@ export function getDatabase() {
     database.exec("ALTER TABLE stock_drive_configs ADD COLUMN include_subfolders INTEGER NOT NULL DEFAULT 1;");
   } catch {}
   database.exec(`
+    CREATE TABLE IF NOT EXISTS drive_accounts (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      email TEXT NOT NULL DEFAULT '',
+      display_name TEXT NOT NULL DEFAULT '',
+      photo_link TEXT NOT NULL DEFAULT '',
+      encrypted_token_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_drive_accounts_email
+      ON drive_accounts(email) WHERE email <> '';
     CREATE TABLE IF NOT EXISTS project_drive_accounts (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -234,6 +259,64 @@ export function getDatabase() {
     CREATE INDEX IF NOT EXISTS idx_project_drive_accounts_project ON project_drive_accounts(project_id, is_active);
   `);
   runMigrations(database);
+  const globalAccountCount = database
+    .prepare("SELECT COUNT(*) AS total FROM drive_accounts")
+    .get() as { total: number };
+  if (globalAccountCount.total === 0) {
+    const legacyRows = database.prepare(`
+      SELECT id, project_id, label, email, display_name, photo_link,
+             encrypted_token_json, created_at, updated_at
+      FROM project_drive_accounts
+      ORDER BY updated_at DESC
+    `).all() as unknown as Array<{
+      id: string;
+      project_id: string;
+      label: string;
+      email: string;
+      display_name: string;
+      photo_link: string;
+      encrypted_token_json: string;
+      created_at: string;
+      updated_at: string;
+    }>;
+
+    const migration = dedupeLegacyDriveAccounts(legacyRows.map((row) => ({
+      id: row.id,
+      projectId: row.project_id,
+      label: row.label,
+      email: row.email,
+      displayName: row.display_name,
+      photoLink: row.photo_link,
+      encryptedTokenJson: row.encrypted_token_json,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    })));
+
+    const insertAccount = database.prepare(`
+      INSERT OR IGNORE INTO drive_accounts (
+        id, label, email, display_name, photo_link, encrypted_token_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const assignAccount = database.prepare(`
+      UPDATE stock_drive_configs SET account_id = ?, updated_at = ? WHERE project_id = ?
+    `);
+
+    for (const account of migration.accounts) {
+      insertAccount.run(
+        account.id,
+        account.label,
+        account.email,
+        account.displayName,
+        account.photoLink,
+        account.encryptedTokenJson,
+        account.createdAt,
+        account.updatedAt,
+      );
+    }
+    for (const assignment of migration.projectAssignments) {
+      assignAccount.run(assignment.accountId, new Date().toISOString(), assignment.projectId);
+    }
+  }
   database.exec("PRAGMA optimize;");
   globalDatabase.__yoneticiDb = database;
   return database;

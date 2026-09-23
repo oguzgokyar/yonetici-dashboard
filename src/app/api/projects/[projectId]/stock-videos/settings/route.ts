@@ -98,6 +98,13 @@ export async function POST(
   const originalVolume = typeof body.originalVolume === "number" ? body.originalVolume : 1.0;
   const musicVolume = typeof body.musicVolume === "number" ? body.musicVolume : 0.4;
   const selectedOutroId = body.selectedOutroId || "";
+  if (selectedOutroId) {
+    const outro = db.prepare("SELECT id FROM project_outro_videos WHERE id = ? AND project_id = ?")
+      .get(selectedOutroId, projectId);
+    if (!outro) {
+      return Response.json({ ok: false, message: "Seçilen outro bu projeye ait değil." }, { status: 400 });
+    }
+  }
 
   db.prepare(`
     INSERT INTO stock_project_settings (

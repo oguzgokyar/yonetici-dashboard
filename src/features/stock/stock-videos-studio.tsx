@@ -7,35 +7,32 @@ import { Player } from "@remotion/player";
 import {
   BookmarkCheck,
   Check,
-  ChevronRight,
   Clapperboard,
   Download,
   Film,
-  Folder,
   FolderOpen,
   FolderSync,
-  HardDrive,
   KeyRound,
   Layers,
   LoaderCircle,
   Music,
   Play,
-  Plus,
   RefreshCw,
   Search,
   Send,
-  Settings2,
   Sparkles,
   Trash2,
   Type,
-  Upload,
-  UserCheck,
   Video,
   Volume2,
   X,
 } from "lucide-react";
 import { useProjects } from "@/features/projects/projects-context";
 import { StockFramedVideo, type StockFrameStyle } from "@/remotion/StockFramedVideo";
+import { DriveSettingsModal } from "./drive-settings-modal";
+import { OutroLibraryModal } from "./outro-library-modal";
+import { StockAccordionSection } from "./stock-accordion-section";
+import type { DriveConfig, OutroItem } from "./types";
 
 type StockVideoItem = {
   id: string;
@@ -52,34 +49,6 @@ type StockVideoItem = {
   createdAt: string;
 };
 
-type DriveConfig = {
-  accountId?: string;
-  folderId: string;
-  folderName: string;
-  rootFolderId?: string;
-  rootFolderName?: string;
-  includeSubfolders?: boolean;
-  lastSyncedAt: string | null;
-  syncStatus: string;
-};
-
-type DriveAccount = {
-  id: string;
-  label: string;
-  email: string;
-  displayName: string;
-  photoLink?: string;
-  isActive: boolean;
-  createdAt: string;
-};
-
-type FolderTreeNode = {
-  id: string;
-  name: string;
-  isExpanded?: boolean;
-  children?: FolderTreeNode[];
-  loading?: boolean;
-};
 
 type RenderedItem = {
   id: string;
@@ -112,13 +81,6 @@ const frameStyles: { id: StockFrameStyle; name: string; desc: string }[] = [
   },
 ];
 
-type OutroItem = {
-  id: string;
-  title: string;
-  videoUrl: string;
-  durationSeconds?: number;
-  createdAt?: string;
-};
 
 export function StockVideosStudio({ projectId }: { projectId: string }) {
   const { getProject } = useProjects();
@@ -168,40 +130,29 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
   const [lastRendered, setLastRendered] = useState<RenderedItem | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  // Drive Settings & Accounts Modal
+  // Drive and editor dialogs
   const [driveModalOpen, setDriveModalOpen] = useState(false);
   const [driveModalTab, setDriveModalTab] = useState<"accounts" | "folders">("folders");
-  const [accounts, setAccounts] = useState<DriveAccount[]>([]);
-  const [systemAccount, setSystemAccount] = useState<{ email: string; displayName: string; photoLink?: string } | null>(null);
-  const [loadingAccounts, setLoadingAccounts] = useState(false);
-  const [newAccountLabel, setNewAccountLabel] = useState("");
-  const [newAccountTokenJson, setNewAccountTokenJson] = useState("");
-  const [savingAccount, setSavingAccount] = useState(false);
-  const [accountActionNotice, setAccountActionNotice] = useState<string | null>(null);
-
-  // Hierarchical Folder Tree
-  const [folderTree, setFolderTree] = useState<FolderTreeNode[]>([]);
-  const [loadingTree, setLoadingTree] = useState(false);
-  const [includeSubfolders, setIncludeSubfolders] = useState(true);
+  const [driveAccountLabel, setDriveAccountLabel] = useState("Drive hesabı");
+  const [outroModalOpen, setOutroModalOpen] = useState(false);
+  const [openCustomizerSection, setOpenCustomizerSection] = useState("frame");
 
   const brandColor = project?.brand.primaryColor || "#6d5dfc";
   const brandLogo = project?.brand.logo || "";
 
   const loadData = useCallback(async () => {
     try {
-      const [stockRes, vidRes, settingsRes] = await Promise.all([
+      const [stockRes, vidRes, settingsRes, driveRes] = await Promise.all([
         fetch(`/api/projects/${projectId}/stock-videos`, { cache: "no-store" }),
         fetch(`/api/videos?projectId=${projectId}`, { cache: "no-store" }),
         fetch(`/api/projects/${projectId}/stock-videos/settings`, { cache: "no-store" }),
+        fetch(`/api/projects/${projectId}/stock-videos/drive-accounts`, { cache: "no-store" }),
       ]);
 
       if (stockRes.ok) {
         const stockData = await stockRes.json();
         setVideos(stockData.videos || []);
         setConfig(stockData.config);
-        if (stockData.config?.includeSubfolders !== undefined) {
-          setIncludeSubfolders(stockData.config.includeSubfolders);
-        }
         if (stockData.videos?.length > 0 && !selectedVideoId) {
           setSelectedVideoId(stockData.videos[0].id);
         }
@@ -228,6 +179,14 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
           if (typeof s.musicVolume === "number") setMusicVolume(s.musicVolume);
           if (s.selectedOutroId) setSelectedOutroId(s.selectedOutroId);
         }
+      }
+
+      if (driveRes.ok) {
+        const driveData = await driveRes.json();
+        const selected = (driveData.accounts || []).find(
+          (account: { selectedForProject?: boolean }) => account.selectedForProject,
+        );
+        setDriveAccountLabel(selected?.label || driveData.systemAccount?.displayName || "Drive hesabı");
       }
     } catch {
       setFeedback("Stok videolar ve ayarlar yüklenirken bir hata oluştu.");
@@ -284,6 +243,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
       }
       setOutros((prev) => [data.outro, ...prev]);
       setSelectedOutroId(data.outro.id);
+      setOutroModalOpen(true);
       setFeedback("Yeni outro videosu başarıyla yüklendi ve seçildi.");
     } catch (err) {
       setFeedback(err instanceof Error ? err.message : String(err));
@@ -362,196 +322,9 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
     }
   }
 
-  // Load Accounts & Folders for Modal
-  const loadAccounts = useCallback(async () => {
-    setLoadingAccounts(true);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/stock-videos/drive-accounts`, { cache: "no-store" });
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        setAccounts(data.accounts || []);
-        setSystemAccount(data.systemAccount || null);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLoadingAccounts(false);
-    }
-  }, [projectId]);
-
-  const loadRootFolders = useCallback(async () => {
-    setLoadingTree(true);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/stock-videos/drive-tree`, { cache: "no-store" });
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        setFolderTree((data.folders || []).map((f: { id: string; name: string }) => ({ ...f, children: [] })));
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLoadingTree(false);
-    }
-  }, [projectId]);
-
   async function openDriveSettings(tab: "accounts" | "folders" = "folders") {
     setDriveModalTab(tab);
     setDriveModalOpen(true);
-    loadAccounts();
-    loadRootFolders();
-  }
-
-  // Expand / collapse folder node
-  async function toggleFolderExpand(node: FolderTreeNode) {
-    if (node.isExpanded) {
-      setFolderTree((prev) => updateTreeNode(prev, node.id, { isExpanded: false }));
-      return;
-    }
-
-    setFolderTree((prev) => updateTreeNode(prev, node.id, { loading: true }));
-    try {
-      const res = await fetch(`/api/projects/${projectId}/stock-videos/drive-tree?parentId=${encodeURIComponent(node.id)}`);
-      const data = await res.json();
-      const children: FolderTreeNode[] = (data.folders || []).map((f: { id: string; name: string }) => ({
-        ...f,
-        children: [],
-      }));
-      setFolderTree((prev) => updateTreeNode(prev, node.id, { isExpanded: true, loading: false, children }));
-    } catch {
-      setFolderTree((prev) => updateTreeNode(prev, node.id, { isExpanded: true, loading: false }));
-    }
-  }
-
-  function updateTreeNode(nodes: FolderTreeNode[], id: string, patch: Partial<FolderTreeNode>): FolderTreeNode[] {
-    return nodes.map((node) => {
-      if (node.id === id) {
-        return { ...node, ...patch };
-      }
-      if (node.children && node.children.length > 0) {
-        return { ...node, children: updateTreeNode(node.children, id, patch) };
-      }
-      return node;
-    });
-  }
-
-  // Select Root Folder
-  async function handleSetRootFolder(folderId: string, folderName: string) {
-    try {
-      const res = await fetch(`/api/projects/${projectId}/stock-videos/drive-tree`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          rootFolderId: folderId,
-          rootFolderName: folderName,
-          includeSubfolders,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        setConfig((prev) => ({
-          ...prev!,
-          folderId,
-          folderName,
-          rootFolderId: folderId,
-          rootFolderName: folderName,
-          includeSubfolders,
-          lastSyncedAt: prev?.lastSyncedAt || null,
-          syncStatus: "idle",
-        }));
-        setDriveModalOpen(false);
-        setFeedback(`Ana dizin '${folderName}' olarak ayarlandı. Senkronizasyon başlatılıyor...`);
-        setTimeout(() => handleSync(), 150);
-      }
-    } catch {
-      setFeedback("Ana dizin belirlenirken bir sorun oluştu.");
-    }
-  }
-
-  // Add new Google Account (Token JSON)
-  async function handleAddAccount(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newAccountTokenJson.trim()) return;
-
-    setSavingAccount(true);
-    setAccountActionNotice(null);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/stock-videos/drive-accounts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "add",
-          label: newAccountLabel.trim(),
-          tokenJson: newAccountTokenJson.trim(),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        throw new Error(data.message || "Hesap eklenemedi.");
-      }
-
-      setAccountActionNotice(data.message || "Hesap başarıyla eklendi.");
-      setNewAccountLabel("");
-      setNewAccountTokenJson("");
-      await loadAccounts();
-      await loadRootFolders();
-    } catch (err) {
-      setAccountActionNotice(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSavingAccount(false);
-    }
-  }
-
-  // Activate Account
-  async function handleActivateAccount(accountId: string) {
-    try {
-      const res = await fetch(`/api/projects/${projectId}/stock-videos/drive-accounts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "activate", accountId }),
-      });
-      if (res.ok) {
-        await loadAccounts();
-        await loadRootFolders();
-        setFeedback("Drive hesabı değiştirildi. Klasör ağacı güncellendi.");
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  // Switch to System Account
-  async function handleUseSystemAccount() {
-    try {
-      const res = await fetch(`/api/projects/${projectId}/stock-videos/drive-accounts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "use_system" }),
-      });
-      if (res.ok) {
-        await loadAccounts();
-        await loadRootFolders();
-        setFeedback("Sistem varsayılan Drive hesabına geçildi.");
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  // Delete Account
-  async function handleDeleteAccount(accountId: string) {
-    if (!confirm("Bu Drive hesabını bu projeden kaldırmak istediğinize emin misiniz?")) return;
-    try {
-      const res = await fetch(`/api/projects/${projectId}/stock-videos/drive-accounts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "delete", accountId }),
-      });
-      if (res.ok) {
-        await loadAccounts();
-      }
-    } catch {
-      // ignore
-    }
   }
 
   // Render framed video
@@ -600,8 +373,6 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
 
   if (!project) return <div className="overview-loading" />;
 
-  const activeAccount = accounts.find((a) => a.isActive);
-
   return (
     <div className="stock-studio-wrap">
       {/* Top Banner & Drive Sync Bar */}
@@ -628,7 +399,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
           >
             <KeyRound size={15} />
             <span>
-              {activeAccount ? activeAccount.label : systemAccount ? "Sistem Drive Hesabı" : "Drive Hesabı"}
+              {driveAccountLabel}
             </span>
           </button>
 
@@ -983,282 +754,95 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
 
               {/* Editor Controls */}
               <div className="customizer-controls">
-                {/* 1. Frame Style */}
-                <div className="editor-group">
-                  <label className="editor-label">
-                    <Layers size={14} /> Çerçeve Düzeni
-                  </label>
+                <StockAccordionSection
+                  id="frame"
+                  title="Çerçeve"
+                  summary={frameStyles.find((style) => style.id === frameStyle)?.name || "Düzen seçin"}
+                  icon={<Layers size={15} />}
+                  openSection={openCustomizerSection}
+                  onToggle={(id) => setOpenCustomizerSection((current) => current === id ? "" : id)}
+                >
                   <div className="frame-style-grid-2x2">
-                    {frameStyles.map((fs) => (
-                      <button
-                        type="button"
-                        key={fs.id}
-                        className={`frame-style-btn-compact ${frameStyle === fs.id ? "selected" : ""}`}
-                        onClick={() => setFrameStyle(fs.id)}
-                      >
-                        <div className="frame-style-btn-text">
-                          <strong>{fs.name}</strong>
-                          <small>{fs.desc}</small>
-                        </div>
-                        {frameStyle === fs.id && <Check size={13} />}
+                    {frameStyles.map((style) => (
+                      <button type="button" key={style.id} className={`frame-style-btn-compact ${frameStyle === style.id ? "selected" : ""}`} onClick={() => setFrameStyle(style.id)}>
+                        <span className="frame-style-btn-text"><strong>{style.name}</strong><small>{style.desc}</small></span>
+                        {frameStyle === style.id && <Check size={13} />}
                       </button>
                     ))}
                   </div>
-                </div>
+                </StockAccordionSection>
 
-                {/* 2. Text & Headline */}
-                <div className="editor-group">
-                  <label className="editor-label">
-                    <Type size={14} /> Kanca Başlık &amp; Metin
-                  </label>
-                  <input
-                    type="text"
-                    className="custom-input"
-                    placeholder="Örn: Doğanın Büyüleyici Dengesi (Kanca Başlık)"
-                    value={headline}
-                    onChange={(e) => setHeadline(e.target.value)}
-                  />
-                  <input
-                    type="text"
-                    className="custom-input"
-                    placeholder="Örn: Detaylı bilgi almak için kaydırın (Alt başlık)"
-                    value={subtitle}
-                    onChange={(e) => setSubtitle(e.target.value)}
-                    style={{ marginTop: 6 }}
-                  />
-
-                  {/* Text and Card Colors */}
-                  <div className="stock-color-grid" style={{ marginTop: 10 }}>
-                    <div className="stock-color-item">
-                      <small>Başlık Rengi</small>
-                      <div className="stock-color-picker-row">
-                        <input
-                          type="color"
-                          value={headlineColor.startsWith("#") ? headlineColor : "#ffffff"}
-                          onChange={(e) => setHeadlineColor(e.target.value)}
-                        />
-                        <div className="stock-color-presets">
-                          {["#ffffff", "#facc15", "#38bdf8", "#4ade80"].map((c) => (
-                            <button
-                              key={c}
-                              type="button"
-                              style={{ backgroundColor: c }}
-                              className={headlineColor === c ? "active" : ""}
-                              onClick={() => setHeadlineColor(c)}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="stock-color-item">
-                      <small>Alt Metin Rengi</small>
-                      <div className="stock-color-picker-row">
-                        <input
-                          type="color"
-                          value={subtitleColor.startsWith("#") ? subtitleColor : "#cbd5e1"}
-                          onChange={(e) => setSubtitleColor(e.target.value)}
-                        />
-                        <div className="stock-color-presets">
-                          {["#cbd5e1", "#ffffff", "#fde047", "#f43f5e"].map((c) => (
-                            <button
-                              key={c}
-                              type="button"
-                              style={{ backgroundColor: c }}
-                              className={subtitleColor === c ? "active" : ""}
-                              onClick={() => setSubtitleColor(c)}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="stock-color-item" style={{ gridColumn: "span 2" }}>
-                      <small>Kart Arka Plan Rengi</small>
-                      <div className="stock-color-picker-row">
-                        <div className="stock-color-presets" style={{ width: "100%", gap: 6 }}>
-                          {[
-                            { label: "Koyu Cam", val: "rgba(10, 12, 20, 0.82)" },
-                            { label: "Tam Siyah", val: "#000000" },
-                            { label: "Marka Rengi", val: brandColor },
-                            { label: "Şeffaf", val: "transparent" },
-                          ].map((item) => (
-                            <button
-                              key={item.label}
-                              type="button"
-                              className={`stock-bg-chip ${headlineBgColor === item.val ? "active" : ""}`}
-                              onClick={() => setHeadlineBgColor(item.val)}
-                            >
-                              {item.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
+                <StockAccordionSection
+                  id="text"
+                  title="Metin ve renkler"
+                  summary={headline.trim() || "Başlık eklenmedi"}
+                  icon={<Type size={15} />}
+                  openSection={openCustomizerSection}
+                  onToggle={(id) => setOpenCustomizerSection((current) => current === id ? "" : id)}
+                >
+                  <input type="text" className="custom-input" placeholder="Kanca başlık" value={headline} onChange={(event) => setHeadline(event.target.value)} />
+                  <input type="text" className="custom-input" placeholder="Alt başlık" value={subtitle} onChange={(event) => setSubtitle(event.target.value)} />
+                  <div className="stock-color-grid">
+                    <div className="stock-color-item"><small>Başlık</small><input type="color" value={headlineColor.startsWith("#") ? headlineColor : "#ffffff"} onChange={(event) => setHeadlineColor(event.target.value)} /></div>
+                    <div className="stock-color-item"><small>Alt metin</small><input type="color" value={subtitleColor.startsWith("#") ? subtitleColor : "#cbd5e1"} onChange={(event) => setSubtitleColor(event.target.value)} /></div>
                   </div>
-                </div>
-
-                {/* 3. Logo Placement */}
-                <div className="editor-group">
-                  <label className="editor-label">
-                    <Sparkles size={14} /> Marka Logosu &amp; Ölçüsü
-                  </label>
-                  <div className="segmented-grid">
+                  <div className="stock-color-presets wide">
                     {[
-                      { id: "top_right", label: "Sağ Üst" },
-                      { id: "top_left", label: "Sol Üst" },
-                      { id: "bottom_center", label: "Alt Merkez" },
-                      { id: "none", label: "Gizle" },
-                    ].map((pos) => (
-                      <button
-                        type="button"
-                        key={pos.id}
-                        className={logoPosition === pos.id ? "active" : ""}
-                        onClick={() => setLogoPosition(pos.id as typeof logoPosition)}
-                      >
-                        {pos.label}
-                      </button>
+                      { label: "Koyu cam", value: "rgba(10, 12, 20, 0.82)" },
+                      { label: "Siyah", value: "#000000" },
+                      { label: "Marka", value: brandColor },
+                      { label: "Şeffaf", value: "transparent" },
+                    ].map((item) => <button type="button" key={item.label} className={`stock-bg-chip ${headlineBgColor === item.value ? "active" : ""}`} onClick={() => setHeadlineBgColor(item.value)}>{item.label}</button>)}
+                  </div>
+                </StockAccordionSection>
+
+                <StockAccordionSection
+                  id="logo"
+                  title="Logo"
+                  summary={logoPosition === "none" ? "Gizli" : `${logoPosition === "top_right" ? "Sağ üst" : logoPosition === "top_left" ? "Sol üst" : "Alt merkez"} · ${logoSize}px`}
+                  icon={<Sparkles size={15} />}
+                  openSection={openCustomizerSection}
+                  onToggle={(id) => setOpenCustomizerSection((current) => current === id ? "" : id)}
+                >
+                  <div className="segmented-grid">
+                    {[{ id: "top_right", label: "Sağ Üst" }, { id: "top_left", label: "Sol Üst" }, { id: "bottom_center", label: "Alt Merkez" }, { id: "none", label: "Gizle" }].map((position) => (
+                      <button type="button" key={position.id} className={logoPosition === position.id ? "active" : ""} onClick={() => setLogoPosition(position.id as typeof logoPosition)}>{position.label}</button>
                     ))}
                   </div>
+                  {logoPosition !== "none" && <div className="slider-item"><small>Logo genişliği: {logoSize}px</small><input type="range" min="60" max="240" step="5" value={logoSize} onChange={(event) => setLogoSize(Number(event.target.value))} /></div>}
+                </StockAccordionSection>
 
-                  {logoPosition !== "none" && (
-                    <div className="slider-item" style={{ marginTop: 8 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <small>Logo Genişliği: {logoSize}px</small>
-                        <div className="stock-color-presets" style={{ gap: 4 }}>
-                          {[
-                            { label: "K", val: 90 },
-                            { label: "O", val: 140 },
-                            { label: "B", val: 200 },
-                          ].map((s) => (
-                            <button
-                              key={s.label}
-                              type="button"
-                              className={`stock-size-chip ${logoSize === s.val ? "active" : ""}`}
-                              onClick={() => setLogoSize(s.val)}
-                            >
-                              {s.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <input
-                        type="range"
-                        min="60"
-                        max="240"
-                        step="5"
-                        value={logoSize}
-                        onChange={(e) => setLogoSize(Number.parseInt(e.target.value, 10))}
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* 4. Audio & Music Mix */}
-                <div className="editor-group">
-                  <label className="editor-label">
-                    <Music size={14} /> Arka Plan Müziği &amp; Ses Miksajı
-                  </label>
+                <StockAccordionSection
+                  id="audio"
+                  title="Ses"
+                  summary={`Video %${Math.round(originalVolume * 100)} · Müzik ${musicTrack === "none" ? "Kapalı" : `%${Math.round(musicVolume * 100)}`}`}
+                  icon={<Music size={15} />}
+                  openSection={openCustomizerSection}
+                  onToggle={(id) => setOpenCustomizerSection((current) => current === id ? "" : id)}
+                >
                   <div className="audio-select-row">
-                    <button
-                      type="button"
-                      className={`audio-option-btn ${musicTrack === "/audio/ambient_track.mp3" ? "active" : ""}`}
-                      onClick={() => setMusicTrack("/audio/ambient_track.mp3")}
-                    >
-                      <Volume2 size={13} />
-                      <span>Huzurlu &amp; Sakin (Ambient)</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`audio-option-btn ${musicTrack === "none" ? "active" : ""}`}
-                      onClick={() => setMusicTrack("none")}
-                    >
-                      <X size={13} />
-                      <span>Müzik Yok (Sadece Video Sesi)</span>
-                    </button>
+                    <button type="button" className={`audio-option-btn ${musicTrack !== "none" ? "active" : ""}`} onClick={() => setMusicTrack("/audio/ambient_track.mp3")}><Volume2 size={13} /> Ambient</button>
+                    <button type="button" className={`audio-option-btn ${musicTrack === "none" ? "active" : ""}`} onClick={() => setMusicTrack("none")}><X size={13} /> Müzik yok</button>
                   </div>
+                  <div className="slider-row">
+                    <div className="slider-item"><small>Video sesi %{Math.round(originalVolume * 100)}</small><input type="range" min="0" max="1" step="0.05" value={originalVolume} onChange={(event) => setOriginalVolume(Number(event.target.value))} /></div>
+                    {musicTrack !== "none" && <div className="slider-item"><small>Müzik %{Math.round(musicVolume * 100)}</small><input type="range" min="0" max="1" step="0.05" value={musicVolume} onChange={(event) => setMusicVolume(Number(event.target.value))} /></div>}
+                  </div>
+                </StockAccordionSection>
 
-                  <div className="slider-row" style={{ marginTop: 10 }}>
-                    <div className="slider-item">
-                      <small>Orijinal Video Sesi: %{Math.round(originalVolume * 100)}</small>
-                      <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.05"
-                        value={originalVolume}
-                        onChange={(e) => setOriginalVolume(Number.parseFloat(e.target.value))}
-                      />
-                    </div>
-                    {musicTrack !== "none" && (
-                      <div className="slider-item">
-                        <small>Müzik Sesi: %{Math.round(musicVolume * 100)}</small>
-                        <input
-                          type="range"
-                          min="0"
-                          max="1"
-                          step="0.05"
-                          value={musicVolume}
-                          onChange={(e) => setMusicVolume(Number.parseFloat(e.target.value))}
-                        />
-                      </div>
-                    )}
+                <StockAccordionSection
+                  id="outro"
+                  title="Outro"
+                  summary={outros.find((outro) => outro.id === selectedOutroId)?.title || "Outro kullanılmıyor"}
+                  icon={<Film size={15} />}
+                  openSection={openCustomizerSection}
+                  onToggle={(id) => setOpenCustomizerSection((current) => current === id ? "" : id)}
+                >
+                  <div className="selected-outro-summary">
+                    <span><strong>{outros.find((outro) => outro.id === selectedOutroId)?.title || "Outro yok"}</strong><small>{selectedOutroId ? "Video sonunda oynatılacak" : "Video ana içerikten sonra bitecek"}</small></span>
+                    <button type="button" className="button secondary" onClick={() => setOutroModalOpen(true)}>Seç / Yönet</button>
                   </div>
-                </div>
-
-                {/* 5. Outro (Bitiş) Videosu */}
-                <div className="editor-group">
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <label className="editor-label">
-                      <Film size={14} /> Bitiş (Outro) Videosu
-                    </label>
-                    <label className="stock-upload-btn">
-                      {uploadingOutro ? <LoaderCircle className="spin" size={12} /> : <Upload size={12} />}
-                      <span>{uploadingOutro ? "Yükleniyor..." : "Outro Yükle"}</span>
-                      <input
-                        type="file"
-                        accept="video/mp4,video/quicktime,video/webm"
-                        style={{ display: "none" }}
-                        disabled={uploadingOutro}
-                        onChange={handleUploadOutro}
-                      />
-                    </label>
-                  </div>
-
-                  <div className="outro-picker-grid">
-                    <button
-                      type="button"
-                      className={`outro-card-btn ${!selectedOutroId ? "active" : ""}`}
-                      onClick={() => setSelectedOutroId("")}
-                    >
-                      <span>Outro Yok</span>
-                      {!selectedOutroId && <Check size={12} />}
-                    </button>
-                    {outros.map((o) => (
-                      <div
-                        key={o.id}
-                        className={`outro-card-item ${selectedOutroId === o.id ? "active" : ""}`}
-                        onClick={() => setSelectedOutroId(o.id)}
-                      >
-                        <span title={o.title}>{o.title}</span>
-                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          {selectedOutroId === o.id && <Check size={12} style={{ color: "var(--primary)" }} />}
-                          <button
-                            type="button"
-                            className="icon-button outro-del-btn"
-                            title="Outro'yu Sil"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteOutro(o.id);
-                            }}
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                </StockAccordionSection>
 
                 {/* Save settings for this brand */}
                 <div className="stock-save-settings-bar">
@@ -1338,280 +922,30 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
         </section>
       </div>
 
-      {/* Drive Configuration Modal (Accounts & Root Folder) */}
       {driveModalOpen && (
-        <div className="modal-backdrop">
-          <div className="surface-modal drive-config-modal">
-            <div className="modal-header">
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Settings2 size={18} color="var(--primary)" />
-                <h3>Google Drive Yapılandırması</h3>
-              </div>
-              <button
-                type="button"
-                className="icon-button"
-                onClick={() => setDriveModalOpen(false)}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Modal Tabs */}
-            <div className="segmented-filter" style={{ margin: "12px 0 16px" }}>
-              <button
-                type="button"
-                className={driveModalTab === "folders" ? "active" : ""}
-                onClick={() => setDriveModalTab("folders")}
-              >
-                <FolderOpen size={13} style={{ marginRight: 6 }} />
-                Ana Dizin &amp; Klasör Kapsamı
-              </button>
-              <button
-                type="button"
-                className={driveModalTab === "accounts" ? "active" : ""}
-                onClick={() => setDriveModalTab("accounts")}
-              >
-                <HardDrive size={13} style={{ marginRight: 6 }} />
-                Drive Hesapları ({accounts.length + (systemAccount ? 1 : 0)})
-              </button>
-            </div>
-
-            {/* TAB 1: Ana Dizin ve Klasör Ağacı */}
-            {driveModalTab === "folders" && (
-              <div className="drive-tab-content">
-                <p className="modal-desc">
-                  Bu projede taranacak <strong>Ana Dizin</strong> klasörünü belirleyin. Sistem sadece seçtiğiniz bu ana dizin ve altındaki klasörlerdeki stok videoları projeye çeker.
-                </p>
-
-                <div className="subfolder-toggle-bar">
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: "12px" }}>
-                    <input
-                      type="checkbox"
-                      checked={includeSubfolders}
-                      onChange={(e) => setIncludeSubfolders(e.target.checked)}
-                      style={{ accentColor: "var(--primary)" }}
-                    />
-                    <span>Alt dizinlerdeki videoları da otomatik tara (Recursive)</span>
-                  </label>
-                </div>
-
-                <div className="folder-tree-container">
-                  {loadingTree ? (
-                    <div className="overview-loading">Klasör ağacı taranıyor...</div>
-                  ) : folderTree.length === 0 ? (
-                    <div className="history-empty">
-                      <Folder size={28} />
-                      <span>Bağlı Drive hesabında klasör bulunamadı.</span>
-                    </div>
-                  ) : (
-                    <div className="folder-tree-list">
-                      {folderTree.map((node) => (
-                        <FolderTreeItem
-                          key={node.id}
-                          node={node}
-                          selectedId={config?.rootFolderId || config?.folderId}
-                          onSelect={handleSetRootFolder}
-                          onToggle={toggleFolderExpand}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* TAB 2: Drive Hesapları & Token Yükleme */}
-            {driveModalTab === "accounts" && (
-              <div className="drive-tab-content">
-                <p className="modal-desc">
-                  Bu projeye özel bir Google Drive hesabı tanımlayabilir veya hesaplar arasında geçiş yapabilirsiniz:
-                </p>
-
-                {accountActionNotice && (
-                  <div className="generation-notice" style={{ marginBottom: 12 }}>
-                    <span>{accountActionNotice}</span>
-                  </div>
-                )}
-
-                {/* Accounts list */}
-                <div className="drive-accounts-list">
-                  {/* System default account */}
-                  {systemAccount && (
-                    <div className={`drive-account-card ${!activeAccount ? "active" : ""}`}>
-                      <div className="account-avatar-wrap">
-                        {systemAccount.photoLink ? (
-                          <img src={systemAccount.photoLink} alt="" />
-                        ) : (
-                          <HardDrive size={18} />
-                        )}
-                      </div>
-                      <div className="account-meta">
-                        <strong>{systemAccount.displayName || "Sistem Varsayılan Drive"}</strong>
-                        <small>{systemAccount.email}</small>
-                        {!activeAccount && <span className="account-badge-active">Aktif (Sistem)</span>}
-                      </div>
-                      {activeAccount && (
-                        <button
-                          type="button"
-                          className="button secondary"
-                          style={{ height: 30, fontSize: 11 }}
-                          onClick={handleUseSystemAccount}
-                        >
-                          Bu Hesaba Geç
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Custom Project Accounts */}
-                  {accounts.map((acc) => (
-                    <div key={acc.id} className={`drive-account-card ${acc.isActive ? "active" : ""}`}>
-                      <div className="account-avatar-wrap">
-                        {acc.photoLink ? (
-                          <img src={acc.photoLink} alt="" />
-                        ) : (
-                          <UserCheck size={18} />
-                        )}
-                      </div>
-                      <div className="account-meta">
-                        <strong>{acc.label}</strong>
-                        <small>{acc.email || "Özel Hesap"}</small>
-                        {acc.isActive && <span className="account-badge-active">Aktif</span>}
-                      </div>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        {!acc.isActive && (
-                          <button
-                            type="button"
-                            className="button secondary"
-                            style={{ height: 30, fontSize: 11 }}
-                            onClick={() => handleActivateAccount(acc.id)}
-                          >
-                            Aktifleştir
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className="stock-btn-del"
-                          title="Hesabı Kaldır"
-                          onClick={() => handleDeleteAccount(acc.id)}
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Add new account form */}
-                <form onSubmit={handleAddAccount} className="add-drive-account-form">
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: "12px" }}>
-                    <Plus size={14} color="var(--primary)" />
-                    <span>Farklı Drive Hesabı Ekle (Token JSON)</span>
-                  </div>
-                  <input
-                    type="text"
-                    className="custom-input"
-                    placeholder="Hesap Etiketi (Örn: Yedek Arşiv, Şirket Drive)"
-                    value={newAccountLabel}
-                    onChange={(e) => setNewAccountLabel(e.target.value)}
-                  />
-                  <textarea
-                    className="custom-textarea"
-                    rows={4}
-                    placeholder='{"access_token": "...", "refresh_token": "...", "client_id": "...", "client_secret": "..."}'
-                    value={newAccountTokenJson}
-                    onChange={(e) => setNewAccountTokenJson(e.target.value)}
-                    required
-                  />
-                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                    <button
-                      type="submit"
-                      className="button primary"
-                      style={{ height: 34, fontSize: 11 }}
-                      disabled={savingAccount}
-                    >
-                      {savingAccount ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}
-                      <span>Hesabı Doğrula ve Bağla</span>
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
-          </div>
-        </div>
+        <DriveSettingsModal
+          projectId={projectId}
+          config={config}
+          initialTab={driveModalTab}
+          onClose={() => setDriveModalOpen(false)}
+          onConfigured={async (message: string, syncAfterSave?: boolean) => {
+            setFeedback(message);
+            await loadData();
+            if (syncAfterSave) setTimeout(() => void handleSync(), 100);
+          }}
+        />
       )}
-    </div>
-  );
-}
 
-// Recursive Folder Tree Component
-function FolderTreeItem({
-  node,
-  selectedId,
-  onSelect,
-  onToggle,
-  level = 0,
-}: {
-  node: FolderTreeNode;
-  selectedId?: string;
-  onSelect: (id: string, name: string) => void;
-  onToggle: (node: FolderTreeNode) => void;
-  level?: number;
-}) {
-  const isSelected = selectedId === node.id;
-
-  return (
-    <div className="folder-tree-node-wrap">
-      <div
-        className={`folder-tree-row ${isSelected ? "selected" : ""}`}
-        style={{ paddingLeft: `${level * 18 + 10}px` }}
-      >
-        <button
-          type="button"
-          className="folder-chevron-btn"
-          onClick={() => onToggle(node)}
-        >
-          {node.loading ? (
-            <LoaderCircle className="spin" size={13} />
-          ) : (
-            <ChevronRight
-              size={14}
-              style={{
-                transform: node.isExpanded ? "rotate(90deg)" : "none",
-                transition: "transform .15s ease",
-              }}
-            />
-          )}
-        </button>
-
-        <div className="folder-tree-title" onClick={() => onToggle(node)}>
-          {node.isExpanded ? <FolderOpen size={15} color="var(--primary)" /> : <Folder size={15} color="#7c819a" />}
-          <span title={node.name}>{node.name}</span>
-        </div>
-
-        <button
-          type="button"
-          className={`folder-set-root-btn ${isSelected ? "active" : ""}`}
-          onClick={() => onSelect(node.id, node.name)}
-        >
-          {isSelected ? <Check size={12} /> : null}
-          <span>{isSelected ? "Ana Dizin" : "Ana Dizin Yap"}</span>
-        </button>
-      </div>
-
-      {node.isExpanded && node.children && node.children.length > 0 && (
-        <div className="folder-tree-children">
-          {node.children.map((child) => (
-            <FolderTreeItem
-              key={child.id}
-              node={child}
-              selectedId={selectedId}
-              onSelect={onSelect}
-              onToggle={onToggle}
-              level={level + 1}
-            />
-          ))}
-        </div>
+      {outroModalOpen && (
+        <OutroLibraryModal
+          outros={outros}
+          selectedOutroId={selectedOutroId}
+          uploading={uploadingOutro}
+          onSelect={setSelectedOutroId}
+          onUpload={handleUploadOutro}
+          onDelete={(id) => void handleDeleteOutro(id)}
+          onClose={() => setOutroModalOpen(false)}
+        />
       )}
     </div>
   );
