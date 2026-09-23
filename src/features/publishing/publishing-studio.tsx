@@ -17,7 +17,6 @@ import {
   Plus,
   RefreshCw,
   Send,
-  Settings,
   Share2,
   Sparkles,
   Trash2,
@@ -191,9 +190,10 @@ export function PublishingStudio({
   async function loadRecentAssets(targetId?: string) {
     setLoadingAssets(true);
     try {
-      const [imgRes, vidRes] = await Promise.all([
+      const [imgRes, vidRes, stockRes] = await Promise.all([
         fetch(`/api/ai/images?projectId=${projectId}`).catch(() => null),
         fetch(`/api/videos?projectId=${projectId}`).catch(() => null),
+        fetch(`/api/projects/${projectId}/stock-videos`).catch(() => null),
       ]);
 
       const items: RecentAsset[] = [];
@@ -243,6 +243,26 @@ export function PublishingStudio({
           }
         );
       }
+      if (stockRes && stockRes.ok) {
+        const stockData = await stockRes.json();
+        (stockData.videos || []).forEach(
+          (s: {
+            id: string;
+            name: string;
+            streamUrl: string;
+            createdAt?: string;
+          }) => {
+            items.push({
+              id: s.id,
+              type: "video",
+              url: s.streamUrl,
+              prompt: `Stok Video: ${s.name}`,
+              sourceTopic: s.name.replace(/\.[^/.]+$/, ""),
+              createdAt: s.createdAt,
+            });
+          }
+        );
+      }
       setRecentAssets(items);
 
       const target = targetId ? items.find((i) => i.id === targetId) : null;
@@ -259,6 +279,7 @@ export function PublishingStudio({
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
     if (initialAssetId) {
       setModalOpen(true);
@@ -626,7 +647,7 @@ export function PublishingStudio({
         <div className="panel-empty" style={{ minHeight: "240px", marginTop: "18px" }}>
           <div><CalendarClock size={24} /></div>
           <strong>Bu filtrede gösterilecek içerik yok</strong>
-          <p>"Yeni İçerik Planla" butonuna tıklayarak üretilmiş kreatiflerinizi sosyal medyada yayınlayabilir veya takvime ekleyebilirsiniz.</p>
+          <p>&quot;Yeni İçerik Planla&quot; butonuna tıklayarak üretilmiş kreatiflerinizi sosyal medyada yayınlayabilir veya takvime ekleyebilirsiniz.</p>
         </div>
       )}
 
@@ -812,7 +833,7 @@ export function PublishingStudio({
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                     <select
                       value={aiStyle}
-                      onChange={(e) => setAiStyle(e.target.value as any)}
+                      onChange={(e) => setAiStyle(e.target.value as "sales" | "story" | "educational" | "punchy")}
                       style={{
                         height: "28px",
                         border: "1px solid #dedfe6",
@@ -867,7 +888,7 @@ export function PublishingStudio({
               </div>
 
               <label className="field-label">
-                Hashtag'ler
+                Hashtag&apos;ler
                 <input
                   type="text"
                   value={hashtags}

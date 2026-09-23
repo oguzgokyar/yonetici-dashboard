@@ -12,7 +12,6 @@ import {
   RefreshCw,
   Settings,
   Share2,
-  Trash2,
   Unlink,
 } from "lucide-react";
 
@@ -69,6 +68,7 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadAccounts();
   }, [projectId]);
 
@@ -298,7 +298,7 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
         <section className="panel" style={{ marginTop: "18px" }}>
           <div className="panel-header">
             <div>
-              <h3>Postiz'den Hesap Eşle</h3>
+              <h3>Postiz&apos;den Hesap Eşle</h3>
               <p>Postiz hesabınızda tanımlı olan ancak bu projeye henüz atanmamış hesaplar</p>
             </div>
             <span className="badge-pill info">
@@ -363,7 +363,7 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
                   style={{ marginTop: "12px", height: "34px", fontSize: "11px" }}
                 >
                   <ExternalLink size={13} />
-                  Postiz'de Yeni Hesap Bağla
+                  Postiz&apos;de Yeni Hesap Bağla
                 </a>
               )}
             </div>

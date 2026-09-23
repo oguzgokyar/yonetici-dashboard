@@ -124,9 +124,29 @@ export async function POST(request: Request, context: Context) {
         mimeType = "video/mp4";
       }
     }
+
+    // C. Check in stock_videos / .data/stock-cache
+    if (!fileBuffer) {
+      const stockRow = getDatabase()
+        .prepare("SELECT * FROM stock_videos WHERE project_id = ? AND (id = ? OR drive_file_id = ?)")
+        .get(projectId, candidateId, candidateId) as { drive_file_id: string; name: string; mime_type?: string } | undefined;
+      if (stockRow) {
+        try {
+          const { ensureCachedVideo } = await import("@/lib/server/google-drive");
+          const { localPath } = await ensureCachedVideo(stockRow.drive_file_id);
+          if (fs.existsSync(localPath)) {
+            fileBuffer = fs.readFileSync(localPath);
+            filename = `stock-${stockRow.name}`;
+            mimeType = stockRow.mime_type || "video/mp4";
+          }
+        } catch (e) {
+          console.error("Error reading stock video:", e);
+        }
+      }
+    }
   }
 
-  // C. Check mediaUrl formats (data URI, relative path, or external URL)
+  // D. Check mediaUrl formats (data URI, relative path, or external URL)
   if (!fileBuffer && body.mediaUrl) {
     const mediaUrl = body.mediaUrl.trim();
     if (mediaUrl.startsWith("data:")) {
@@ -137,6 +157,26 @@ export async function POST(request: Request, context: Context) {
         if (mimeMatch) mimeType = mimeMatch[1];
         fileBuffer = Buffer.from(mediaUrl.slice(commaIndex + 1), "base64");
         filename = `creative-${Date.now()}.${mimeType.includes("jpeg") ? "jpg" : "png"}`;
+      }
+    } else if (mediaUrl.includes("/stock-videos/")) {
+      const stockId = mediaUrl.split("/stock-videos/")[1]?.split("?")[0];
+      if (stockId) {
+        const stockRow = getDatabase()
+          .prepare("SELECT * FROM stock_videos WHERE project_id = ? AND (id = ? OR drive_file_id = ?)")
+          .get(projectId, stockId, stockId) as { drive_file_id: string; name: string; mime_type?: string } | undefined;
+        if (stockRow) {
+          try {
+            const { ensureCachedVideo } = await import("@/lib/server/google-drive");
+            const { localPath } = await ensureCachedVideo(stockRow.drive_file_id);
+            if (fs.existsSync(localPath)) {
+              fileBuffer = fs.readFileSync(localPath);
+              filename = `stock-${stockRow.name}`;
+              mimeType = stockRow.mime_type || "video/mp4";
+            }
+          } catch (e) {
+            console.error("Error reading stock video from url:", e);
+          }
+        }
       }
     } else if (mediaUrl.startsWith("/api/videos/")) {
       const vidId = mediaUrl.replace("/api/videos/", "").replace(/\.mp4$/i, "");

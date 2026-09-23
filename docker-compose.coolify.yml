@@ -15,6 +15,7 @@ services:
       COOLIFY_DEPLOY_WEBHOOK: ${COOLIFY_DEPLOY_WEBHOOK:?}
       COOLIFY_TOKEN: ${COOLIFY_TOKEN:?}
       SOURCE_COMMIT: ${SOURCE_COMMIT:-unknown}
+      GOOGLE_TOKEN_JSON: ${GOOGLE_TOKEN_JSON:-}
     volumes:
       - yonetici-data:/app/.data
     ports:

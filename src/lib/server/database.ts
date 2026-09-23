@@ -77,6 +77,33 @@ function runMigrations(database: DatabaseSync) {
       updated_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_content_posts_project_created ON content_posts(project_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS stock_videos (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      drive_file_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL DEFAULT 0,
+      mime_type TEXT NOT NULL DEFAULT 'video/mp4',
+      thumbnail_url TEXT,
+      duration_seconds REAL DEFAULT 0,
+      width INTEGER DEFAULT 0,
+      height INTEGER DEFAULT 0,
+      local_path TEXT NOT NULL DEFAULT '',
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(project_id, drive_file_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_stock_videos_project_created ON stock_videos(project_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS stock_drive_configs (
+      project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+      folder_id TEXT NOT NULL DEFAULT '',
+      folder_name TEXT NOT NULL DEFAULT '',
+      last_synced_at TEXT,
+      sync_status TEXT NOT NULL DEFAULT 'idle',
+      error_message TEXT,
+      updated_at TEXT NOT NULL
+    );
   `);
 }
 

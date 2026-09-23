@@ -34,8 +34,8 @@ export function getPostizStoredConfig(): {
     .get() as { enabled?: number; base_url?: string; encrypted_api_key?: string } | undefined;
 
   let apiKey = process.env.POSTIZ_API_KEY || "";
-  let baseUrl = row?.base_url?.trim() || process.env.POSTIZ_BASE_URL || DEFAULT_POSTIZ_URL;
-  let enabled = row ? Boolean(row.enabled) : Boolean(apiKey);
+  const baseUrl = row?.base_url?.trim() || process.env.POSTIZ_BASE_URL || DEFAULT_POSTIZ_URL;
+  const enabled = row ? Boolean(row.enabled) : Boolean(apiKey);
 
   if (row?.encrypted_api_key) {
     try {
