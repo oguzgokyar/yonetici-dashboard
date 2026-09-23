@@ -14,6 +14,9 @@ type DriveAccountRow = {
   created_at: string;
   updated_at: string;
   used_by_project_count: number;
+  status: string;
+  last_validated_at: string | null;
+  last_error: string | null;
 };
 
 function mapAccount(row: DriveAccountRow, selectedAccountId: string) {
@@ -26,6 +29,9 @@ function mapAccount(row: DriveAccountRow, selectedAccountId: string) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     usedByProjectCount: row.used_by_project_count,
+    status: row.status,
+    lastValidatedAt: row.last_validated_at,
+    lastError: row.last_error,
     selectedForProject: row.id === selectedAccountId,
     isActive: row.id === selectedAccountId,
   };
@@ -42,6 +48,7 @@ export async function GET(
   const selectedAccountId = config?.account_id || "";
   const rows = db.prepare(`
     SELECT a.id, a.label, a.email, a.display_name, a.photo_link, a.created_at, a.updated_at,
+           a.status, a.last_validated_at, a.last_error,
            (SELECT COUNT(*) FROM stock_drive_configs c WHERE c.account_id = a.id) AS used_by_project_count
     FROM drive_accounts a
     ORDER BY a.updated_at DESC, a.label COLLATE NOCASE
@@ -57,6 +64,11 @@ export async function GET(
 
   return Response.json({
     ok: true,
+    oauthConfigured: Boolean(
+      process.env.GOOGLE_DRIVE_OAUTH_CLIENT_ID?.trim() &&
+      process.env.GOOGLE_DRIVE_OAUTH_CLIENT_SECRET?.trim() &&
+      process.env.GOOGLE_DRIVE_OAUTH_REDIRECT_URI?.trim()
+    ),
     selectedAccountId,
     accounts: rows.map((row) => mapAccount(row, selectedAccountId)),
     systemAccount: systemAccount ? { ...systemAccount, selectedForProject: !selectedAccountId } : null,
@@ -96,7 +108,7 @@ export async function POST(
   const { projectId } = await context.params;
   const db = getDatabase();
   const body = await request.json().catch(() => ({})) as {
-    action?: "add" | "select" | "activate" | "delete" | "use_system";
+    action?: "add" | "select" | "activate" | "delete" | "use_system" | "rename" | "detach";
     accountId?: string;
     label?: string;
     tokenJson?: string | Record<string, unknown>;
@@ -115,19 +127,23 @@ export async function POST(
       const accountId = existing?.id || crypto.randomUUID();
       const label = body.label?.trim() || profile.displayName || normalizedEmail || "Google Drive";
       const encryptedToken = encryptSecret(JSON.stringify(tokenData));
+      const scopes = tokenData.scope?.split(/\s+/).filter(Boolean) || [];
+      const expiresAt = tokenData.expiry_date ? new Date(tokenData.expiry_date).toISOString() : null;
 
       if (existing) {
         db.prepare(`
           UPDATE drive_accounts
-          SET label = ?, display_name = ?, photo_link = ?, encrypted_token_json = ?, updated_at = ?
+          SET label = ?, display_name = ?, photo_link = ?, encrypted_token_json = ?,
+              status = 'active', scopes_json = ?, token_expires_at = ?, last_validated_at = ?, last_error = NULL, updated_at = ?
           WHERE id = ?
-        `).run(label, profile.displayName, profile.photoLink || "", encryptedToken, now, accountId);
+        `).run(label, profile.displayName, profile.photoLink || "", encryptedToken, JSON.stringify(scopes), expiresAt, now, now, accountId);
       } else {
         db.prepare(`
           INSERT INTO drive_accounts (
-            id, label, email, display_name, photo_link, encrypted_token_json, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(accountId, label, normalizedEmail, profile.displayName, profile.photoLink || "", encryptedToken, now, now);
+            id, label, email, display_name, photo_link, encrypted_token_json,
+            status, scopes_json, token_expires_at, last_validated_at, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)
+        `).run(accountId, label, normalizedEmail, profile.displayName, profile.photoLink || "", encryptedToken, JSON.stringify(scopes), expiresAt, now, now, now);
       }
 
       db.prepare(`
@@ -164,6 +180,25 @@ export async function POST(
       ON CONFLICT(project_id) DO UPDATE SET account_id = '', updated_at = excluded.updated_at
     `).run(projectId, now);
     return Response.json({ ok: true, message: "Bu proje sistem Drive hesabını kullanacak." });
+  }
+
+  if (action === "detach") {
+    db.prepare(`
+      INSERT INTO stock_drive_configs (project_id, account_id, updated_at)
+      VALUES (?, '', ?)
+      ON CONFLICT(project_id) DO UPDATE SET account_id = '', updated_at = excluded.updated_at
+    `).run(projectId, now);
+    return Response.json({ ok: true, message: "Drive hesabı bu projeden ayrıldı." });
+  }
+
+  if (action === "rename") {
+    if (!body.accountId || !body.label?.trim()) {
+      return Response.json({ ok: false, message: "Hesap ve yeni etiket gerekli." }, { status: 400 });
+    }
+    const result = db.prepare("UPDATE drive_accounts SET label = ?, updated_at = ? WHERE id = ?")
+      .run(body.label.trim(), now, body.accountId);
+    if (!result.changes) return Response.json({ ok: false, message: "Drive hesabı bulunamadı." }, { status: 404 });
+    return Response.json({ ok: true, message: "Hesap etiketi güncellendi." });
   }
 
   if (action === "delete") {

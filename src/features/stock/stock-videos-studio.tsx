@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { Player } from "@remotion/player";
@@ -85,6 +86,7 @@ const frameStyles: { id: StockFrameStyle; name: string; desc: string }[] = [
 export function StockVideosStudio({ projectId }: { projectId: string }) {
   const { getProject } = useProjects();
   const project = getProject(projectId);
+  const searchParams = useSearchParams();
 
   const [videos, setVideos] = useState<StockVideoItem[]>([]);
   const [renderedVideos, setRenderedVideos] = useState<RenderedItem[]>([]);
@@ -282,6 +284,16 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    const oauthResult = searchParams.get("driveOAuth");
+    const oauthMessage = searchParams.get("message");
+    if (!oauthResult) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFeedback(oauthMessage || (oauthResult === "success" ? "Google Drive hesabı bağlandı." : "Google Drive hesabı bağlanamadı."));
+    setDriveModalTab("accounts");
+    setDriveModalOpen(true);
+  }, [searchParams]);
 
   // Selected video object
   const selectedVideo = useMemo(

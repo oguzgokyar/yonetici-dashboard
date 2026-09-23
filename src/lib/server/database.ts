@@ -116,11 +116,27 @@ function runMigrations(database: DatabaseSync) {
       display_name TEXT NOT NULL DEFAULT '',
       photo_link TEXT NOT NULL DEFAULT '',
       encrypted_token_json TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      scopes_json TEXT NOT NULL DEFAULT '[]',
+      token_expires_at TEXT,
+      last_validated_at TEXT,
+      last_error TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_drive_accounts_email
       ON drive_accounts(email) WHERE email <> '';
+    CREATE TABLE IF NOT EXISTS google_oauth_sessions (
+      state TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      account_id TEXT NOT NULL DEFAULT '',
+      code_verifier TEXT NOT NULL,
+      redirect_uri TEXT NOT NULL,
+      return_to TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_google_oauth_sessions_expiry ON google_oauth_sessions(expires_at);
     CREATE TABLE IF NOT EXISTS project_drive_accounts (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -239,11 +255,27 @@ export function getDatabase() {
       display_name TEXT NOT NULL DEFAULT '',
       photo_link TEXT NOT NULL DEFAULT '',
       encrypted_token_json TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      scopes_json TEXT NOT NULL DEFAULT '[]',
+      token_expires_at TEXT,
+      last_validated_at TEXT,
+      last_error TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_drive_accounts_email
       ON drive_accounts(email) WHERE email <> '';
+    CREATE TABLE IF NOT EXISTS google_oauth_sessions (
+      state TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      account_id TEXT NOT NULL DEFAULT '',
+      code_verifier TEXT NOT NULL,
+      redirect_uri TEXT NOT NULL,
+      return_to TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_google_oauth_sessions_expiry ON google_oauth_sessions(expires_at);
     CREATE TABLE IF NOT EXISTS project_drive_accounts (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -259,6 +291,12 @@ export function getDatabase() {
     CREATE INDEX IF NOT EXISTS idx_project_drive_accounts_project ON project_drive_accounts(project_id, is_active);
   `);
   runMigrations(database);
+  const driveAccountColumns = database.prepare("PRAGMA table_info(drive_accounts)").all() as unknown as { name: string }[];
+  if (driveAccountColumns.length && !driveAccountColumns.some((column) => column.name === "status")) database.exec("ALTER TABLE drive_accounts ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
+  if (driveAccountColumns.length && !driveAccountColumns.some((column) => column.name === "scopes_json")) database.exec("ALTER TABLE drive_accounts ADD COLUMN scopes_json TEXT NOT NULL DEFAULT '[]'");
+  if (driveAccountColumns.length && !driveAccountColumns.some((column) => column.name === "token_expires_at")) database.exec("ALTER TABLE drive_accounts ADD COLUMN token_expires_at TEXT");
+  if (driveAccountColumns.length && !driveAccountColumns.some((column) => column.name === "last_validated_at")) database.exec("ALTER TABLE drive_accounts ADD COLUMN last_validated_at TEXT");
+  if (driveAccountColumns.length && !driveAccountColumns.some((column) => column.name === "last_error")) database.exec("ALTER TABLE drive_accounts ADD COLUMN last_error TEXT");
   const globalAccountCount = database
     .prepare("SELECT COUNT(*) AS total FROM drive_accounts")
     .get() as { total: number };

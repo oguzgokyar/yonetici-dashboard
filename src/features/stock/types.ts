@@ -17,6 +17,9 @@ export type DriveAccount = {
   photoLink?: string;
   selectedForProject: boolean;
   usedByProjectCount: number;
+  status?: string;
+  lastValidatedAt?: string | null;
+  lastError?: string | null;
 };
 
 export type DriveFolder = {

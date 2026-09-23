@@ -16,6 +16,7 @@ export type TokenData = {
   client_secret?: string;
   token_type?: string;
   expiry_date?: number;
+  scope?: string;
 };
 
 export type DriveUserProfile = {
@@ -195,12 +196,16 @@ export async function getValidAccessToken(projectId?: string): Promise<string> {
 
         // Save back encrypted
         const newEncrypted = encryptSecret(JSON.stringify(refreshed.tokenData));
+        const validatedAt = new Date().toISOString();
         db.prepare(
-          "UPDATE project_drive_accounts SET encrypted_token_json = ?, updated_at = ? WHERE id = ?"
-        ).run(newEncrypted, new Date().toISOString(), accountRow.id);
+          "UPDATE drive_accounts SET encrypted_token_json = ?, status = 'active', last_validated_at = ?, last_error = NULL, updated_at = ? WHERE id = ?"
+        ).run(newEncrypted, validatedAt, validatedAt, accountRow.id);
 
         return accessToken;
       } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        db.prepare("UPDATE drive_accounts SET status = 'error', last_error = ?, updated_at = ? WHERE id = ?")
+          .run(message.slice(0, 500), new Date().toISOString(), accountRow.id);
         console.warn(`[GoogleDrive] Proje (${projectId}) özel token yenileme hatası, sistem tokenına geçiliyor:`, err);
       }
     }

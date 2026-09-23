@@ -68,6 +68,9 @@ Bu dosya, Yönetici uygulamasını bir VPS üzerindeki mevcut Coolify kurulumuna
 | `GITHUB_ACCESS_TOKEN` | Evet | Fine-grained, yalnızca repo okuma token'ı |
 | `COOLIFY_DEPLOY_WEBHOOK` | Evet | Bu uygulamanın auth-required deploy webhook URL'si |
 | `COOLIFY_TOKEN` | Evet | Yalnızca `deploy` yetkili Coolify token'ı |
+| `GOOGLE_DRIVE_OAUTH_CLIENT_ID` | Stok Drive girişi için | Google Cloud Web Application OAuth istemci ID'si |
+| `GOOGLE_DRIVE_OAUTH_CLIENT_SECRET` | Stok Drive girişi için | Google Cloud Web Application OAuth istemci secret'ı |
+| `GOOGLE_DRIVE_OAUTH_REDIRECT_URI` | Stok Drive girişi için | Google Cloud'da birebir kayıtlı HTTPS callback adresi |
 
 Değişkenleri build arg olarak image katmanına yazma. Coolify runtime environment/secret olarak tanımla.
 
