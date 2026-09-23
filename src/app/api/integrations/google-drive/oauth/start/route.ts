@@ -56,6 +56,10 @@ export async function GET(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Google OAuth başlatılamadı.";
     const returnTo = `/projects/${encodeURIComponent(projectId)}/stock-videos?driveOAuth=error&message=${encodeURIComponent(message)}`;
-    return Response.redirect(new URL(returnTo, request.url), 302);
+    const requestUrl = new URL(request.url);
+    const publicOrigin = request.headers.get("x-forwarded-host")
+      ? `${request.headers.get("x-forwarded-proto") || "https"}://${request.headers.get("x-forwarded-host")}`
+      : requestUrl.origin;
+    return Response.redirect(new URL(returnTo, publicOrigin), 302);
   }
 }
