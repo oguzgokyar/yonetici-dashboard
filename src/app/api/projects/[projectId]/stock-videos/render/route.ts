@@ -20,6 +20,7 @@ export async function POST(
     logoUrl?: string;
     logoPosition?: "top_left" | "top_right" | "bottom_left" | "bottom_right" | "bottom_center" | "none";
     logoSize?: number;
+    outroId?: string;
     musicTrack?: string;
     originalVolume?: number;
     musicVolume?: number;
@@ -47,6 +48,7 @@ export async function POST(
       logoUrl: body.logoUrl,
       logoPosition: body.logoPosition,
       logoSize: body.logoSize,
+      outroId: body.outroId,
       musicTrack: body.musicTrack,
       originalVolume: body.originalVolume,
       musicVolume: body.musicVolume,

@@ -24,6 +24,7 @@ export type RenderStockVideoOptions = {
   logoUrl?: string;
   logoPosition?: "top_left" | "top_right" | "bottom_left" | "bottom_right" | "bottom_center" | "none";
   logoSize?: number;
+  outroId?: string;
   musicTrack?: string;
   originalVolume?: number;
   musicVolume?: number;
@@ -51,6 +52,21 @@ export async function renderFramedStockVideo(
 
   const renderId = crypto.randomUUID();
   const outputLocation = path.join(outputDir, `${renderId}.mp4`);
+
+  // Check if outro video is requested
+  const outroRow = options.outroId
+    ? (db
+        .prepare("SELECT * FROM project_outro_videos WHERE id = ? AND project_id = ?")
+        .get(options.outroId, options.projectId) as {
+        id: string;
+        title: string;
+        local_path: string;
+        video_url: string;
+      } | undefined)
+    : undefined;
+
+  const hasOutro = Boolean(outroRow?.local_path && fs.existsSync(/*turbopackIgnore: true*/ outroRow.local_path));
+  const mainStageOutput = hasOutro ? path.join(tempDir, `${renderId}_main.mp4`) : outputLocation;
 
   // Fetch stock video record
   const stockRow = db
@@ -319,7 +335,7 @@ export async function renderFramedStockVideo(
     "192k",
     "-movflags",
     "+faststart",
-    outputLocation,
+    mainStageOutput,
   ];
 
   const now = new Date().toISOString();
@@ -339,6 +355,7 @@ export async function renderFramedStockVideo(
       headline: titleText,
       subtitle: subText,
       musicTrack: options.musicTrack,
+      outroId: options.outroId,
       renderer: "ffmpeg-frame-engine",
     }),
     now
@@ -350,6 +367,62 @@ export async function renderFramedStockVideo(
       maxBuffer: 32 * 1024 * 1024,
       timeout: 180000,
     });
+
+    // If outro exists, concatenate main video with outro
+    if (hasOutro && outroRow?.local_path) {
+      const outroPath = outroRow.local_path;
+      try {
+        const concatArgs = [
+          "-y",
+          "-i", mainStageOutput,
+          "-i", outroPath,
+          "-filter_complex",
+          "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=30,setsar=1[v0];" +
+          "[1:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=30,setsar=1[v1];" +
+          "[0:a]aformat=sample_rates=44100:channel_layouts=stereo[a0];" +
+          "[1:a]aformat=sample_rates=44100:channel_layouts=stereo[a1];" +
+          "[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a]",
+          "-map", "[v]",
+          "-map", "[a]",
+          "-c:v", "libx264",
+          "-preset", "veryfast",
+          "-crf", "22",
+          "-c:a", "aac",
+          "-b:a", "192k",
+          "-movflags", "+faststart",
+          outputLocation,
+        ];
+        await execFileAsync("/usr/bin/ffmpeg", concatArgs, { cwd: projectDir, timeout: 180000 });
+      } catch {
+        // Fallback with silent audio for outro if it lacks an audio stream
+        const fallbackArgs = [
+          "-y",
+          "-i", mainStageOutput,
+          "-i", outroPath,
+          "-f", "lavfi", "-t", "30", "-i", "anullsrc=r=44100:cl=stereo",
+          "-filter_complex",
+          "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=30,setsar=1[v0];" +
+          "[1:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=30,setsar=1[v1];" +
+          "[0:a]aformat=sample_rates=44100:channel_layouts=stereo[a0];" +
+          "[2:a]aformat=sample_rates=44100:channel_layouts=stereo[a1];" +
+          "[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a]",
+          "-map", "[v]",
+          "-map", "[a]",
+          "-c:v", "libx264",
+          "-preset", "veryfast",
+          "-crf", "22",
+          "-c:a", "aac",
+          "-b:a", "192k",
+          "-movflags", "+faststart",
+          outputLocation,
+        ];
+        await execFileAsync("/usr/bin/ffmpeg", fallbackArgs, { cwd: projectDir, timeout: 180000 });
+      } finally {
+        if (fs.existsSync(mainStageOutput)) {
+          fs.rmSync(mainStageOutput, { force: true });
+        }
+      }
+    }
 
     const finalUrl = `/api/videos/${renderId}`;
     db.prepare(`

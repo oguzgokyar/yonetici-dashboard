@@ -104,6 +104,30 @@ function runMigrations(database: DatabaseSync) {
       error_message TEXT,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS stock_project_settings (
+      project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+      frame_style TEXT NOT NULL DEFAULT 'blur_padding',
+      headline_color TEXT NOT NULL DEFAULT '#ffffff',
+      subtitle_color TEXT NOT NULL DEFAULT '#cbd5e1',
+      headline_bg_color TEXT NOT NULL DEFAULT 'rgba(10, 12, 20, 0.82)',
+      logo_position TEXT NOT NULL DEFAULT 'top_right',
+      logo_size INTEGER NOT NULL DEFAULT 130,
+      music_track TEXT NOT NULL DEFAULT '/audio/ambient_track.mp3',
+      original_volume REAL NOT NULL DEFAULT 1.0,
+      music_volume REAL NOT NULL DEFAULT 0.4,
+      selected_outro_id TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS project_outro_videos (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      video_url TEXT NOT NULL,
+      local_path TEXT NOT NULL DEFAULT '',
+      duration_seconds REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_outros_project ON project_outro_videos(project_id);
   `);
 }
 

@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Player } from "@remotion/player";
 import {
+  BookmarkCheck,
   Check,
   Clapperboard,
   Download,
@@ -18,7 +19,9 @@ import {
   Search,
   Send,
   Sparkles,
+  Trash2,
   Type,
+  Upload,
   Video,
   Volume2,
   X,
@@ -79,6 +82,14 @@ const frameStyles: { id: StockFrameStyle; name: string; desc: string }[] = [
   },
 ];
 
+type OutroItem = {
+  id: string;
+  title: string;
+  videoUrl: string;
+  durationSeconds?: number;
+  createdAt?: string;
+};
+
 export function StockVideosStudio({ projectId }: { projectId: string }) {
   const { getProject } = useProjects();
   const project = getProject(projectId);
@@ -109,6 +120,15 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
   const [originalVolume, setOriginalVolume] = useState<number>(1);
   const [musicVolume, setMusicVolume] = useState<number>(0.4);
 
+  // Outro states
+  const [outros, setOutros] = useState<OutroItem[]>([]);
+  const [selectedOutroId, setSelectedOutroId] = useState<string>("");
+  const [uploadingOutro, setUploadingOutro] = useState(false);
+
+  // Settings persistence
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsSavedNotice, setSettingsSavedNotice] = useState(false);
+
   // Render & action states
   const [rendering, setRendering] = useState(false);
   const [lastRendered, setLastRendered] = useState<RenderedItem | null>(null);
@@ -124,9 +144,10 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
 
   const loadData = useCallback(async () => {
     try {
-      const [stockRes, vidRes] = await Promise.all([
+      const [stockRes, vidRes, settingsRes] = await Promise.all([
         fetch(`/api/projects/${projectId}/stock-videos`, { cache: "no-store" }),
         fetch(`/api/videos?projectId=${projectId}`, { cache: "no-store" }),
+        fetch(`/api/projects/${projectId}/stock-videos/settings`, { cache: "no-store" }),
       ]);
 
       if (stockRes.ok) {
@@ -142,12 +163,98 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
         const vidData = await vidRes.json();
         setRenderedVideos(vidData.videos || []);
       }
+
+      if (settingsRes.ok) {
+        const sData = await settingsRes.json();
+        if (sData.outros) setOutros(sData.outros);
+        if (sData.settings) {
+          const s = sData.settings;
+          if (s.frameStyle) setFrameStyle(s.frameStyle);
+          if (s.headlineColor) setHeadlineColor(s.headlineColor);
+          if (s.subtitleColor) setSubtitleColor(s.subtitleColor);
+          if (s.headlineBgColor) setHeadlineBgColor(s.headlineBgColor);
+          if (s.logoPosition) setLogoPosition(s.logoPosition);
+          if (typeof s.logoSize === "number") setLogoSize(s.logoSize);
+          if (s.musicTrack) setMusicTrack(s.musicTrack);
+          if (typeof s.originalVolume === "number") setOriginalVolume(s.originalVolume);
+          if (typeof s.musicVolume === "number") setMusicVolume(s.musicVolume);
+          if (s.selectedOutroId) setSelectedOutroId(s.selectedOutroId);
+        }
+      }
     } catch {
-      setFeedback("Stok videolar yüklenirken bir hata oluştu.");
+      setFeedback("Stok videolar ve ayarlar yüklenirken bir hata oluştu.");
     } finally {
       setLoading(false);
     }
   }, [projectId, selectedVideoId]);
+
+  async function handleSaveSettings() {
+    setSavingSettings(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/stock-videos/settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          frameStyle,
+          headlineColor,
+          subtitleColor,
+          headlineBgColor,
+          logoPosition,
+          logoSize,
+          musicTrack,
+          originalVolume,
+          musicVolume,
+          selectedOutroId,
+        }),
+      });
+      if (res.ok) {
+        setSettingsSavedNotice(true);
+        setTimeout(() => setSettingsSavedNotice(false), 2500);
+      }
+    } finally {
+      setSavingSettings(false);
+    }
+  }
+
+  async function handleUploadOutro(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingOutro(true);
+    setFeedback(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("title", file.name.replace(/\.[^/.]+$/, ""));
+
+      const res = await fetch(`/api/projects/${projectId}/stock-videos/outros`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok || !data.outro) {
+        throw new Error(data.message || "Outro videosu yüklenemedi.");
+      }
+      setOutros((prev) => [data.outro, ...prev]);
+      setSelectedOutroId(data.outro.id);
+      setFeedback("Yeni outro videosu başarıyla yüklendi ve seçildi.");
+    } catch (err) {
+      setFeedback(err instanceof Error ? err.message : String(err));
+    } finally {
+      setUploadingOutro(false);
+    }
+  }
+
+  async function handleDeleteOutro(id: string) {
+    try {
+      await fetch(`/api/projects/${projectId}/stock-videos/outros?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      setOutros((prev) => prev.filter((o) => o.id !== id));
+      if (selectedOutroId === id) setSelectedOutroId("");
+    } catch {
+      // ignore
+    }
+  }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -254,6 +361,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
           logoUrl: brandLogo,
           logoPosition,
           logoSize,
+          outroId: selectedOutroId || undefined,
           musicTrack: musicTrack !== "none" ? musicTrack : undefined,
           originalVolume,
           musicVolume: musicTrack !== "none" ? musicVolume : 0,
@@ -542,11 +650,15 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                       logoSrc: brandLogo,
                       logoPosition,
                       logoSize,
+                      outroSrc: outros.find((o) => o.id === selectedOutroId)?.videoUrl,
                       musicSrc: musicTrack !== "none" ? musicTrack : undefined,
                       originalVolume,
                       musicVolume: musicTrack !== "none" ? musicVolume : 0,
                     }}
-                    durationInFrames={Math.min((selectedVideo.durationSeconds || 15) * 30, 450)}
+                    durationInFrames={
+                      Math.min((selectedVideo.durationSeconds || 15) * 30, 450) +
+                      (selectedOutroId ? 90 : 0)
+                    }
                     compositionWidth={1080}
                     compositionHeight={1920}
                     fps={30}
@@ -558,7 +670,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                 <div className="remotion-meta-bar">
                   <span>9:16 Dikey Format</span>
                   <span>1080 × 1920</span>
-                  <span>Canlı Önizleme</span>
+                  <span>{selectedOutroId ? "Outro Ekli" : "Tek Sahne"}</span>
                 </div>
               </div>
 
@@ -787,6 +899,84 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                   </div>
                 </div>
 
+                {/* 5. Outro (Bitiş) Videosu */}
+                <div className="editor-group">
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <label className="editor-label">
+                      <Film size={14} /> Bitiş (Outro) Videosu
+                    </label>
+                    <label className="stock-upload-btn">
+                      {uploadingOutro ? <LoaderCircle className="spin" size={12} /> : <Upload size={12} />}
+                      <span>{uploadingOutro ? "Yükleniyor..." : "Outro Yükle"}</span>
+                      <input
+                        type="file"
+                        accept="video/mp4,video/quicktime,video/webm"
+                        style={{ display: "none" }}
+                        disabled={uploadingOutro}
+                        onChange={handleUploadOutro}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="outro-picker-grid">
+                    <button
+                      type="button"
+                      className={`outro-card-btn ${!selectedOutroId ? "active" : ""}`}
+                      onClick={() => setSelectedOutroId("")}
+                    >
+                      <span>Outro Yok</span>
+                      {!selectedOutroId && <Check size={12} />}
+                    </button>
+                    {outros.map((o) => (
+                      <div
+                        key={o.id}
+                        className={`outro-card-item ${selectedOutroId === o.id ? "active" : ""}`}
+                        onClick={() => setSelectedOutroId(o.id)}
+                      >
+                        <span title={o.title}>{o.title}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          {selectedOutroId === o.id && <Check size={12} style={{ color: "var(--primary)" }} />}
+                          <button
+                            type="button"
+                            className="icon-button outro-del-btn"
+                            title="Outro'yu Sil"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteOutro(o.id);
+                            }}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Save settings for this brand */}
+                <div className="stock-save-settings-bar">
+                  <div>
+                    <strong>Firma Ayarlarını Sabitle</strong>
+                    <p>Çerçeve, renkler, logo ve outro ayarlarını bu marka için kaydet</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="button secondary"
+                    style={{ height: "32px", fontSize: "11px", padding: "0 10px" }}
+                    onClick={handleSaveSettings}
+                    disabled={savingSettings}
+                  >
+                    {savingSettings ? (
+                      <LoaderCircle className="spin" size={13} />
+                    ) : settingsSavedNotice ? (
+                      <Check size={13} style={{ color: "#22c55e" }} />
+                    ) : (
+                      <BookmarkCheck size={13} />
+                    )}
+                    <span>{settingsSavedNotice ? "Kaydedildi" : "Ayarları Kaydet"}</span>
+                  </button>
+                </div>
+
                 {/* Render Button */}
                 <button
                   type="button"
@@ -800,7 +990,11 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                     <Play size={17} />
                   )}
                   <span>
-                    {rendering ? "Video Render Ediliyor..." : "Özel Çerçeveli Videoyu Üret"}
+                    {rendering
+                      ? "Video Render Ediliyor..."
+                      : selectedOutroId
+                      ? "Çerçeveli Video + Outro Üret"
+                      : "Özel Çerçeveli Videoyu Üret"}
                   </span>
                 </button>
 
