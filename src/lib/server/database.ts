@@ -97,13 +97,30 @@ function runMigrations(database: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_stock_videos_project_created ON stock_videos(project_id, created_at DESC);
     CREATE TABLE IF NOT EXISTS stock_drive_configs (
       project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+      account_id TEXT NOT NULL DEFAULT '',
       folder_id TEXT NOT NULL DEFAULT '',
       folder_name TEXT NOT NULL DEFAULT '',
+      root_folder_id TEXT NOT NULL DEFAULT '',
+      root_folder_name TEXT NOT NULL DEFAULT '',
+      include_subfolders INTEGER NOT NULL DEFAULT 1,
       last_synced_at TEXT,
       sync_status TEXT NOT NULL DEFAULT 'idle',
       error_message TEXT,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS project_drive_accounts (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      label TEXT NOT NULL,
+      email TEXT NOT NULL DEFAULT '',
+      display_name TEXT NOT NULL DEFAULT '',
+      photo_link TEXT NOT NULL DEFAULT '',
+      encrypted_token_json TEXT NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_drive_accounts_project ON project_drive_accounts(project_id, is_active);
     CREATE TABLE IF NOT EXISTS stock_project_settings (
       project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
       frame_style TEXT NOT NULL DEFAULT 'blur_padding',
@@ -187,6 +204,34 @@ export function getDatabase() {
       used_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_content_ideas_project_created ON content_ideas(project_id, created_at DESC);
+  `);
+  // Dynamic migrations for stock_drive_configs
+  try {
+    database.exec("ALTER TABLE stock_drive_configs ADD COLUMN account_id TEXT NOT NULL DEFAULT '';");
+  } catch {}
+  try {
+    database.exec("ALTER TABLE stock_drive_configs ADD COLUMN root_folder_id TEXT NOT NULL DEFAULT '';");
+  } catch {}
+  try {
+    database.exec("ALTER TABLE stock_drive_configs ADD COLUMN root_folder_name TEXT NOT NULL DEFAULT '';");
+  } catch {}
+  try {
+    database.exec("ALTER TABLE stock_drive_configs ADD COLUMN include_subfolders INTEGER NOT NULL DEFAULT 1;");
+  } catch {}
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS project_drive_accounts (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      label TEXT NOT NULL,
+      email TEXT NOT NULL DEFAULT '',
+      display_name TEXT NOT NULL DEFAULT '',
+      photo_link TEXT NOT NULL DEFAULT '',
+      encrypted_token_json TEXT NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_drive_accounts_project ON project_drive_accounts(project_id, is_active);
   `);
   runMigrations(database);
   database.exec("PRAGMA optimize;");

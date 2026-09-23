@@ -295,6 +295,41 @@ button { cursor:pointer; }
 .stock-pagination-btns{display:flex;align-items:center;gap:8px}
 .stock-page-indicator{font-size:11px;font-weight:700;color:var(--text);padding:0 4px}
 
+/* Drive Multi-Account & Folder Tree Styles */
+.stock-root-indicator-bar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:12px;margin-bottom:14px;font-size:12px;color:var(--text)}
+.stock-root-indicator-bar small{color:var(--muted);font-weight:500}
+.drive-config-modal{width:min(580px,94vw);padding:24px;max-height:85vh;overflow-y:auto}
+.drive-tab-content{display:flex;flex-direction:column;gap:14px}
+.subfolder-toggle-bar{padding:10px 12px;background:#f8f8fc;border-radius:10px;border:1px solid #eaeaef}
+.folder-tree-container{max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:8px;background:white}
+.folder-tree-list{display:flex;flex-direction:column;gap:3px}
+.folder-tree-node-wrap{display:flex;flex-direction:column}
+.folder-tree-row{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;transition:.15s ease}
+.folder-tree-row:hover{background:#f8f7ff}
+.folder-tree-row.selected{background:#f3f0ff}
+.folder-chevron-btn{width:22px;height:22px;border:none;background:transparent;cursor:pointer;display:grid;place-items:center;color:var(--muted);border-radius:4px}
+.folder-chevron-btn:hover{background:#ebebf2}
+.folder-tree-title{display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.folder-set-root-btn{display:flex;align-items:center;gap:4px;height:26px;padding:0 9px;border-radius:6px;border:1px solid #dfdfee;background:#fbfbfd;font-size:10px;font-weight:700;color:var(--muted);cursor:pointer;transition:.15s ease}
+.folder-set-root-btn:hover{border-color:var(--primary);color:var(--primary);background:#f6f4ff}
+.folder-set-root-btn.active{border-color:var(--primary);background:var(--primary);color:white}
+.folder-tree-children{display:flex;flex-direction:column;gap:2px}
+
+/* Drive Accounts UI */
+.drive-accounts-list{display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto}
+.drive-account-card{display:flex;align-items:center;gap:12px;padding:10px 14px;border:1.5px solid #ececf4;background:#fbfbfd;border-radius:12px;transition:.15s ease}
+.drive-account-card.active{border-color:var(--primary);background:#f6f4ff}
+.account-avatar-wrap{width:36px;height:36px;border-radius:50%;background:#eaeaef;overflow:hidden;display:grid;place-items:center;flex:none;color:var(--muted)}
+.account-avatar-wrap img{width:100%;height:100%;object-fit:cover}
+.account-meta{flex:1;display:flex;flex-direction:column;gap:2px;overflow:hidden}
+.account-meta strong{font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-meta small{font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-badge-active{font-size:9px;font-weight:700;color:#10b981;background:#ecfdf5;padding:1px 6px;border-radius:6px;width:fit-content}
+.add-drive-account-form{display:flex;flex-direction:column;gap:10px;padding:14px;background:#f9f9fd;border:1px solid #eaeaef;border-radius:12px;margin-top:6px}
+.custom-textarea{width:100%;border:1px solid var(--border);border-radius:9px;padding:8px 11px;font-size:11px;font-family:monospace;outline:none;background:white;resize:vertical}
+.custom-textarea:focus{border-color:var(--primary);box-shadow:0 0 0 2px #6d5dfc1e}
+
+
 
 
 

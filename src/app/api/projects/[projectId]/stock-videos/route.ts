@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { getDatabase } from "@/lib/server/database";
-import { listDriveFolders, listDriveVideos } from "@/lib/server/google-drive";
+import { getAllFolderIdsUnderRoot, listDriveFolders, listDriveVideos } from "@/lib/server/google-drive";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -24,8 +24,12 @@ type StockVideoRow = {
 
 type DriveConfigRow = {
   project_id: string;
+  account_id?: string;
   folder_id: string;
   folder_name: string;
+  root_folder_id?: string;
+  root_folder_name?: string;
+  include_subfolders?: number;
   last_synced_at: string | null;
   sync_status: string;
   error_message: string | null;
@@ -70,8 +74,12 @@ export async function GET(
     total: countRow?.total || 0,
     config: config
       ? {
+          accountId: config.account_id || "",
           folderId: config.folder_id,
           folderName: config.folder_name,
+          rootFolderId: config.root_folder_id || config.folder_id,
+          rootFolderName: config.root_folder_name || config.folder_name,
+          includeSubfolders: config.include_subfolders !== 0,
           lastSyncedAt: config.last_synced_at,
           syncStatus: config.sync_status,
         }
@@ -103,13 +111,16 @@ export async function POST(
     action?: string;
     folderId?: string;
     folderName?: string;
+    rootFolderId?: string;
+    rootFolderName?: string;
+    includeSubfolders?: boolean;
   };
 
   const action = body.action || "sync";
 
   if (action === "list_folders") {
     try {
-      const folders = await listDriveFolders();
+      const folders = await listDriveFolders(projectId);
       return Response.json({ ok: true, folders });
     } catch (err) {
       return Response.json(
@@ -120,20 +131,28 @@ export async function POST(
   }
 
   if (action === "set_folder") {
-    const folderId = body.folderId?.trim() || "";
-    const folderName = body.folderName?.trim() || "";
+    const folderId = body.folderId?.trim() || body.rootFolderId?.trim() || "";
+    const folderName = body.folderName?.trim() || body.rootFolderName?.trim() || "";
+    const rootFolderId = body.rootFolderId?.trim() || folderId;
+    const rootFolderName = body.rootFolderName?.trim() || folderName;
+    const includeSubfolders = body.includeSubfolders !== false ? 1 : 0;
     const now = new Date().toISOString();
 
     db.prepare(`
-      INSERT INTO stock_drive_configs (project_id, folder_id, folder_name, updated_at)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO stock_drive_configs (
+        project_id, folder_id, folder_name, root_folder_id, root_folder_name, include_subfolders, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(project_id) DO UPDATE SET
         folder_id = excluded.folder_id,
         folder_name = excluded.folder_name,
+        root_folder_id = excluded.root_folder_id,
+        root_folder_name = excluded.root_folder_name,
+        include_subfolders = excluded.include_subfolders,
         updated_at = excluded.updated_at
-    `).run(projectId, folderId, folderName, now);
+    `).run(projectId, folderId, folderName, rootFolderId, rootFolderName, includeSubfolders, now);
 
-    return Response.json({ ok: true, folderId, folderName });
+    return Response.json({ ok: true, folderId, folderName, rootFolderId, rootFolderName });
   }
 
   if (action === "sync") {
@@ -141,20 +160,43 @@ export async function POST(
       .prepare("SELECT * FROM stock_drive_configs WHERE project_id = ?")
       .get(projectId) as unknown as DriveConfigRow | undefined;
 
-    const targetFolderId = body.folderId?.trim() || config?.folder_id || "";
+    const targetRootId = body.rootFolderId?.trim() || config?.root_folder_id || body.folderId?.trim() || config?.folder_id || "";
+    const includeSubfolders = config?.include_subfolders !== 0;
     const now = new Date().toISOString();
 
     db.prepare(`
-      INSERT INTO stock_drive_configs (project_id, folder_id, folder_name, sync_status, updated_at)
-      VALUES (?, ?, ?, 'syncing', ?)
+      INSERT INTO stock_drive_configs (project_id, folder_id, folder_name, root_folder_id, root_folder_name, sync_status, updated_at)
+      VALUES (?, ?, ?, ?, ?, 'syncing', ?)
       ON CONFLICT(project_id) DO UPDATE SET
         sync_status = 'syncing',
         updated_at = excluded.updated_at
-    `).run(projectId, targetFolderId, config?.folder_name || "", now);
+    `).run(
+      projectId,
+      targetRootId,
+      config?.folder_name || "",
+      targetRootId,
+      config?.root_folder_name || config?.folder_name || "",
+      now
+    );
 
     try {
+      let targetFolderIds: string[] | undefined;
+
+      // If a root folder is selected, collect its tree if includeSubfolders is on
+      if (targetRootId) {
+        if (includeSubfolders) {
+          targetFolderIds = await getAllFolderIdsUnderRoot(projectId, targetRootId);
+        } else {
+          targetFolderIds = [targetRootId];
+        }
+      }
+
       // List videos from Drive
-      const { files } = await listDriveVideos(targetFolderId || undefined);
+      const { files } = await listDriveVideos({
+        projectId,
+        folderIds: targetFolderIds,
+        pageSize: 100,
+      });
 
       let addedCount = 0;
       let updatedCount = 0;
@@ -184,15 +226,14 @@ export async function POST(
           file.name,
           file.size || 0,
           file.mimeType,
-          file.thumbnailLink || null,
+          file.thumbnailLink || "",
           file.durationSeconds || 0,
           file.width || 0,
           file.height || 0,
-          JSON.stringify({ parents: file.parents }),
+          JSON.stringify({ parents: file.parents || [] }),
           now,
           now
         );
-
         if (res.changes > 0) {
           addedCount++;
         } else {
@@ -200,30 +241,36 @@ export async function POST(
         }
       }
 
+      // Mark sync status completed
       db.prepare(`
         UPDATE stock_drive_configs
-        SET sync_status = 'idle', last_synced_at = ?, error_message = NULL, updated_at = ?
+        SET sync_status = 'idle',
+            last_synced_at = ?,
+            error_message = NULL,
+            updated_at = ?
         WHERE project_id = ?
       `).run(now, now, projectId);
 
       return Response.json({
         ok: true,
-        message: `${files.length} stok video senkronize edildi.`,
-        syncedCount: files.length,
+        message: `${files.length} video senkronize edildi (${addedCount} yeni / güncellendi).`,
+        totalScanned: files.length,
         addedCount,
         updatedCount,
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const errorMsg = err instanceof Error ? err.message : String(err);
       db.prepare(`
         UPDATE stock_drive_configs
-        SET sync_status = 'error', error_message = ?, updated_at = ?
+        SET sync_status = 'error',
+            error_message = ?,
+            updated_at = ?
         WHERE project_id = ?
-      `).run(msg, now, projectId);
+      `).run(errorMsg.slice(0, 500), new Date().toISOString(), projectId);
 
-      return Response.json({ ok: false, message: msg }, { status: 500 });
+      return Response.json({ ok: false, message: `Senkronizasyon hatası: ${errorMsg}` }, { status: 500 });
     }
   }
 
-  return Response.json({ ok: false, message: "Geçersiz işlem." }, { status: 400 });
+  return Response.json({ ok: false, message: "Geçersiz aksiyon." }, { status: 400 });
 }

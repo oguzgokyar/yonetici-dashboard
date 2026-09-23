@@ -7,21 +7,29 @@ import { Player } from "@remotion/player";
 import {
   BookmarkCheck,
   Check,
+  ChevronRight,
   Clapperboard,
   Download,
   Film,
+  Folder,
+  FolderOpen,
   FolderSync,
+  HardDrive,
+  KeyRound,
   Layers,
   LoaderCircle,
   Music,
   Play,
+  Plus,
   RefreshCw,
   Search,
   Send,
+  Settings2,
   Sparkles,
   Trash2,
   Type,
   Upload,
+  UserCheck,
   Video,
   Volume2,
   X,
@@ -45,10 +53,32 @@ type StockVideoItem = {
 };
 
 type DriveConfig = {
+  accountId?: string;
   folderId: string;
   folderName: string;
+  rootFolderId?: string;
+  rootFolderName?: string;
+  includeSubfolders?: boolean;
   lastSyncedAt: string | null;
   syncStatus: string;
+};
+
+type DriveAccount = {
+  id: string;
+  label: string;
+  email: string;
+  displayName: string;
+  photoLink?: string;
+  isActive: boolean;
+  createdAt: string;
+};
+
+type FolderTreeNode = {
+  id: string;
+  name: string;
+  isExpanded?: boolean;
+  children?: FolderTreeNode[];
+  loading?: boolean;
 };
 
 type RenderedItem = {
@@ -138,10 +168,21 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
   const [lastRendered, setLastRendered] = useState<RenderedItem | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  // Folder management
-  const [folderModalOpen, setFolderModalOpen] = useState(false);
-  const [availableFolders, setAvailableFolders] = useState<{ id: string; name: string }[]>([]);
-  const [loadingFolders, setLoadingFolders] = useState(false);
+  // Drive Settings & Accounts Modal
+  const [driveModalOpen, setDriveModalOpen] = useState(false);
+  const [driveModalTab, setDriveModalTab] = useState<"accounts" | "folders">("folders");
+  const [accounts, setAccounts] = useState<DriveAccount[]>([]);
+  const [systemAccount, setSystemAccount] = useState<{ email: string; displayName: string; photoLink?: string } | null>(null);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [newAccountLabel, setNewAccountLabel] = useState("");
+  const [newAccountTokenJson, setNewAccountTokenJson] = useState("");
+  const [savingAccount, setSavingAccount] = useState(false);
+  const [accountActionNotice, setAccountActionNotice] = useState<string | null>(null);
+
+  // Hierarchical Folder Tree
+  const [folderTree, setFolderTree] = useState<FolderTreeNode[]>([]);
+  const [loadingTree, setLoadingTree] = useState(false);
+  const [includeSubfolders, setIncludeSubfolders] = useState(true);
 
   const brandColor = project?.brand.primaryColor || "#6d5dfc";
   const brandLogo = project?.brand.logo || "";
@@ -158,6 +199,9 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
         const stockData = await stockRes.json();
         setVideos(stockData.videos || []);
         setConfig(stockData.config);
+        if (stockData.config?.includeSubfolders !== undefined) {
+          setIncludeSubfolders(stockData.config.includeSubfolders);
+        }
         if (stockData.videos?.length > 0 && !selectedVideoId) {
           setSelectedVideoId(stockData.videos[0].id);
         }
@@ -318,45 +362,192 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
     }
   }
 
-  // Open folder selector modal
-  async function openFolderPicker() {
-    setFolderModalOpen(true);
-    setLoadingFolders(true);
+  // Load Accounts & Folders for Modal
+  const loadAccounts = useCallback(async () => {
+    setLoadingAccounts(true);
     try {
-      const res = await fetch(`/api/projects/${projectId}/stock-videos`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "list_folders" }),
-      });
+      const res = await fetch(`/api/projects/${projectId}/stock-videos/drive-accounts`, { cache: "no-store" });
       const data = await res.json();
       if (res.ok && data.ok) {
-        setAvailableFolders(data.folders || []);
+        setAccounts(data.accounts || []);
+        setSystemAccount(data.systemAccount || null);
       }
     } catch {
       // ignore
     } finally {
-      setLoadingFolders(false);
+      setLoadingAccounts(false);
+    }
+  }, [projectId]);
+
+  const loadRootFolders = useCallback(async () => {
+    setLoadingTree(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/stock-videos/drive-tree`, { cache: "no-store" });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setFolderTree((data.folders || []).map((f: { id: string; name: string }) => ({ ...f, children: [] })));
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingTree(false);
+    }
+  }, [projectId]);
+
+  async function openDriveSettings(tab: "accounts" | "folders" = "folders") {
+    setDriveModalTab(tab);
+    setDriveModalOpen(true);
+    loadAccounts();
+    loadRootFolders();
+  }
+
+  // Expand / collapse folder node
+  async function toggleFolderExpand(node: FolderTreeNode) {
+    if (node.isExpanded) {
+      setFolderTree((prev) => updateTreeNode(prev, node.id, { isExpanded: false }));
+      return;
+    }
+
+    setFolderTree((prev) => updateTreeNode(prev, node.id, { loading: true }));
+    try {
+      const res = await fetch(`/api/projects/${projectId}/stock-videos/drive-tree?parentId=${encodeURIComponent(node.id)}`);
+      const data = await res.json();
+      const children: FolderTreeNode[] = (data.folders || []).map((f: { id: string; name: string }) => ({
+        ...f,
+        children: [],
+      }));
+      setFolderTree((prev) => updateTreeNode(prev, node.id, { isExpanded: true, loading: false, children }));
+    } catch {
+      setFolderTree((prev) => updateTreeNode(prev, node.id, { isExpanded: true, loading: false }));
     }
   }
 
-  // Choose a folder from Drive
-  async function selectFolder(folderId: string, folderName: string) {
+  function updateTreeNode(nodes: FolderTreeNode[], id: string, patch: Partial<FolderTreeNode>): FolderTreeNode[] {
+    return nodes.map((node) => {
+      if (node.id === id) {
+        return { ...node, ...patch };
+      }
+      if (node.children && node.children.length > 0) {
+        return { ...node, children: updateTreeNode(node.children, id, patch) };
+      }
+      return node;
+    });
+  }
+
+  // Select Root Folder
+  async function handleSetRootFolder(folderId: string, folderName: string) {
     try {
-      const res = await fetch(`/api/projects/${projectId}/stock-videos`, {
+      const res = await fetch(`/api/projects/${projectId}/stock-videos/drive-tree`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "set_folder", folderId, folderName }),
+        body: JSON.stringify({
+          rootFolderId: folderId,
+          rootFolderName: folderName,
+          includeSubfolders,
+        }),
       });
-      if (res.ok) {
+      const data = await res.json();
+      if (res.ok && data.ok) {
         setConfig((prev) => ({
+          ...prev!,
           folderId,
           folderName,
+          rootFolderId: folderId,
+          rootFolderName: folderName,
+          includeSubfolders,
           lastSyncedAt: prev?.lastSyncedAt || null,
           syncStatus: "idle",
         }));
-        setFolderModalOpen(false);
-        // Trigger auto sync for new folder
-        setTimeout(() => handleSync(), 100);
+        setDriveModalOpen(false);
+        setFeedback(`Ana dizin '${folderName}' olarak ayarlandı. Senkronizasyon başlatılıyor...`);
+        setTimeout(() => handleSync(), 150);
+      }
+    } catch {
+      setFeedback("Ana dizin belirlenirken bir sorun oluştu.");
+    }
+  }
+
+  // Add new Google Account (Token JSON)
+  async function handleAddAccount(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newAccountTokenJson.trim()) return;
+
+    setSavingAccount(true);
+    setAccountActionNotice(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/stock-videos/drive-accounts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "add",
+          label: newAccountLabel.trim(),
+          tokenJson: newAccountTokenJson.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.message || "Hesap eklenemedi.");
+      }
+
+      setAccountActionNotice(data.message || "Hesap başarıyla eklendi.");
+      setNewAccountLabel("");
+      setNewAccountTokenJson("");
+      await loadAccounts();
+      await loadRootFolders();
+    } catch (err) {
+      setAccountActionNotice(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingAccount(false);
+    }
+  }
+
+  // Activate Account
+  async function handleActivateAccount(accountId: string) {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/stock-videos/drive-accounts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "activate", accountId }),
+      });
+      if (res.ok) {
+        await loadAccounts();
+        await loadRootFolders();
+        setFeedback("Drive hesabı değiştirildi. Klasör ağacı güncellendi.");
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Switch to System Account
+  async function handleUseSystemAccount() {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/stock-videos/drive-accounts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "use_system" }),
+      });
+      if (res.ok) {
+        await loadAccounts();
+        await loadRootFolders();
+        setFeedback("Sistem varsayılan Drive hesabına geçildi.");
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Delete Account
+  async function handleDeleteAccount(accountId: string) {
+    if (!confirm("Bu Drive hesabını bu projeden kaldırmak istediğinize emin misiniz?")) return;
+    try {
+      const res = await fetch(`/api/projects/${projectId}/stock-videos/drive-accounts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete", accountId }),
+      });
+      if (res.ok) {
+        await loadAccounts();
       }
     } catch {
       // ignore
@@ -409,6 +600,8 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
 
   if (!project) return <div className="overview-loading" />;
 
+  const activeAccount = accounts.find((a) => a.isActive);
+
   return (
     <div className="stock-studio-wrap">
       {/* Top Banner & Drive Sync Bar */}
@@ -426,15 +619,33 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
         </div>
 
         <div className="stock-header-actions">
+          {/* Drive Settings & Account Button */}
           <button
             type="button"
             className="button secondary"
-            onClick={openFolderPicker}
-            title="Drive Klasörünü Seç"
+            onClick={() => openDriveSettings("accounts")}
+            title="Google Drive Hesap Ayarları"
+          >
+            <KeyRound size={15} />
+            <span>
+              {activeAccount ? activeAccount.label : systemAccount ? "Sistem Drive Hesabı" : "Drive Hesabı"}
+            </span>
+          </button>
+
+          {/* Drive Folder & Root Selector Button */}
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => openDriveSettings("folders")}
+            title="Ana Dizin ve Alt Klasörleri Belirle"
           >
             <FolderSync size={15} />
             <span>
-              {config?.folderName ? `Klasör: ${config.folderName}` : "Drive Klasörü Seç"}
+              {config?.rootFolderName
+                ? `Ana Dizin: ${config.rootFolderName}`
+                : config?.folderName
+                ? `Klasör: ${config.folderName}`
+                : "Ana Dizin Belirle"}
             </span>
           </button>
 
@@ -462,6 +673,27 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
             style={{ marginLeft: "auto", width: 22, height: 22 }}
           >
             <X size={13} />
+          </button>
+        </div>
+      )}
+
+      {/* Active Root Folder Banner */}
+      {config?.rootFolderName && (
+        <div className="stock-root-indicator-bar">
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <FolderOpen size={16} color="var(--primary)" />
+            <span>
+              Aktif Ana Dizin: <strong>{config.rootFolderName}</strong>
+              {config.includeSubfolders !== false && <small> (Tüm alt dizinler taranıyor)</small>}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="text-btn"
+            style={{ fontSize: "11px", color: "var(--primary)", cursor: "pointer", background: "none", border: "none" }}
+            onClick={() => openDriveSettings("folders")}
+          >
+            Dizini Değiştir
           </button>
         </div>
       )}
@@ -1106,45 +1338,279 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
         </section>
       </div>
 
-      {/* Drive Folder Selection Modal */}
-      {folderModalOpen && (
+      {/* Drive Configuration Modal (Accounts & Root Folder) */}
+      {driveModalOpen && (
         <div className="modal-backdrop">
-          <div className="surface-modal folder-modal">
+          <div className="surface-modal drive-config-modal">
             <div className="modal-header">
-              <h3>Google Drive Klasör Seçimi</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Settings2 size={18} color="var(--primary)" />
+                <h3>Google Drive Yapılandırması</h3>
+              </div>
               <button
                 type="button"
                 className="icon-button"
-                onClick={() => setFolderModalOpen(false)}
+                onClick={() => setDriveModalOpen(false)}
               >
                 <X size={18} />
               </button>
             </div>
-            <p className="modal-desc">
-              Stok videolarınızın taranacağı Google Drive klasörünü belirleyin:
-            </p>
 
-            <div className="folder-list">
-              {loadingFolders ? (
-                <div className="overview-loading">Klasörler getiriliyor...</div>
-              ) : availableFolders.length === 0 ? (
-                <p>Google Drive hesabınızda klasör bulunamadı.</p>
-              ) : (
-                availableFolders.map((f) => (
-                  <button
-                    type="button"
-                    key={f.id}
-                    className={`folder-item-btn ${config?.folderId === f.id ? "active" : ""}`}
-                    onClick={() => selectFolder(f.id, f.name)}
-                  >
-                    <FolderSync size={16} />
-                    <span>{f.name}</span>
-                    {config?.folderId === f.id && <Check size={14} />}
-                  </button>
-                ))
-              )}
+            {/* Modal Tabs */}
+            <div className="segmented-filter" style={{ margin: "12px 0 16px" }}>
+              <button
+                type="button"
+                className={driveModalTab === "folders" ? "active" : ""}
+                onClick={() => setDriveModalTab("folders")}
+              >
+                <FolderOpen size={13} style={{ marginRight: 6 }} />
+                Ana Dizin &amp; Klasör Kapsamı
+              </button>
+              <button
+                type="button"
+                className={driveModalTab === "accounts" ? "active" : ""}
+                onClick={() => setDriveModalTab("accounts")}
+              >
+                <HardDrive size={13} style={{ marginRight: 6 }} />
+                Drive Hesapları ({accounts.length + (systemAccount ? 1 : 0)})
+              </button>
             </div>
+
+            {/* TAB 1: Ana Dizin ve Klasör Ağacı */}
+            {driveModalTab === "folders" && (
+              <div className="drive-tab-content">
+                <p className="modal-desc">
+                  Bu projede taranacak <strong>Ana Dizin</strong> klasörünü belirleyin. Sistem sadece seçtiğiniz bu ana dizin ve altındaki klasörlerdeki stok videoları projeye çeker.
+                </p>
+
+                <div className="subfolder-toggle-bar">
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: "12px" }}>
+                    <input
+                      type="checkbox"
+                      checked={includeSubfolders}
+                      onChange={(e) => setIncludeSubfolders(e.target.checked)}
+                      style={{ accentColor: "var(--primary)" }}
+                    />
+                    <span>Alt dizinlerdeki videoları da otomatik tara (Recursive)</span>
+                  </label>
+                </div>
+
+                <div className="folder-tree-container">
+                  {loadingTree ? (
+                    <div className="overview-loading">Klasör ağacı taranıyor...</div>
+                  ) : folderTree.length === 0 ? (
+                    <div className="history-empty">
+                      <Folder size={28} />
+                      <span>Bağlı Drive hesabında klasör bulunamadı.</span>
+                    </div>
+                  ) : (
+                    <div className="folder-tree-list">
+                      {folderTree.map((node) => (
+                        <FolderTreeItem
+                          key={node.id}
+                          node={node}
+                          selectedId={config?.rootFolderId || config?.folderId}
+                          onSelect={handleSetRootFolder}
+                          onToggle={toggleFolderExpand}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: Drive Hesapları & Token Yükleme */}
+            {driveModalTab === "accounts" && (
+              <div className="drive-tab-content">
+                <p className="modal-desc">
+                  Bu projeye özel bir Google Drive hesabı tanımlayabilir veya hesaplar arasında geçiş yapabilirsiniz:
+                </p>
+
+                {accountActionNotice && (
+                  <div className="generation-notice" style={{ marginBottom: 12 }}>
+                    <span>{accountActionNotice}</span>
+                  </div>
+                )}
+
+                {/* Accounts list */}
+                <div className="drive-accounts-list">
+                  {/* System default account */}
+                  {systemAccount && (
+                    <div className={`drive-account-card ${!activeAccount ? "active" : ""}`}>
+                      <div className="account-avatar-wrap">
+                        {systemAccount.photoLink ? (
+                          <img src={systemAccount.photoLink} alt="" />
+                        ) : (
+                          <HardDrive size={18} />
+                        )}
+                      </div>
+                      <div className="account-meta">
+                        <strong>{systemAccount.displayName || "Sistem Varsayılan Drive"}</strong>
+                        <small>{systemAccount.email}</small>
+                        {!activeAccount && <span className="account-badge-active">Aktif (Sistem)</span>}
+                      </div>
+                      {activeAccount && (
+                        <button
+                          type="button"
+                          className="button secondary"
+                          style={{ height: 30, fontSize: 11 }}
+                          onClick={handleUseSystemAccount}
+                        >
+                          Bu Hesaba Geç
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Custom Project Accounts */}
+                  {accounts.map((acc) => (
+                    <div key={acc.id} className={`drive-account-card ${acc.isActive ? "active" : ""}`}>
+                      <div className="account-avatar-wrap">
+                        {acc.photoLink ? (
+                          <img src={acc.photoLink} alt="" />
+                        ) : (
+                          <UserCheck size={18} />
+                        )}
+                      </div>
+                      <div className="account-meta">
+                        <strong>{acc.label}</strong>
+                        <small>{acc.email || "Özel Hesap"}</small>
+                        {acc.isActive && <span className="account-badge-active">Aktif</span>}
+                      </div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {!acc.isActive && (
+                          <button
+                            type="button"
+                            className="button secondary"
+                            style={{ height: 30, fontSize: 11 }}
+                            onClick={() => handleActivateAccount(acc.id)}
+                          >
+                            Aktifleştir
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="stock-btn-del"
+                          title="Hesabı Kaldır"
+                          onClick={() => handleDeleteAccount(acc.id)}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Add new account form */}
+                <form onSubmit={handleAddAccount} className="add-drive-account-form">
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: "12px" }}>
+                    <Plus size={14} color="var(--primary)" />
+                    <span>Farklı Drive Hesabı Ekle (Token JSON)</span>
+                  </div>
+                  <input
+                    type="text"
+                    className="custom-input"
+                    placeholder="Hesap Etiketi (Örn: Yedek Arşiv, Şirket Drive)"
+                    value={newAccountLabel}
+                    onChange={(e) => setNewAccountLabel(e.target.value)}
+                  />
+                  <textarea
+                    className="custom-textarea"
+                    rows={4}
+                    placeholder='{"access_token": "...", "refresh_token": "...", "client_id": "...", "client_secret": "..."}'
+                    value={newAccountTokenJson}
+                    onChange={(e) => setNewAccountTokenJson(e.target.value)}
+                    required
+                  />
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <button
+                      type="submit"
+                      className="button primary"
+                      style={{ height: 34, fontSize: 11 }}
+                      disabled={savingAccount}
+                    >
+                      {savingAccount ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}
+                      <span>Hesabı Doğrula ve Bağla</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Recursive Folder Tree Component
+function FolderTreeItem({
+  node,
+  selectedId,
+  onSelect,
+  onToggle,
+  level = 0,
+}: {
+  node: FolderTreeNode;
+  selectedId?: string;
+  onSelect: (id: string, name: string) => void;
+  onToggle: (node: FolderTreeNode) => void;
+  level?: number;
+}) {
+  const isSelected = selectedId === node.id;
+
+  return (
+    <div className="folder-tree-node-wrap">
+      <div
+        className={`folder-tree-row ${isSelected ? "selected" : ""}`}
+        style={{ paddingLeft: `${level * 18 + 10}px` }}
+      >
+        <button
+          type="button"
+          className="folder-chevron-btn"
+          onClick={() => onToggle(node)}
+        >
+          {node.loading ? (
+            <LoaderCircle className="spin" size={13} />
+          ) : (
+            <ChevronRight
+              size={14}
+              style={{
+                transform: node.isExpanded ? "rotate(90deg)" : "none",
+                transition: "transform .15s ease",
+              }}
+            />
+          )}
+        </button>
+
+        <div className="folder-tree-title" onClick={() => onToggle(node)}>
+          {node.isExpanded ? <FolderOpen size={15} color="var(--primary)" /> : <Folder size={15} color="#7c819a" />}
+          <span title={node.name}>{node.name}</span>
+        </div>
+
+        <button
+          type="button"
+          className={`folder-set-root-btn ${isSelected ? "active" : ""}`}
+          onClick={() => onSelect(node.id, node.name)}
+        >
+          {isSelected ? <Check size={12} /> : null}
+          <span>{isSelected ? "Ana Dizin" : "Ana Dizin Yap"}</span>
+        </button>
+      </div>
+
+      {node.isExpanded && node.children && node.children.length > 0 && (
+        <div className="folder-tree-children">
+          {node.children.map((child) => (
+            <FolderTreeItem
+              key={child.id}
+              node={child}
+              selectedId={selectedId}
+              onSelect={onSelect}
+              onToggle={onToggle}
+              level={level + 1}
+            />
+          ))}
         </div>
       )}
     </div>

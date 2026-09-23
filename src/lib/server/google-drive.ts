@@ -3,10 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { getDatabase } from "@/lib/server/database";
+import { decryptSecret, encryptSecret } from "@/lib/server/secrets";
 
 const CACHE_DIR = path.join(process.cwd(), ".data", "stock-cache");
 
-type TokenData = {
+export type TokenData = {
   access_token: string;
   refresh_token?: string;
   client_id?: string;
@@ -15,9 +17,16 @@ type TokenData = {
   expiry_date?: number;
 };
 
+export type DriveUserProfile = {
+  email: string;
+  displayName: string;
+  photoLink?: string;
+};
+
 export type DriveFolder = {
   id: string;
   name: string;
+  parents?: string[];
 };
 
 export type DriveVideoFile = {
@@ -32,7 +41,8 @@ export type DriveVideoFile = {
   parents?: string[];
 };
 
-function readTokenData(): TokenData {
+// Fallback to system token files if project has no custom account
+function readSystemTokenData(): TokenData {
   if (process.env.GOOGLE_TOKEN_BASE64) {
     try {
       const decoded = Buffer.from(process.env.GOOGLE_TOKEN_BASE64.trim(), "base64").toString("utf8");
@@ -64,7 +74,7 @@ function readTokenData(): TokenData {
   throw new Error(`Google token dosyası bulunamadı. Aranan konumlar: ${candidatePaths.join(", ")}`);
 }
 
-function writeTokenData(data: TokenData) {
+function writeSystemTokenData(data: TokenData) {
   const candidatePaths = [
     process.env.GOOGLE_TOKEN_PATH,
     "/opt/data/google_token.json",
@@ -82,7 +92,6 @@ function writeTokenData(data: TokenData) {
     }
   }
 
-  // fallback to write in .data if not found
   try {
     const dataDir = path.join(process.cwd(), ".data");
     fs.mkdirSync(dataDir, { recursive: true });
@@ -92,20 +101,30 @@ function writeTokenData(data: TokenData) {
   }
 }
 
-export async function getValidAccessToken(): Promise<string> {
-  const tokenData = readTokenData();
-  let accessToken = tokenData.access_token;
-
-  // Test token with a lightweight call
-  const testRes = await fetch("https://www.googleapis.com/drive/v3/about?fields=user", {
+/**
+ * Fetch Google User Info with a given access token
+ */
+export async function getGoogleUserProfile(accessToken: string): Promise<DriveUserProfile> {
+  const res = await fetch("https://www.googleapis.com/drive/v3/about?fields=user", {
     headers: { Authorization: `Bearer ${accessToken}` },
-  }).catch(() => null);
-
-  if (testRes && testRes.ok) {
-    return accessToken;
+  });
+  if (!res.ok) {
+    throw new Error(`Google kullanıcı bilgisi alınamadı (${res.status}): ${await res.text()}`);
   }
+  const data = (await res.json()) as {
+    user?: { emailAddress?: string; displayName?: string; photoLink?: string };
+  };
+  return {
+    email: data.user?.emailAddress || "",
+    displayName: data.user?.displayName || "",
+    photoLink: data.user?.photoLink || "",
+  };
+}
 
-  // Token expired or invalid, refresh using refresh_token
+/**
+ * Refresh an OAuth access token using refresh_token
+ */
+async function refreshGoogleAccessToken(tokenData: TokenData): Promise<{ tokenData: TokenData; accessToken: string }> {
   if (!tokenData.refresh_token || !tokenData.client_id || !tokenData.client_secret) {
     throw new Error("Google access token geçersiz ve yenileme (refresh_token) bilgisi eksik.");
   }
@@ -128,18 +147,99 @@ export async function getValidAccessToken(): Promise<string> {
     throw new Error(`Google access token yenilenemedi (${refreshRes.status}): ${errorBody}`);
   }
 
-  const refreshData = await refreshRes.json() as { access_token: string; expires_in?: number };
-  accessToken = refreshData.access_token;
-  tokenData.access_token = accessToken;
-  writeTokenData(tokenData);
-
-  return accessToken;
+  const refreshData = (await refreshRes.json()) as { access_token: string; expires_in?: number };
+  const updatedToken: TokenData = {
+    ...tokenData,
+    access_token: refreshData.access_token,
+    expiry_date: refreshData.expires_in ? Date.now() + refreshData.expires_in * 1000 : undefined,
+  };
+  return { tokenData: updatedToken, accessToken: refreshData.access_token };
 }
 
-export async function listDriveFolders(): Promise<DriveFolder[]> {
-  const accessToken = await getValidAccessToken();
-  const q = "mimeType = 'application/vnd.google-apps.folder' and trashed = false";
-  const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&pageSize=50&fields=files(id,name)&orderBy=name`;
+/**
+ * Get valid access token for a project or globally
+ */
+export async function getValidAccessToken(projectId?: string): Promise<string> {
+  const db = getDatabase();
+
+  // 1. If projectId provided, check for active project_drive_accounts
+  if (projectId) {
+    const accountRow = db
+      .prepare(`
+        SELECT id, encrypted_token_json
+        FROM project_drive_accounts
+        WHERE project_id = ? AND is_active = 1
+        ORDER BY updated_at DESC
+        LIMIT 1
+      `)
+      .get(projectId) as { id: string; encrypted_token_json: string } | undefined;
+
+    if (accountRow?.encrypted_token_json) {
+      try {
+        const decryptedStr = decryptSecret(accountRow.encrypted_token_json);
+        const tokenData = JSON.parse(decryptedStr) as TokenData;
+        let accessToken = tokenData.access_token;
+
+        // Test if current access token is valid
+        const testRes = await fetch("https://www.googleapis.com/drive/v3/about?fields=user", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }).catch(() => null);
+
+        if (testRes && testRes.ok) {
+          return accessToken;
+        }
+
+        // Try refreshing token
+        const refreshed = await refreshGoogleAccessToken(tokenData);
+        accessToken = refreshed.accessToken;
+
+        // Save back encrypted
+        const newEncrypted = encryptSecret(JSON.stringify(refreshed.tokenData));
+        db.prepare(
+          "UPDATE project_drive_accounts SET encrypted_token_json = ?, updated_at = ? WHERE id = ?"
+        ).run(newEncrypted, new Date().toISOString(), accountRow.id);
+
+        return accessToken;
+      } catch (err) {
+        console.warn(`[GoogleDrive] Proje (${projectId}) özel token yenileme hatası, sistem tokenına geçiliyor:`, err);
+      }
+    }
+  }
+
+  // 2. Fallback to System Token
+  const tokenData = readSystemTokenData();
+  const accessToken = tokenData.access_token;
+
+  const testRes = await fetch("https://www.googleapis.com/drive/v3/about?fields=user", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  }).catch(() => null);
+
+  if (testRes && testRes.ok) {
+    return accessToken;
+  }
+
+  const refreshed = await refreshGoogleAccessToken(tokenData);
+  writeSystemTokenData(refreshed.tokenData);
+  return refreshed.accessToken;
+}
+
+/**
+ * List folders in Drive.
+ * If parentFolderId is supplied, lists direct child folders of that parent.
+ * Otherwise lists top folders or all accessible folders.
+ */
+export async function listDriveFolders(projectId?: string, parentFolderId?: string): Promise<DriveFolder[]> {
+  const accessToken = await getValidAccessToken(projectId);
+  const clauses: string[] = ["mimeType = 'application/vnd.google-apps.folder'", "trashed = false"];
+
+  if (parentFolderId && parentFolderId.trim()) {
+    clauses.push(`'${parentFolderId.trim()}' in parents`);
+  }
+
+  const q = clauses.join(" and ");
+  const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
+    q
+  )}&pageSize=100&fields=files(id,name,parents)&orderBy=name`;
 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -149,25 +249,102 @@ export async function listDriveFolders(): Promise<DriveFolder[]> {
     throw new Error(`Google Drive klasörleri alınamadı (${res.status}): ${await res.text()}`);
   }
 
-  const data = await res.json() as { files?: { id: string; name: string }[] };
+  const data = (await res.json()) as { files?: DriveFolder[] };
   return data.files || [];
 }
 
-export async function listDriveVideos(folderId?: string, query?: string): Promise<{ files: DriveVideoFile[]; nextPageToken?: string }> {
-  const accessToken = await getValidAccessToken();
-  const clauses: string[] = ["mimeType contains 'video/'", "trashed = false"];
+/**
+ * Recursive Discovery: Find all subfolder IDs under a given root folder
+ */
+export async function getAllFolderIdsUnderRoot(
+  projectId: string | undefined,
+  rootFolderId: string
+): Promise<string[]> {
+  const accessToken = await getValidAccessToken(projectId);
+  const collectedIds = new Set<string>([rootFolderId]);
+  const queue = [rootFolderId];
 
-  if (folderId && folderId.trim()) {
-    clauses.push(`'${folderId.trim()}' in parents`);
+  // Fetch children level by level (breadth-first)
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    try {
+      const q = `'${currentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+      const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
+        q
+      )}&pageSize=100&fields=files(id,name)`;
+
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (res.ok) {
+        const data = (await res.json()) as { files?: { id: string; name: string }[] };
+        for (const child of data.files || []) {
+          if (!collectedIds.has(child.id)) {
+            collectedIds.add(child.id);
+            queue.push(child.id);
+          }
+        }
+      }
+    } catch {
+      // Continue with remaining
+    }
   }
+
+  return Array.from(collectedIds);
+}
+
+/**
+ * List videos in Drive.
+ * Supports:
+ * - Specific folderId (single folder)
+ * - Array of folderIds (root + recursive subfolders)
+ * - query search
+ */
+export async function listDriveVideos(
+  options: {
+    projectId?: string;
+    folderId?: string;
+    folderIds?: string[];
+    query?: string;
+    pageSize?: number;
+    pageToken?: string;
+  } = {}
+): Promise<{ files: DriveVideoFile[]; nextPageToken?: string }> {
+  const { projectId, folderId, folderIds, query, pageSize = 100, pageToken } = options;
+  const accessToken = await getValidAccessToken(projectId);
+
+  const baseClauses: string[] = ["mimeType contains 'video/'", "trashed = false"];
 
   if (query && query.trim()) {
     const escaped = query.replace(/'/g, "\\'");
-    clauses.push(`name contains '${escaped}'`);
+    baseClauses.push(`name contains '${escaped}'`);
   }
 
-  const q = clauses.join(" and ");
-  const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&pageSize=100&fields=nextPageToken,files(id,name,mimeType,size,thumbnailLink,videoMediaMetadata,parents)&orderBy=name`;
+  // Handle multi-folder query
+  let finalQuery = baseClauses.join(" and ");
+
+  if (folderIds && folderIds.length > 0) {
+    if (folderIds.length === 1) {
+      finalQuery += ` and '${folderIds[0]}' in parents`;
+    } else {
+      // Google Drive API supports OR clauses inside parentheses
+      // E.g. and ('folder1' in parents or 'folder2' in parents)
+      // Chunk into batches of up to 25 to avoid Drive query length limits
+      const parentClauses = folderIds.slice(0, 30).map((id) => `'${id}' in parents`).join(" or ");
+      finalQuery += ` and (${parentClauses})`;
+    }
+  } else if (folderId && folderId.trim()) {
+    finalQuery += ` and '${folderId.trim()}' in parents`;
+  }
+
+  let url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
+    finalQuery
+  )}&pageSize=${pageSize}&fields=nextPageToken,files(id,name,mimeType,size,thumbnailLink,videoMediaMetadata,parents)&orderBy=name`;
+
+  if (pageToken) {
+    url += `&pageToken=${encodeURIComponent(pageToken)}`;
+  }
 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -177,7 +354,7 @@ export async function listDriveVideos(folderId?: string, query?: string): Promis
     throw new Error(`Google Drive videoları listelenemedi (${res.status}): ${await res.text()}`);
   }
 
-  const data = await res.json() as {
+  const data = (await res.json()) as {
     nextPageToken?: string;
     files?: Array<{
       id: string;
@@ -216,7 +393,13 @@ export async function listDriveVideos(folderId?: string, query?: string): Promis
   return { files, nextPageToken: data.nextPageToken };
 }
 
-export async function ensureCachedVideo(fileId: string): Promise<{ localPath: string; isNewDownload: boolean }> {
+/**
+ * Ensure video file is downloaded and cached locally on server disk
+ */
+export async function ensureCachedVideo(
+  fileId: string,
+  projectId?: string
+): Promise<{ localPath: string; isNewDownload: boolean }> {
   fs.mkdirSync(CACHE_DIR, { recursive: true });
   const localPath = path.join(CACHE_DIR, `${fileId}.mp4`);
 
@@ -227,7 +410,7 @@ export async function ensureCachedVideo(fileId: string): Promise<{ localPath: st
     }
   }
 
-  const accessToken = await getValidAccessToken();
+  const accessToken = await getValidAccessToken(projectId);
   const downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
 
   const res = await fetch(downloadUrl, {
@@ -242,7 +425,6 @@ export async function ensureCachedVideo(fileId: string): Promise<{ localPath: st
   const fileStream = fs.createWriteStream(tempPath);
   const webStream = res.body;
 
-  // Convert Web ReadableStream to Node Readable
   // @ts-expect-error Node.js Readable from Web stream
   await pipeline(Readable.fromWeb(webStream), fileStream);
   fs.renameSync(tempPath, localPath);
