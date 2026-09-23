@@ -33,6 +33,17 @@ export type DriveVideoFile = {
 };
 
 function readTokenData(): TokenData {
+  if (process.env.GOOGLE_TOKEN_BASE64) {
+    try {
+      const decoded = Buffer.from(process.env.GOOGLE_TOKEN_BASE64.trim(), "base64").toString("utf8");
+      if (decoded.startsWith("{")) {
+        return JSON.parse(decoded) as TokenData;
+      }
+    } catch {
+      // continue
+    }
+  }
+
   const tokenJsonStr = process.env.GOOGLE_TOKEN_JSON;
   if (tokenJsonStr && tokenJsonStr.trim().startsWith("{")) {
     return JSON.parse(tokenJsonStr) as TokenData;
