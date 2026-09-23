@@ -14,9 +14,12 @@ export async function POST(
     headline?: string;
     subtitle?: string;
     headlineColor?: string;
+    subtitleColor?: string;
+    headlineBgColor?: string;
     accentColor?: string;
     logoUrl?: string;
     logoPosition?: "top_left" | "top_right" | "bottom_left" | "bottom_right" | "bottom_center" | "none";
+    logoSize?: number;
     musicTrack?: string;
     originalVolume?: number;
     musicVolume?: number;
@@ -38,9 +41,12 @@ export async function POST(
       headline: body.headline,
       subtitle: body.subtitle,
       headlineColor: body.headlineColor,
+      subtitleColor: body.subtitleColor,
+      headlineBgColor: body.headlineBgColor,
       accentColor: body.accentColor,
       logoUrl: body.logoUrl,
       logoPosition: body.logoPosition,
+      logoSize: body.logoSize,
       musicTrack: body.musicTrack,
       originalVolume: body.originalVolume,
       musicVolume: body.musicVolume,

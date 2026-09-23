@@ -98,9 +98,13 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
   const [frameStyle, setFrameStyle] = useState<StockFrameStyle>("blur_padding");
   const [headline, setHeadline] = useState("");
   const [subtitle, setSubtitle] = useState("");
+  const [headlineColor, setHeadlineColor] = useState("#ffffff");
+  const [subtitleColor, setSubtitleColor] = useState("#cbd5e1");
+  const [headlineBgColor, setHeadlineBgColor] = useState("rgba(10, 12, 20, 0.82)");
   const [logoPosition, setLogoPosition] = useState<
     "top_left" | "top_right" | "bottom_left" | "bottom_right" | "bottom_center" | "none"
   >("top_right");
+  const [logoSize, setLogoSize] = useState<number>(130);
   const [musicTrack, setMusicTrack] = useState<string>("/audio/ambient_track.mp3");
   const [originalVolume, setOriginalVolume] = useState<number>(1);
   const [musicVolume, setMusicVolume] = useState<number>(0.4);
@@ -243,9 +247,13 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
           frameStyle,
           headline: headline.trim(),
           subtitle: subtitle.trim(),
+          headlineColor,
+          subtitleColor,
+          headlineBgColor,
           accentColor: brandColor,
           logoUrl: brandLogo,
           logoPosition,
+          logoSize,
           musicTrack: musicTrack !== "none" ? musicTrack : undefined,
           originalVolume,
           musicVolume: musicTrack !== "none" ? musicVolume : 0,
@@ -527,10 +535,13 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                       frameStyle,
                       headline,
                       subtitle,
-                      headlineColor: "#ffffff",
+                      headlineColor,
+                      subtitleColor,
+                      headlineBgColor,
                       accentColor: brandColor,
                       logoSrc: brandLogo,
                       logoPosition,
+                      logoSize,
                       musicSrc: musicTrack !== "none" ? musicTrack : undefined,
                       originalVolume,
                       musicVolume: musicTrack !== "none" ? musicVolume : 0,
@@ -596,12 +607,82 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                     onChange={(e) => setSubtitle(e.target.value)}
                     style={{ marginTop: 6 }}
                   />
+
+                  {/* Text and Card Colors */}
+                  <div className="stock-color-grid" style={{ marginTop: 10 }}>
+                    <div className="stock-color-item">
+                      <small>Başlık Rengi</small>
+                      <div className="stock-color-picker-row">
+                        <input
+                          type="color"
+                          value={headlineColor.startsWith("#") ? headlineColor : "#ffffff"}
+                          onChange={(e) => setHeadlineColor(e.target.value)}
+                        />
+                        <div className="stock-color-presets">
+                          {["#ffffff", "#facc15", "#38bdf8", "#4ade80"].map((c) => (
+                            <button
+                              key={c}
+                              type="button"
+                              style={{ backgroundColor: c }}
+                              className={headlineColor === c ? "active" : ""}
+                              onClick={() => setHeadlineColor(c)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="stock-color-item">
+                      <small>Alt Metin Rengi</small>
+                      <div className="stock-color-picker-row">
+                        <input
+                          type="color"
+                          value={subtitleColor.startsWith("#") ? subtitleColor : "#cbd5e1"}
+                          onChange={(e) => setSubtitleColor(e.target.value)}
+                        />
+                        <div className="stock-color-presets">
+                          {["#cbd5e1", "#ffffff", "#fde047", "#f43f5e"].map((c) => (
+                            <button
+                              key={c}
+                              type="button"
+                              style={{ backgroundColor: c }}
+                              className={subtitleColor === c ? "active" : ""}
+                              onClick={() => setSubtitleColor(c)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="stock-color-item" style={{ gridColumn: "span 2" }}>
+                      <small>Kart Arka Plan Rengi</small>
+                      <div className="stock-color-picker-row">
+                        <div className="stock-color-presets" style={{ width: "100%", gap: 6 }}>
+                          {[
+                            { label: "Koyu Cam", val: "rgba(10, 12, 20, 0.82)" },
+                            { label: "Tam Siyah", val: "#000000" },
+                            { label: "Marka Rengi", val: brandColor },
+                            { label: "Şeffaf", val: "transparent" },
+                          ].map((item) => (
+                            <button
+                              key={item.label}
+                              type="button"
+                              className={`stock-bg-chip ${headlineBgColor === item.val ? "active" : ""}`}
+                              onClick={() => setHeadlineBgColor(item.val)}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* 3. Logo Placement */}
                 <div className="editor-group">
                   <label className="editor-label">
-                    <Sparkles size={14} /> Marka Logosu
+                    <Sparkles size={14} /> Marka Logosu &amp; Ölçüsü
                   </label>
                   <div className="segmented-grid">
                     {[
@@ -620,6 +701,38 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                       </button>
                     ))}
                   </div>
+
+                  {logoPosition !== "none" && (
+                    <div className="slider-item" style={{ marginTop: 8 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <small>Logo Genişliği: {logoSize}px</small>
+                        <div className="stock-color-presets" style={{ gap: 4 }}>
+                          {[
+                            { label: "K", val: 90 },
+                            { label: "O", val: 140 },
+                            { label: "B", val: 200 },
+                          ].map((s) => (
+                            <button
+                              key={s.label}
+                              type="button"
+                              className={`stock-size-chip ${logoSize === s.val ? "active" : ""}`}
+                              onClick={() => setLogoSize(s.val)}
+                            >
+                              {s.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <input
+                        type="range"
+                        min="60"
+                        max="240"
+                        step="5"
+                        value={logoSize}
+                        onChange={(e) => setLogoSize(Number.parseInt(e.target.value, 10))}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* 4. Audio & Music Mix */}

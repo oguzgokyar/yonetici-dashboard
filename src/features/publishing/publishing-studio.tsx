@@ -55,7 +55,9 @@ type PostRecord = {
 type RecentAsset = {
   id: string;
   type: "image" | "video";
+  category: "image" | "video" | "stock";
   url: string;
+  thumbnailUrl?: string;
   prompt?: string;
   idea?: {
     id?: string;
@@ -99,6 +101,7 @@ export function PublishingStudio({
   // Recent generated assets
   const [recentAssets, setRecentAssets] = useState<RecentAsset[]>([]);
   const [loadingAssets, setLoadingAssets] = useState(false);
+  const [modalMediaTab, setModalMediaTab] = useState<"image" | "video" | "stock">("image");
 
   // Status
   const [submitting, setSubmitting] = useState(false);
@@ -211,6 +214,7 @@ export function PublishingStudio({
             items.push({
               id: a.id,
               type: "image",
+              category: "image",
               url: a.url,
               prompt: a.prompt,
               idea: a.idea,
@@ -234,6 +238,7 @@ export function PublishingStudio({
             items.push({
               id: v.id,
               type: "video",
+              category: "video",
               url: v.url || `/api/videos/${v.id}`,
               prompt: v.prompt,
               idea: v.idea,
@@ -249,13 +254,16 @@ export function PublishingStudio({
           (s: {
             id: string;
             name: string;
+            thumbnailUrl?: string;
             streamUrl: string;
             createdAt?: string;
           }) => {
             items.push({
               id: s.id,
               type: "video",
+              category: "stock",
               url: s.streamUrl,
+              thumbnailUrl: s.thumbnailUrl,
               prompt: `Stok Video: ${s.name}`,
               sourceTopic: s.name.replace(/\.[^/.]+$/, ""),
               createdAt: s.createdAt,
@@ -267,6 +275,7 @@ export function PublishingStudio({
 
       const target = targetId ? items.find((i) => i.id === targetId) : null;
       if (target) {
+        setModalMediaTab(target.category);
         applyAssetSelection(target);
       } else if (items.length > 0 && !selectedMedia) {
         applyAssetSelection(items[0]);
@@ -713,38 +722,75 @@ export function PublishingStudio({
 
                 {mediaSourceTab === "recent" ? (
                   <div>
+                    {/* Category tabs: Görseller, Videolar, Stok Videolar */}
+                    <div className="segmented-filter" style={{ marginBottom: "10px" }}>
+                      <button
+                        type="button"
+                        className={modalMediaTab === "image" ? "active" : ""}
+                        onClick={() => setModalMediaTab("image")}
+                      >
+                        Görseller ({recentAssets.filter((a) => a.category === "image").length})
+                      </button>
+                      <button
+                        type="button"
+                        className={modalMediaTab === "video" ? "active" : ""}
+                        onClick={() => setModalMediaTab("video")}
+                      >
+                        Videolar ({recentAssets.filter((a) => a.category === "video").length})
+                      </button>
+                      <button
+                        type="button"
+                        className={modalMediaTab === "stock" ? "active" : ""}
+                        onClick={() => setModalMediaTab("stock")}
+                      >
+                        Stok Videolar ({recentAssets.filter((a) => a.category === "stock").length})
+                      </button>
+                    </div>
+
                     {loadingAssets ? (
                       <div className="overview-loading" style={{ minHeight: "100px" }} />
-                    ) : recentAssets.length > 0 ? (
+                    ) : recentAssets.filter((a) => a.category === modalMediaTab).length > 0 ? (
                       <div className="media-picker-grid">
-                        {recentAssets.map((asset) => {
-                          const isSelected = selectedMedia?.id === asset.id;
-                          return (
-                            <button
-                              key={asset.id}
-                              type="button"
-                              onClick={() => applyAssetSelection(asset)}
-                              className={`media-picker-item ${isSelected ? "selected" : ""}`}
-                            >
-                              {asset.type === "video" ? (
-                                <div style={{ width: "100%", height: "100%", background: "#111", display: "grid", placeItems: "center", color: "white" }}>
-                                  <Video size={18} />
-                                </div>
-                              ) : (
-                                <img
-                                  src={asset.url.startsWith("/api/assets/") ? `${asset.url}?thumb=1` : asset.url}
-                                  alt=""
-                                  loading="lazy"
-                                />
-                              )}
-                              <span>{asset.type === "video" ? "MP4" : "IMG"}</span>
-                            </button>
-                          );
-                        })}
+                        {recentAssets
+                          .filter((a) => a.category === modalMediaTab)
+                          .map((asset) => {
+                            const isSelected = selectedMedia?.id === asset.id;
+                            return (
+                              <button
+                                key={asset.id}
+                                type="button"
+                                onClick={() => applyAssetSelection(asset)}
+                                className={`media-picker-item ${isSelected ? "selected" : ""}`}
+                              >
+                                {asset.thumbnailUrl ? (
+                                  <img
+                                    src={asset.thumbnailUrl}
+                                    alt=""
+                                    loading="lazy"
+                                  />
+                                ) : asset.type === "video" ? (
+                                  <div style={{ width: "100%", height: "100%", background: "#111", display: "grid", placeItems: "center", color: "white" }}>
+                                    <Video size={18} />
+                                  </div>
+                                ) : (
+                                  <img
+                                    src={asset.url.startsWith("/api/assets/") ? `${asset.url}?thumb=1` : asset.url}
+                                    alt=""
+                                    loading="lazy"
+                                  />
+                                )}
+                                <span>{asset.category === "stock" ? "STOK" : asset.type === "video" ? "MP4" : "IMG"}</span>
+                              </button>
+                            );
+                          })}
                       </div>
                     ) : (
                       <div className="panel-empty" style={{ minHeight: "100px" }}>
-                        <p>Bu projede henüz üretilmiş görsel veya video bulunamadı.</p>
+                        <p>
+                          {modalMediaTab === "image" && "Bu projede henüz üretilmiş görsel bulunamadı."}
+                          {modalMediaTab === "video" && "Bu projede henüz üretilmiş video bulunamadı."}
+                          {modalMediaTab === "stock" && "Bu projede henüz senkronize edilmiş stok video bulunamadı."}
+                        </p>
                       </div>
                     )}
                   </div>

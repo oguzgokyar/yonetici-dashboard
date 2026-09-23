@@ -18,9 +18,12 @@ export type RenderStockVideoOptions = {
   headline?: string;
   subtitle?: string;
   headlineColor?: string;
+  subtitleColor?: string;
+  headlineBgColor?: string;
   accentColor?: string;
   logoUrl?: string;
   logoPosition?: "top_left" | "top_right" | "bottom_left" | "bottom_right" | "bottom_center" | "none";
+  logoSize?: number;
   musicTrack?: string;
   originalVolume?: number;
   musicVolume?: number;
@@ -89,6 +92,10 @@ export async function renderFramedStockVideo(
 
   const titleText = (options.headline || "").trim();
   const subText = (options.subtitle || "").trim();
+  const headlineColor = options.headlineColor || "#ffffff";
+  const subtitleColor = options.subtitleColor || "#cbd5e1";
+  const headlineBgColor = options.headlineBgColor || "#000000";
+  const logoSize = Math.max(60, Math.min(options.logoSize || 140, 260));
 
   if (titleText || subText) {
     hasTextOverlay = true;
@@ -117,13 +124,13 @@ export async function renderFramedStockVideo(
           titleText
             ? `
           <g filter="url(#shadow)">
-            <rect x="80" y="${headlineY - 50}" width="920" height="${subText ? cardHeight + 40 : cardHeight}" rx="28" fill="#000000" fill-opacity="0.75" stroke="${accentColor}" stroke-width="3" />
-            <text x="540" y="${headlineY + 40}" font-family="sans-serif" font-size="46" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">
+            <rect x="80" y="${headlineY - 50}" width="920" height="${subText ? cardHeight + 40 : cardHeight}" rx="28" fill="${headlineBgColor}" fill-opacity="0.82" stroke="${accentColor}" stroke-width="3" />
+            <text x="540" y="${headlineY + 40}" font-family="sans-serif" font-size="46" font-weight="bold" fill="${headlineColor}" text-anchor="middle" dominant-baseline="middle">
               ${escapeXml(titleText)}
             </text>
             ${
               subText
-                ? `<text x="540" y="${headlineY + 110}" font-family="sans-serif" font-size="28" font-weight="500" fill="#cbd5e1" text-anchor="middle" dominant-baseline="middle">
+                ? `<text x="540" y="${headlineY + 110}" font-family="sans-serif" font-size="28" font-weight="500" fill="${subtitleColor}" text-anchor="middle" dominant-baseline="middle">
                     ${escapeXml(subText)}
                   </text>`
                 : ""
@@ -157,7 +164,7 @@ export async function renderFramedStockVideo(
 
       if (logoBuf) {
         await sharp(logoBuf)
-          .resize({ width: 160, height: 160, fit: "inside" })
+          .resize({ width: logoSize, height: logoSize, fit: "inside" })
           .png()
           .toFile(logoPngPath);
       }

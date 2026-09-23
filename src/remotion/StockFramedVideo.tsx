@@ -9,9 +9,12 @@ export type StockFramedVideoProps = {
   headline?: string;
   subtitle?: string;
   headlineColor?: string;
+  subtitleColor?: string;
+  headlineBgColor?: string;
   accentColor?: string;
   logoSrc?: string;
   logoPosition?: "top_left" | "top_right" | "bottom_left" | "bottom_right" | "bottom_center" | "none";
+  logoSize?: number;
   musicSrc?: string;
   originalVolume?: number;
   musicVolume?: number;
@@ -23,8 +26,11 @@ export const defaultStockFramedProps: StockFramedVideoProps = {
   headline: "Öne Çıkan Başlık",
   subtitle: "Doğal ve etkileyici anlar",
   headlineColor: "#ffffff",
+  subtitleColor: "#cbd5e1",
+  headlineBgColor: "rgba(10, 12, 20, 0.78)",
   accentColor: "#6d5dfc",
   logoPosition: "top_right",
+  logoSize: 130,
   originalVolume: 1,
   musicVolume: 0.5,
 };
@@ -35,9 +41,12 @@ export function StockFramedVideo({
   headline = "",
   subtitle = "",
   headlineColor = "#ffffff",
+  subtitleColor = "#cbd5e1",
+  headlineBgColor = "rgba(10, 12, 20, 0.78)",
   accentColor = "#6d5dfc",
   logoSrc,
   logoPosition = "top_right",
+  logoSize = 130,
   musicSrc,
   originalVolume = 1,
   musicVolume = 0.5,
@@ -69,8 +78,8 @@ export function StockFramedVideo({
       zIndex: 30,
       opacity: logoSpring,
       transform: `scale(${0.85 + logoSpring * 0.15})`,
-      maxHeight: 80,
-      maxWidth: 160,
+      maxHeight: Math.round(logoSize * 0.75),
+      maxWidth: logoSize,
       filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.5))",
     };
 
@@ -202,7 +211,7 @@ export function StockFramedVideo({
       {/* Branded Logo Overlay */}
       {logoSrc && logoPosition !== "none" && (
         <div style={getLogoStyle()}>
-          <Img src={logoSrc} style={{ maxHeight: 75, maxWidth: 150, objectFit: "contain" }} />
+          <Img src={logoSrc} style={{ maxHeight: Math.round(logoSize * 0.7), maxWidth: logoSize, objectFit: "contain" }} />
         </div>
       )}
 
@@ -220,7 +229,7 @@ export function StockFramedVideo({
             zIndex: 25,
             padding: "20px 28px",
             borderRadius: 22,
-            background: "rgba(10, 12, 20, 0.78)",
+            background: headlineBgColor,
             backdropFilter: "blur(16px)",
             WebkitBackdropFilter: "blur(16px)",
             border: `1.5px solid ${accentColor}66`,
@@ -248,7 +257,7 @@ export function StockFramedVideo({
             <p
               style={{
                 margin: "8px 0 0",
-                color: "#cbd5e1",
+                color: subtitleColor,
                 fontFamily: '"DM Sans", Arial, sans-serif',
                 fontSize: 20,
                 fontWeight: 500,
