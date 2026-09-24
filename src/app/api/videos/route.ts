@@ -48,6 +48,7 @@ export async function GET(request: Request) {
     let durationSeconds: number | undefined;
     let motionStyle: string | undefined;
     let isStockRender = false;
+    let metadata: Record<string, unknown> | undefined;
 
     try {
       const requestState = JSON.parse(row.request_json || "{}");
@@ -56,6 +57,7 @@ export async function GET(request: Request) {
       motionStyle = requestState.motionStyle;
       idea = requestState.idea;
       sourceTopic = requestState.sourceTopic;
+      metadata = requestState.metadata;
       isStockRender = Boolean(
         requestState.sourceStockVideoId || requestState.renderer === "ffmpeg-frame-engine"
       );
@@ -72,6 +74,7 @@ export async function GET(request: Request) {
       motionStyle,
       idea,
       sourceTopic,
+      metadata,
       createdAt: row.completed_at || row.created_at,
     };
   });

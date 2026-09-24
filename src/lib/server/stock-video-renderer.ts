@@ -99,6 +99,7 @@ export async function renderFramedStockVideo(
       duration_seconds?: number;
       width?: number;
       height?: number;
+      metadata_json?: string;
     } | undefined;
 
   if (!stockRow) {
@@ -582,6 +583,12 @@ export async function renderFramedStockVideo(
 
   const now = new Date().toISOString();
   const videoTitle = titleText || `Stok Video - ${stockRow.name}`;
+  let sourceMetadata: Record<string, unknown> = {};
+  try {
+    sourceMetadata = JSON.parse(stockRow.metadata_json || "{}");
+  } catch {
+    sourceMetadata = {};
+  }
 
   // Log job in generation_jobs table
   db.prepare(`
@@ -596,6 +603,12 @@ export async function renderFramedStockVideo(
       frameStyle,
       headline: titleText,
       subtitle: subText,
+      metadata: {
+        ...sourceMetadata,
+        headline: titleText,
+        subtitle: subText,
+        sourceStockVideoId: stockRow.id,
+      },
       musicTrack: options.musicTrack,
       outroId: options.outroId,
       renderer: "ffmpeg-frame-engine",

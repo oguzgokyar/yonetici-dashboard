@@ -23,6 +23,10 @@ import {
   Video,
   X,
 } from "lucide-react";
+import {
+  extractStockPublishingMetadata,
+  mergeHashtagText,
+} from "@/lib/stock-publishing-metadata";
 
 type ConnectedAccount = {
   id: string;
@@ -144,17 +148,10 @@ export function PublishingStudio({
     // If stock video has rich metadata from Drive .json
     if (asset.metadata && Object.keys(asset.metadata).length > 0) {
       const meta = asset.metadata;
-      const rawTitle = (meta.title || meta.name || meta.başlık || asset.sourceTopic || "") as string;
-      const rawDesc = (meta.description || meta.desc || meta.açıklama || "") as string;
-      const rawKeywords = (meta.keywords || meta.tags || meta.anahtar_kelimeler || []) as string[];
-
-      // Set tags directly if available
-      if (Array.isArray(rawKeywords) && rawKeywords.length > 0) {
-        const tagStr = rawKeywords
-          .map((k) => (k.startsWith("#") ? k : `#${k.replace(/\s+/g, "")}`))
-          .join(" ");
-        setHashtags(tagStr);
-      }
+      const extracted = extractStockPublishingMetadata(meta);
+      const rawTitle = extracted.title || asset.sourceTopic || "";
+      const rawDesc = extracted.description;
+      if (extracted.hashtags) setHashtags(extracted.hashtags);
 
       // Populate draft title and caption
       setTitle(rawTitle.slice(0, 50));
@@ -189,9 +186,10 @@ export function PublishingStudio({
     setError(null);
     try {
       const meta = targetAsset?.metadata;
-      const rawTitle = meta ? ((meta.title || meta.name || meta.başlık || targetAsset?.sourceTopic || "") as string) : undefined;
-      const rawDesc = meta ? ((meta.description || meta.desc || meta.açıklama || "") as string) : undefined;
-      const rawKeywords = meta ? ((meta.keywords || meta.tags || meta.anahtar_kelimeler || []) as string[]) : undefined;
+      const extracted = extractStockPublishingMetadata(meta);
+      const rawTitle = extracted.title || targetAsset?.sourceTopic;
+      const rawDesc = extracted.description || undefined;
+      const rawKeywords = extracted.hashtags ? extracted.hashtags.split(/\s+/) : [];
 
       const response = await fetch("/api/ai/posts/generate-copy", {
         method: "POST",
@@ -219,7 +217,9 @@ export function PublishingStudio({
 
       if (result.copy.title) setTitle(result.copy.title);
       if (result.copy.caption) setCaption(result.copy.caption);
-      if (result.copy.hashtags) setHashtags(result.copy.hashtags);
+      if (result.copy.hashtags) {
+        setHashtags((current) => mergeHashtagText(current, result.copy.hashtags));
+      }
       setCopyFeedback("Sosyal medya metni ve etiketler AI ile Türkçe sosyal medya diline göre revize edildi.");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -273,6 +273,7 @@ export function PublishingStudio({
             prompt?: string;
             idea?: { id?: string; title?: string; concept?: string };
             sourceTopic?: string;
+            metadata?: Record<string, unknown>;
             createdAt?: string;
           }) => {
             const isStockRender = Boolean(v.isStockRender);
@@ -284,6 +285,7 @@ export function PublishingStudio({
               prompt: v.title || v.prompt || (isStockRender ? "Stok Üretim Video" : undefined),
               idea: v.idea,
               sourceTopic: v.title || v.sourceTopic,
+              metadata: v.metadata,
               createdAt: v.createdAt,
             });
           }
