@@ -103,6 +103,7 @@ export async function renderFramedStockVideo(
   const musicVol = typeof options.musicVolume === "number" ? options.musicVolume : 0.5;
 
   // Frame Style Geometry & Shadows to match Remotion preview
+  // Note: All dimensions MUST be even integers for FFmpeg YUV420p & alphamerge compatibility
   let fgW = 994; // 92% of 1080
   let fgH = 1690; // 88% of 1920
   let rx = 24;
@@ -130,7 +131,7 @@ export async function renderFramedStockVideo(
     shadowOpacity = 0.7;
     glowOpacity = 0.35;
   } else if (frameStyle === "split_screen") {
-    fgW = 1015;
+    fgW = 1016; // ensure even number (1016 instead of 1015)
     fgH = 1306;
     rx = 20;
     borderW = 3;
@@ -139,7 +140,7 @@ export async function renderFramedStockVideo(
     shadowOpacity = 0.6;
   } else if (frameStyle === "minimal_glow") {
     fgW = 1036;
-    fgH = 1805;
+    fgH = 1804; // ensure even number (1804 instead of 1805)
     rx = 16;
     borderW = 2;
     borderAlpha = 1.0;
@@ -148,8 +149,12 @@ export async function renderFramedStockVideo(
     glowOpacity = 0.4;
   }
 
-  const fgX = Math.round((1080 - fgW) / 2);
-  const fgY = Math.round((1920 - fgH) / 2);
+  // Ensure fgW and fgH are strictly even
+  fgW = Math.floor(fgW / 2) * 2;
+  fgH = Math.floor(fgH / 2) * 2;
+
+  const fgX = Math.floor((1080 - fgW) / 2);
+  const fgY = Math.floor((1920 - fgH) / 2);
 
   const sharp = (await import("sharp")).default;
 
