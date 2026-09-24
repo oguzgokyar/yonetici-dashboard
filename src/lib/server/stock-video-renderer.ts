@@ -309,7 +309,7 @@ export async function renderFramedStockVideo(
       </svg>
     `;
 
-    await sharp(Buffer.from(svg), { density: 144 }).png().toFile(overlaySvgPath);
+    await sharp(Buffer.from(svg)).png().toFile(overlaySvgPath);
   }
 
   // 4. Handle Logo & Brand Name Badge
