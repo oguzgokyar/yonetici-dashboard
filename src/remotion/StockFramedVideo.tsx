@@ -96,6 +96,8 @@ export function StockFramedVideo({
   const titleText = (headline || "").trim();
   const subText = (subtitle || "").trim();
   const brandText = (brandNameText || "").trim();
+  const hasTopBrand = (logoPosition === "top_left" || logoPosition === "top_right") &&
+    Boolean(logoSrc || (showBrandName && brandText));
 
   // Logo position container styles
   const getLogoContainerStyle = (): React.CSSProperties => {
@@ -301,7 +303,7 @@ export function StockFramedVideo({
             style={{
               position: "absolute",
               left: "50%",
-              top: frameStyle === "split_screen" ? 70 : 120,
+              top: hasTopBrand ? 250 : frameStyle === "split_screen" ? 70 : 120,
               transform: `translateX(-50%) translateY(${(1 - headlineSpring) * -30}px) scale(${0.9 + headlineSpring * 0.1})`,
               opacity: headlineSpring,
               zIndex: 20,

@@ -270,12 +270,17 @@ export async function renderFramedStockVideo(
     const cardH = totalContentH + padY * 2;
     const cardX = (1080 - cardW) / 2;
     const cardY = frameStyle === "split_screen" ? 70 : 120;
+    const topLogoPosition = logoPosition === "top_left" || logoPosition === "top_right";
+    const hasTopBrand = topLogoPosition && Boolean(
+      options.logoUrl || brand.logo || (options.showBrandName && (options.brandNameText || brand.brandName))
+    );
+    const textCardY = hasTopBrand ? Math.max(cardY, 250) : cardY;
 
     const titleBaseOffset = Math.round(headlineFontSize * 0.82);
-    const titleFirstY = cardY + padY + titleBaseOffset;
+    const titleFirstY = textCardY + padY + titleBaseOffset;
 
     const subBaseOffset = Math.round(subtitleFontSize * 0.82);
-    const subFirstY = cardY + padY + (titleTotalH ? titleTotalH + gap : 0) + subBaseOffset;
+    const subFirstY = textCardY + padY + (titleTotalH ? titleTotalH + gap : 0) + subBaseOffset;
 
     const titleTspans = titleLines.map((line, idx) =>
       `<tspan x="540" dy="${idx === 0 ? 0 : headlineLineHeight}">${escapeXml(line)}</tspan>`
@@ -294,7 +299,7 @@ export async function renderFramedStockVideo(
           </filter>
         </defs>
         <g filter="url(#text_card_shadow)">
-          <rect x="${cardX}" y="${cardY}" width="${cardW}" height="${cardH}" rx="22" fill="${headlineBgColor}" stroke="${accentColor}" stroke-width="2" stroke-opacity="0.5" />
+          <rect x="${cardX}" y="${textCardY}" width="${cardW}" height="${cardH}" rx="22" fill="${headlineBgColor}" stroke="${accentColor}" stroke-width="2" stroke-opacity="0.5" />
           ${titleLines.length ? `
             <text x="540" y="${titleFirstY}" font-family="DejaVu Sans" font-size="${headlineFontSize}" font-weight="bold" fill="${headlineColor}" text-anchor="middle">
               ${titleTspans}
