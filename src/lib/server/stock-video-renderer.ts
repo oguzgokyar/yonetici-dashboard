@@ -108,6 +108,21 @@ export async function renderFramedStockVideo(
   // Ensure local video is cached
   const { localPath } = await ensureCachedVideo(stockRow.drive_file_id, options.projectId);
 
+  // Probe if source video contains an audio stream
+  let hasSourceAudio = false;
+  try {
+    const probeRes = await execFileAsync("/usr/bin/ffprobe", [
+      "-v", "error",
+      "-select_streams", "a",
+      "-show_entries", "stream=codec_type",
+      "-of", "default=noprint_wrappers=1:nokey=1",
+      localPath,
+    ]);
+    hasSourceAudio = probeRes.stdout.trim().toLowerCase().includes("audio");
+  } catch {
+    hasSourceAudio = false;
+  }
+
   // Fetch project brand info for default colors / logo
   const projectRow = db
     .prepare("SELECT brand_json FROM projects WHERE id = ?")
@@ -513,7 +528,7 @@ export async function renderFramedStockVideo(
   // Audio filtering
   const audioMapArgs: string[] = [];
   if (musicInputIdx >= 0 && musicVol > 0) {
-    if (originalVol > 0) {
+    if (hasSourceAudio && originalVol > 0) {
       filterParts.push(
         `[0:a]volume=${originalVol}[a_orig]`,
         `[${musicInputIdx}:a]volume=${musicVol}[a_music]`,
@@ -524,8 +539,12 @@ export async function renderFramedStockVideo(
       filterParts.push(`[${musicInputIdx}:a]volume=${musicVol}[out_a]`);
       audioMapArgs.push("-map", "[out_a]");
     }
-  } else if (originalVol > 0) {
-    audioMapArgs.push("-map", "0:a?");
+  } else if (hasSourceAudio && originalVol > 0) {
+    audioMapArgs.push("-map", "0:a");
+  } else if (hasOutro) {
+    const silentAudioIdx = filterStreamIdx++;
+    inputs.push("-f", "lavfi", "-t", String(options.maxDurationSeconds || 30), "-i", "anullsrc=r=44100:cl=stereo");
+    audioMapArgs.push("-map", `${silentAudioIdx}:a`);
   }
 
   const durationLimit = options.maxDurationSeconds || 30;
@@ -548,10 +567,9 @@ export async function renderFramedStockVideo(
     "22",
     "-pix_fmt",
     "yuv420p",
-    "-c:a",
-    "aac",
-    "-b:a",
-    "192k",
+    ...(audioMapArgs.length > 0
+      ? ["-c:a", "aac", "-b:a", "192k"]
+      : ["-an"]),
     "-movflags",
     "+faststart",
     mainStageOutput,
