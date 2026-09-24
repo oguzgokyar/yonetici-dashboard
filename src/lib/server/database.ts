@@ -155,6 +155,8 @@ function runMigrations(database: DatabaseSync) {
       frame_style TEXT NOT NULL DEFAULT 'blur_padding',
       headline_color TEXT NOT NULL DEFAULT '#ffffff',
       subtitle_color TEXT NOT NULL DEFAULT '#cbd5e1',
+      headline_font_size INTEGER NOT NULL DEFAULT 34,
+      subtitle_font_size INTEGER NOT NULL DEFAULT 20,
       headline_bg_color TEXT NOT NULL DEFAULT 'rgba(10, 12, 20, 0.82)',
       logo_position TEXT NOT NULL DEFAULT 'top_right',
       logo_size INTEGER NOT NULL DEFAULT 130,
@@ -320,6 +322,8 @@ export function getDatabase() {
     if (!settingsColumns.some((c) => c.name === "brand_name_layout")) database.exec("ALTER TABLE stock_project_settings ADD COLUMN brand_name_layout TEXT NOT NULL DEFAULT 'row';");
     if (!settingsColumns.some((c) => c.name === "brand_name_color")) database.exec("ALTER TABLE stock_project_settings ADD COLUMN brand_name_color TEXT NOT NULL DEFAULT '#ffffff';");
     if (!settingsColumns.some((c) => c.name === "selected_overlay_id")) database.exec("ALTER TABLE stock_project_settings ADD COLUMN selected_overlay_id TEXT NOT NULL DEFAULT '';");
+    if (!settingsColumns.some((c) => c.name === "headline_font_size")) database.exec("ALTER TABLE stock_project_settings ADD COLUMN headline_font_size INTEGER NOT NULL DEFAULT 34;");
+    if (!settingsColumns.some((c) => c.name === "subtitle_font_size")) database.exec("ALTER TABLE stock_project_settings ADD COLUMN subtitle_font_size INTEGER NOT NULL DEFAULT 20;");
   }
 
   // Ensure project_frame_overlays table exists

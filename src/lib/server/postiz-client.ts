@@ -220,7 +220,9 @@ export async function createPostizPost(
   }
 
   const scheduleDate = params.date || new Date(Date.now() + 60_000).toISOString();
-  const postType = params.postType || "post";
+  // Postiz Instagram/Facebook DTO accepts only 'post' | 'story' in settings.post_type.
+  // Single mp4 videos with post_type='post' are automatically published as REELS by Postiz.
+  const postizPostType = params.postType === "story" ? "story" : "post";
 
   const payload = {
     type: params.type,
@@ -237,7 +239,7 @@ export async function createPostizPost(
           },
         ],
         settings: {
-          post_type: postType,
+          post_type: postizPostType,
         },
       },
     ],

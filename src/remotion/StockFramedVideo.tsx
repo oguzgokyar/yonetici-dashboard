@@ -10,6 +10,8 @@ export type StockFramedVideoProps = {
   subtitle?: string;
   headlineColor?: string;
   subtitleColor?: string;
+  headlineFontSize?: number;
+  subtitleFontSize?: number;
   headlineBgColor?: string;
   accentColor?: string;
   logoSrc?: string;
@@ -33,6 +35,8 @@ export const defaultStockFramedProps: StockFramedVideoProps = {
   subtitle: "Doğal ve etkileyici anlar",
   headlineColor: "#ffffff",
   subtitleColor: "#cbd5e1",
+  headlineFontSize: 34,
+  subtitleFontSize: 20,
   headlineBgColor: "rgba(10, 12, 20, 0.78)",
   accentColor: "#6d5dfc",
   logoPosition: "top_right",
@@ -52,6 +56,8 @@ export function StockFramedVideo({
   subtitle = "",
   headlineColor = "#ffffff",
   subtitleColor = "#cbd5e1",
+  headlineFontSize = 34,
+  subtitleFontSize = 20,
   headlineBgColor = "rgba(10, 12, 20, 0.78)",
   accentColor = "#6d5dfc",
   logoSrc,
@@ -316,7 +322,7 @@ export function StockFramedVideo({
                   margin: 0,
                   color: headlineColor,
                   fontFamily: '"Manrope", "DM Sans", Arial, sans-serif',
-                  fontSize: 34,
+                  fontSize: headlineFontSize || 34,
                   fontWeight: 800,
                   lineHeight: 1.2,
                   letterSpacing: "-0.02em",
@@ -332,7 +338,7 @@ export function StockFramedVideo({
                   margin: "8px 0 0",
                   color: subtitleColor,
                   fontFamily: '"DM Sans", Arial, sans-serif',
-                  fontSize: 20,
+                  fontSize: subtitleFontSize || 20,
                   fontWeight: 500,
                   lineHeight: 1.3,
                 }}

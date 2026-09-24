@@ -19,6 +19,8 @@ export type RenderStockVideoOptions = {
   subtitle?: string;
   headlineColor?: string;
   subtitleColor?: string;
+  headlineFontSize?: number;
+  subtitleFontSize?: number;
   headlineBgColor?: string;
   accentColor?: string;
   logoUrl?: string;
@@ -209,14 +211,16 @@ export async function renderFramedStockVideo(
   const subText = (options.subtitle || "").trim();
   const headlineColor = options.headlineColor || "#ffffff";
   const subtitleColor = options.subtitleColor || "#cbd5e1";
+  const headlineFontSize = typeof options.headlineFontSize === "number" ? Math.max(18, Math.min(64, options.headlineFontSize)) : 34;
+  const subtitleFontSize = typeof options.subtitleFontSize === "number" ? Math.max(12, Math.min(40, options.subtitleFontSize)) : 20;
   const headlineBgColor = options.headlineBgColor || "rgba(10, 12, 20, 0.82)";
   const logoSize = Math.max(60, Math.min(options.logoSize || 130, 260));
 
   if (titleText || subText) {
     hasTextOverlay = true;
 
-    function wrapText(str: string, maxChars = 24): string[] {
-      const words = str.split(/\s+/);
+    function wrapText(str: string, maxChars: number): string[] {
+      const words = str.split(/\s+/).filter(Boolean);
       const lines: string[] = [];
       let current = "";
       for (const w of words) {
@@ -231,21 +235,40 @@ export async function renderFramedStockVideo(
       return lines;
     }
 
-    const titleLines = wrapText(titleText, 24);
-    const subLines = wrapText(subText, 34);
+    const cardW = 920;
+    const availableWidth = cardW - 64;
+    const maxHeadlineChars = Math.max(18, Math.floor(availableWidth / (headlineFontSize * 0.58)));
+    const maxSubChars = Math.max(24, Math.floor(availableWidth / (subtitleFontSize * 0.52)));
+
+    const titleLines = titleText ? wrapText(titleText, maxHeadlineChars) : [];
+    const subLines = subText ? wrapText(subText, maxSubChars) : [];
+
+    const headlineLineHeight = Math.round(headlineFontSize * 1.25);
+    const subtitleLineHeight = Math.round(subtitleFontSize * 1.35);
+
+    const titleTotalH = titleLines.length ? titleLines.length * headlineLineHeight : 0;
+    const subTotalH = subLines.length ? subLines.length * subtitleLineHeight : 0;
+    const gap = (titleLines.length && subLines.length) ? 14 : 0;
+    const totalContentH = titleTotalH + gap + subTotalH;
+
+    const padY = 24;
+    const cardH = totalContentH + padY * 2;
+    const cardX = (1080 - cardW) / 2;
+    const cardY = frameStyle === "split_screen" ? 70 : 120;
+
+    const titleBaseOffset = Math.round(headlineFontSize * 0.82);
+    const titleFirstY = cardY + padY + titleBaseOffset;
+
+    const subBaseOffset = Math.round(subtitleFontSize * 0.82);
+    const subFirstY = cardY + padY + (titleTotalH ? titleTotalH + gap : 0) + subBaseOffset;
 
     const titleTspans = titleLines.map((line, idx) =>
-      `<tspan x="540" dy="${idx === 0 ? 0 : 42}">${escapeXml(line)}</tspan>`
+      `<tspan x="540" dy="${idx === 0 ? 0 : headlineLineHeight}">${escapeXml(line)}</tspan>`
     ).join("");
 
     const subTspans = subLines.map((line, idx) =>
-      `<tspan x="540" dy="${idx === 0 ? 0 : 28}">${escapeXml(line)}</tspan>`
+      `<tspan x="540" dy="${idx === 0 ? 0 : subtitleLineHeight}">${escapeXml(line)}</tspan>`
     ).join("");
-
-    const cardW = 900;
-    const cardX = (1080 - cardW) / 2;
-    const cardY = frameStyle === "split_screen" ? 70 : 120;
-    const cardH = 46 + titleLines.length * 42 + (subLines.length ? subLines.length * 28 + 16 : 0);
 
     const svg = `
       <svg width="1080" height="1920" xmlns="http://www.w3.org/2000/svg">
@@ -257,11 +280,13 @@ export async function renderFramedStockVideo(
         </defs>
         <g filter="url(#text_card_shadow)">
           <rect x="${cardX}" y="${cardY}" width="${cardW}" height="${cardH}" rx="22" fill="${headlineBgColor}" stroke="${accentColor}" stroke-width="2" stroke-opacity="0.5" />
-          <text x="540" y="${cardY + 48}" font-family="sans-serif" font-size="34" font-weight="800" fill="${headlineColor}" text-anchor="middle">
-            ${titleTspans}
-          </text>
+          ${titleLines.length ? `
+            <text x="540" y="${titleFirstY}" font-family="'DejaVu Sans', 'Liberation Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${headlineFontSize}" font-weight="800" fill="${headlineColor}" text-anchor="middle">
+              ${titleTspans}
+            </text>
+          ` : ""}
           ${subLines.length ? `
-            <text x="540" y="${cardY + 52 + titleLines.length * 42 + 8}" font-family="sans-serif" font-size="20" font-weight="500" fill="${subtitleColor}" text-anchor="middle">
+            <text x="540" y="${subFirstY}" font-family="'DejaVu Sans', 'Liberation Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${subtitleFontSize}" font-weight="500" fill="${subtitleColor}" text-anchor="middle">
               ${subTspans}
             </text>
           ` : ""}
@@ -313,8 +338,8 @@ export async function renderFramedStockVideo(
 
       if (showBrandName && brandName) {
         const fontSize = Math.max(16, Math.min(Math.round(logoSize * 0.22), 30));
-        const estimatedTextW = Math.round(brandName.length * fontSize * 0.62) + 10;
-        const textH = fontSize + 8;
+        const estimatedTextW = Math.round(brandName.length * fontSize * 0.72) + 24;
+        const textH = fontSize + 12;
 
         let totalBadgeW = 0;
         let totalBadgeH = 0;
@@ -323,20 +348,31 @@ export async function renderFramedStockVideo(
         let textX = 0;
         let textY = 0;
 
+        const isRightSide = (logoPosition === "top_right" || logoPosition === "bottom_right");
+
         if (brandLayout === "stack") {
-          totalBadgeW = Math.max(logoW, estimatedTextW) + 20;
-          totalBadgeH = (logoH ? logoH + 8 : 0) + textH + 10;
+          totalBadgeW = Math.max(logoW, estimatedTextW) + 24;
+          totalBadgeH = (logoH ? logoH + 8 : 0) + textH + 12;
           logoX = Math.round((totalBadgeW - logoW) / 2);
-          logoY = 5;
+          logoY = 6;
           textX = Math.round(totalBadgeW / 2);
-          textY = (logoH ? logoH + 8 : 0) + fontSize;
+          textY = (logoH ? logoH + 8 : 0) + Math.round(fontSize * 0.82) + 4;
         } else {
-          totalBadgeW = (logoW ? logoW + 12 : 0) + estimatedTextW + 10;
-          totalBadgeH = Math.max(logoH, textH) + 10;
-          logoX = 5;
-          logoY = Math.round((totalBadgeH - logoH) / 2);
-          textX = (logoW ? logoW + 14 : 0);
-          textY = Math.round((totalBadgeH + fontSize) / 2) - 3;
+          totalBadgeW = (logoW ? logoW + 16 : 0) + estimatedTextW + 16;
+          totalBadgeH = Math.max(logoH, textH) + 12;
+          const centerY = Math.round(totalBadgeH / 2);
+
+          if (isRightSide && logoW > 0) {
+            textX = 8;
+            textY = centerY + Math.round(fontSize * 0.35);
+            logoX = estimatedTextW + 16;
+            logoY = Math.round((totalBadgeH - logoH) / 2);
+          } else {
+            logoX = 8;
+            logoY = Math.round((totalBadgeH - logoH) / 2);
+            textX = (logoW ? logoW + 16 : 8);
+            textY = centerY + Math.round(fontSize * 0.35);
+          }
         }
 
         const compositeList: Array<{ input: Buffer; top: number; left: number }> = [];
@@ -346,7 +382,12 @@ export async function renderFramedStockVideo(
 
         const textSvg = `
           <svg width="${totalBadgeW}" height="${totalBadgeH}" xmlns="http://www.w3.org/2000/svg">
-            <text x="${textX}" y="${textY}" font-family="sans-serif" font-size="${fontSize}" font-weight="800" fill="${brandColor}" ${brandLayout === "stack" ? 'text-anchor="middle"' : 'text-anchor="start"'} filter="drop-shadow(0 2px 6px rgba(0,0,0,0.8))">
+            <defs>
+              <filter id="badge_text_shadow" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.85"/>
+              </filter>
+            </defs>
+            <text x="${textX}" y="${textY}" font-family="'DejaVu Sans', 'Liberation Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${fontSize}" font-weight="800" fill="${brandColor}" ${brandLayout === "stack" ? 'text-anchor="middle"' : 'text-anchor="start"'} filter="url(#badge_text_shadow)">
               ${escapeXml(brandName)}
             </text>
           </svg>

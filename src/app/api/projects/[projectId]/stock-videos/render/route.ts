@@ -15,6 +15,8 @@ export async function POST(
     subtitle?: string;
     headlineColor?: string;
     subtitleColor?: string;
+    headlineFontSize?: number;
+    subtitleFontSize?: number;
     headlineBgColor?: string;
     accentColor?: string;
     logoUrl?: string;
@@ -48,6 +50,8 @@ export async function POST(
       subtitle: body.subtitle,
       headlineColor: body.headlineColor,
       subtitleColor: body.subtitleColor,
+      headlineFontSize: body.headlineFontSize,
+      subtitleFontSize: body.subtitleFontSize,
       headlineBgColor: body.headlineBgColor,
       accentColor: body.accentColor,
       logoUrl: body.logoUrl,

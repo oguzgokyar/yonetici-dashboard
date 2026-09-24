@@ -8,5 +8,6 @@ npm-debug.log*
 .data/
 tmp/
 .seo-cache/
+.hermes/
 **/.obsidian/workspace.json
 **/.obsidian/workspace-mobile.json

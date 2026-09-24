@@ -7,6 +7,8 @@ type StockProjectSettingsRow = {
   frame_style: string;
   headline_color: string;
   subtitle_color: string;
+  headline_font_size?: number;
+  subtitle_font_size?: number;
   headline_bg_color: string;
   logo_position: string;
   logo_size: number;
@@ -67,6 +69,8 @@ export async function GET(
           frameStyle: settingsRow.frame_style,
           headlineColor: settingsRow.headline_color,
           subtitleColor: settingsRow.subtitle_color,
+          headlineFontSize: settingsRow.headline_font_size || 34,
+          subtitleFontSize: settingsRow.subtitle_font_size || 20,
           headlineBgColor: settingsRow.headline_bg_color,
           logoPosition: settingsRow.logo_position,
           logoSize: settingsRow.logo_size,
@@ -107,6 +111,8 @@ export async function POST(
     frameStyle?: string;
     headlineColor?: string;
     subtitleColor?: string;
+    headlineFontSize?: number;
+    subtitleFontSize?: number;
     headlineBgColor?: string;
     logoPosition?: string;
     logoSize?: number;
@@ -125,6 +131,8 @@ export async function POST(
   const frameStyle = body.frameStyle || "blur_padding";
   const headlineColor = body.headlineColor || "#ffffff";
   const subtitleColor = body.subtitleColor || "#cbd5e1";
+  const headlineFontSize = typeof body.headlineFontSize === "number" ? Math.max(18, Math.min(64, Math.round(body.headlineFontSize))) : 34;
+  const subtitleFontSize = typeof body.subtitleFontSize === "number" ? Math.max(12, Math.min(40, Math.round(body.subtitleFontSize))) : 20;
   const headlineBgColor = body.headlineBgColor || "rgba(10, 12, 20, 0.82)";
   const logoPosition = body.logoPosition || "top_right";
   const logoSize = typeof body.logoSize === "number" ? body.logoSize : 130;
@@ -156,14 +164,16 @@ export async function POST(
 
   db.prepare(`
     INSERT INTO stock_project_settings (
-      project_id, frame_style, headline_color, subtitle_color, headline_bg_color,
+      project_id, frame_style, headline_color, subtitle_color, headline_font_size, subtitle_font_size, headline_bg_color,
       logo_position, logo_size, show_brand_name, brand_name_text, brand_name_layout, brand_name_color, selected_overlay_id,
       music_track, original_volume, music_volume, selected_outro_id, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(project_id) DO UPDATE SET
       frame_style = excluded.frame_style,
       headline_color = excluded.headline_color,
       subtitle_color = excluded.subtitle_color,
+      headline_font_size = excluded.headline_font_size,
+      subtitle_font_size = excluded.subtitle_font_size,
       headline_bg_color = excluded.headline_bg_color,
       logo_position = excluded.logo_position,
       logo_size = excluded.logo_size,
@@ -182,6 +192,8 @@ export async function POST(
     frameStyle,
     headlineColor,
     subtitleColor,
+    headlineFontSize,
+    subtitleFontSize,
     headlineBgColor,
     logoPosition,
     logoSize,

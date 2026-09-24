@@ -110,6 +110,8 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
   const [subtitle, setSubtitle] = useState("");
   const [headlineColor, setHeadlineColor] = useState("#ffffff");
   const [subtitleColor, setSubtitleColor] = useState("#cbd5e1");
+  const [headlineFontSize, setHeadlineFontSize] = useState<number>(34);
+  const [subtitleFontSize, setSubtitleFontSize] = useState<number>(20);
   const [headlineBgColor, setHeadlineBgColor] = useState("rgba(10, 12, 20, 0.82)");
   const [logoPosition, setLogoPosition] = useState<
     "top_left" | "top_right" | "bottom_left" | "bottom_right" | "bottom_center" | "none"
@@ -187,6 +189,8 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
           if (s.frameStyle) setFrameStyle(s.frameStyle);
           if (s.headlineColor) setHeadlineColor(s.headlineColor);
           if (s.subtitleColor) setSubtitleColor(s.subtitleColor);
+          if (typeof s.headlineFontSize === "number") setHeadlineFontSize(s.headlineFontSize);
+          if (typeof s.subtitleFontSize === "number") setSubtitleFontSize(s.subtitleFontSize);
           if (s.headlineBgColor) setHeadlineBgColor(s.headlineBgColor);
           if (s.logoPosition) setLogoPosition(s.logoPosition);
           if (typeof s.logoSize === "number") setLogoSize(s.logoSize);
@@ -226,6 +230,8 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
           frameStyle,
           headlineColor,
           subtitleColor,
+          headlineFontSize,
+          subtitleFontSize,
           headlineBgColor,
           logoPosition,
           logoSize,
@@ -423,6 +429,8 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
           subtitle: subtitle.trim(),
           headlineColor,
           subtitleColor,
+          headlineFontSize,
+          subtitleFontSize,
           headlineBgColor,
           accentColor: brandColor,
           logoUrl: brandLogo,
@@ -808,6 +816,8 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                       subtitle,
                       headlineColor,
                       subtitleColor,
+                      headlineFontSize,
+                      subtitleFontSize,
                       headlineBgColor,
                       accentColor: brandColor,
                       logoSrc: brandLogo,
@@ -883,8 +893,52 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                   <input type="text" className="custom-input" placeholder="Kanca başlık" value={headline} onChange={(event) => setHeadline(event.target.value)} />
                   <input type="text" className="custom-input" placeholder="Alt başlık" value={subtitle} onChange={(event) => setSubtitle(event.target.value)} />
                   <div className="stock-color-grid">
-                    <div className="stock-color-item"><small>Başlık</small><input type="color" value={headlineColor.startsWith("#") ? headlineColor : "#ffffff"} onChange={(event) => setHeadlineColor(event.target.value)} /></div>
-                    <div className="stock-color-item"><small>Alt metin</small><input type="color" value={subtitleColor.startsWith("#") ? subtitleColor : "#cbd5e1"} onChange={(event) => setSubtitleColor(event.target.value)} /></div>
+                    <div className="stock-color-item">
+                      <small>Başlık Rengi &amp; Boyutu</small>
+                      <div className="stock-color-picker-row">
+                        <input
+                          type="color"
+                          value={headlineColor.startsWith("#") ? headlineColor : "#ffffff"}
+                          onChange={(event) => setHeadlineColor(event.target.value)}
+                          title="Başlık Rengi"
+                        />
+                        <div className="stock-font-size-control" title="Başlık Font Boyutu (px)">
+                          <input
+                            type="number"
+                            min="18"
+                            max="64"
+                            step="1"
+                            value={headlineFontSize}
+                            onChange={(event) => setHeadlineFontSize(Math.max(18, Math.min(64, Number(event.target.value) || 34)))}
+                            className="stock-font-size-input"
+                          />
+                          <span className="stock-font-size-unit">px</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="stock-color-item">
+                      <small>Alt Metin Rengi &amp; Boyutu</small>
+                      <div className="stock-color-picker-row">
+                        <input
+                          type="color"
+                          value={subtitleColor.startsWith("#") ? subtitleColor : "#cbd5e1"}
+                          onChange={(event) => setSubtitleColor(event.target.value)}
+                          title="Alt Metin Rengi"
+                        />
+                        <div className="stock-font-size-control" title="Alt Başlık Font Boyutu (px)">
+                          <input
+                            type="number"
+                            min="12"
+                            max="40"
+                            step="1"
+                            value={subtitleFontSize}
+                            onChange={(event) => setSubtitleFontSize(Math.max(12, Math.min(40, Number(event.target.value) || 20)))}
+                            className="stock-font-size-input"
+                          />
+                          <span className="stock-font-size-unit">px</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   <div className="stock-color-presets wide">
                     {[
