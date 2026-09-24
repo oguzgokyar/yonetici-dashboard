@@ -24,6 +24,11 @@ export async function POST(request: Request) {
         concept?: string;
       };
       sourceTopic?: string;
+      stockVideoMeta?: {
+        rawTitle?: string;
+        rawDescription?: string;
+        keywords?: string[];
+      };
     };
 
     if (!input.projectId) {
@@ -46,9 +51,16 @@ export async function POST(request: Request) {
     const styleKey: CopyStyle = input.style || "sales";
     const styleLabel = styleDescriptions[styleKey] || styleDescriptions.sales;
 
-    const topicContext = input.idea?.title
+    let topicContext = input.idea?.title
       ? `Seçilen İçerik Fikri: "${input.idea.title}"\nFikir Konsepti / Açıklaması: "${input.idea.concept || ""}"`
       : `Paylaşımın Ana Konusu: "${input.sourceTopic || "Marka ve ürün tanıtımı"}"`;
+
+    if (input.stockVideoMeta) {
+      topicContext += `\n\nSTOK VİDEO DRIVE META BİLGİLERİ (Aynen kopyalama; Türkçe, akıcı ve ilgi çekici şekilde yeniden yaz):
+Ham Video Başlığı: "${input.stockVideoMeta.rawTitle || ""}"
+Ham Video Açıklaması: "${input.stockVideoMeta.rawDescription || ""}"
+Mevcut Anahtar Kelimeler: ${(input.stockVideoMeta.keywords || []).join(", ")}`;
+    }
 
     const platformFormat =
       postType === "reel"
@@ -72,12 +84,14 @@ ${topicContext}
 
 GÖREV:
 Bu içerik için takipçilerin doğrudan okuyacağı, etkileşime gireceği ve markanın ses tonuyla birebir örtüşen Türkçe sosyal medya paylaşım metnini hazırla.
+Eğer stok video meta bilgileri verilmişse, ham başlık ve açıklamayı birebir kopyalama; onları Türkçe, akıcı, etkileyici ve sosyal medya diline uygun bir başlık ve açıklamaya dönüştür.
+
 KURALLAR:
 1. Asla görsel üretim talimatı (prompt), sahne tarifi, kamera açısı veya İngilizce parametre YAZMA.
 2. İlk satır mutlaka kaydırmayı durduran, merak uyandıran bir kanca (hook) cümlesi olsun.
 3. Metin içinde paragraflar rahat okunsun, emoji kullanımı abartısız ve yerinde olsun.
 4. Metnin sonunda uygun bir eylem çağrısı (CTA) yer alsın.
-5. Hashtag'ler Türkiye'deki hedef kitleye ve sektöre özel 5 ila 7 adet etiket olsun.
+5. Hashtag'ler Türkiye'deki hedef kitleye ve sektöre özel 5 ila 7 adet etiket olsun (Varsa stok video anahtar kelimelerini de uygun şekilde etiket olarak kullanabilirsin).
 6. Yanıtın YALNIZCA geçerli bir JSON nesnesi olmalıdır:
 {
   "title": "İçerik için kısa ve öz başlık (maks 50 karakter)",
@@ -97,12 +111,12 @@ KURALLAR:
       ok: true,
       copy: {
         title: parsed.title || input.idea?.title || input.sourceTopic || "Sosyal Medya Gönderisi",
-        caption: parsed.caption || input.idea?.concept || input.sourceTopic || "",
+        caption: parsed.caption || "",
         hashtags: parsed.hashtags || "",
       },
     });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    return Response.json({ ok: false, message: `Metin üretilemedi: ${msg}` }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Metin üretilemedi.";
+    return Response.json({ ok: false, message }, { status: 500 });
   }
 }

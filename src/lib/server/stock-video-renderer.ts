@@ -24,6 +24,11 @@ export type RenderStockVideoOptions = {
   logoUrl?: string;
   logoPosition?: "top_left" | "top_right" | "bottom_left" | "bottom_right" | "bottom_center" | "none";
   logoSize?: number;
+  showBrandName?: boolean;
+  brandNameText?: string;
+  brandNameLayout?: "row" | "stack";
+  brandNameColor?: string;
+  customOverlayId?: string;
   outroId?: string;
   musicTrack?: string;
   originalVolume?: number;
@@ -52,6 +57,20 @@ export async function renderFramedStockVideo(
 
   const renderId = crypto.randomUUID();
   const outputLocation = path.join(outputDir, `${renderId}.mp4`);
+
+  // Check if custom overlay PNG is requested
+  const overlayRow = options.customOverlayId
+    ? (db
+        .prepare("SELECT * FROM project_frame_overlays WHERE id = ? AND project_id = ?")
+        .get(options.customOverlayId, options.projectId) as {
+        id: string;
+        title: string;
+        local_path: string;
+      } | undefined)
+    : undefined;
+  const customOverlayPath = overlayRow?.local_path && fs.existsSync(/*turbopackIgnore: true*/ overlayRow.local_path)
+    ? overlayRow.local_path
+    : "";
 
   // Check if outro video is requested
   const outroRow = options.outroId
@@ -253,29 +272,102 @@ export async function renderFramedStockVideo(
     await sharp(Buffer.from(svg)).png().toFile(overlaySvgPath);
   }
 
-  // 4. Handle Logo with drop shadow
+  // 4. Handle Logo & Brand Name Badge
   let logoPngPath = "";
   const rawLogo = options.logoUrl || brand.logo;
-  if (rawLogo && logoPosition !== "none") {
+  const showBrandName = options.showBrandName;
+  const brandName = (options.brandNameText || brand.brandName || "").trim();
+  const brandLayout = options.brandNameLayout === "stack" ? "stack" : "row";
+  const brandColor = options.brandNameColor || "#ffffff";
+
+  if (logoPosition !== "none" && (rawLogo || (showBrandName && brandName))) {
     try {
       logoPngPath = path.join(tempDir, `${renderId}_logo.png`);
       let logoBuf: Buffer | null = null;
-      if (rawLogo.startsWith("data:")) {
-        const parts = rawLogo.split(",");
-        logoBuf = Buffer.from(parts[1], "base64");
-      } else if (rawLogo.startsWith("http://") || rawLogo.startsWith("https://")) {
-        const r = await fetch(rawLogo);
-        if (r.ok) logoBuf = Buffer.from(await r.arrayBuffer());
-      } else if (fs.existsSync(rawLogo)) {
-        logoBuf = fs.readFileSync(rawLogo);
+      if (rawLogo) {
+        if (rawLogo.startsWith("data:")) {
+          const parts = rawLogo.split(",");
+          logoBuf = Buffer.from(parts[1], "base64");
+        } else if (rawLogo.startsWith("http://") || rawLogo.startsWith("https://")) {
+          const r = await fetch(rawLogo);
+          if (r.ok) logoBuf = Buffer.from(await r.arrayBuffer());
+        } else if (fs.existsSync(rawLogo)) {
+          logoBuf = fs.readFileSync(rawLogo);
+        }
       }
 
+      const logoMaxH = Math.round(logoSize * 0.75);
+      let logoResizedBuf: Buffer | null = null;
+      let logoW = 0;
+      let logoH = 0;
+
       if (logoBuf) {
-        const logoMaxH = Math.round(logoSize * 0.7);
-        await sharp(logoBuf)
+        const res = await sharp(logoBuf)
           .resize({ width: logoSize, height: logoMaxH, fit: "inside" })
           .png()
+          .toBuffer({ resolveWithObject: true });
+        logoResizedBuf = res.data;
+        logoW = res.info.width;
+        logoH = res.info.height;
+      }
+
+      if (showBrandName && brandName) {
+        const fontSize = Math.max(16, Math.min(Math.round(logoSize * 0.22), 30));
+        const estimatedTextW = Math.round(brandName.length * fontSize * 0.62) + 10;
+        const textH = fontSize + 8;
+
+        let totalBadgeW = 0;
+        let totalBadgeH = 0;
+        let logoX = 0;
+        let logoY = 0;
+        let textX = 0;
+        let textY = 0;
+
+        if (brandLayout === "stack") {
+          totalBadgeW = Math.max(logoW, estimatedTextW) + 20;
+          totalBadgeH = (logoH ? logoH + 8 : 0) + textH + 10;
+          logoX = Math.round((totalBadgeW - logoW) / 2);
+          logoY = 5;
+          textX = Math.round(totalBadgeW / 2);
+          textY = (logoH ? logoH + 8 : 0) + fontSize;
+        } else {
+          totalBadgeW = (logoW ? logoW + 12 : 0) + estimatedTextW + 10;
+          totalBadgeH = Math.max(logoH, textH) + 10;
+          logoX = 5;
+          logoY = Math.round((totalBadgeH - logoH) / 2);
+          textX = (logoW ? logoW + 14 : 0);
+          textY = Math.round((totalBadgeH + fontSize) / 2) - 3;
+        }
+
+        const compositeList: Array<{ input: Buffer; top: number; left: number }> = [];
+        if (logoResizedBuf) {
+          compositeList.push({ input: logoResizedBuf, top: logoY, left: logoX });
+        }
+
+        const textSvg = `
+          <svg width="${totalBadgeW}" height="${totalBadgeH}" xmlns="http://www.w3.org/2000/svg">
+            <text x="${textX}" y="${textY}" font-family="sans-serif" font-size="${fontSize}" font-weight="800" fill="${brandColor}" ${brandLayout === "stack" ? 'text-anchor="middle"' : 'text-anchor="start"'} filter="drop-shadow(0 2px 6px rgba(0,0,0,0.8))">
+              ${escapeXml(brandName)}
+            </text>
+          </svg>
+        `;
+        compositeList.push({ input: Buffer.from(textSvg), top: 0, left: 0 });
+
+        await sharp({
+          create: {
+            width: totalBadgeW,
+            height: totalBadgeH,
+            channels: 4,
+            background: { r: 0, g: 0, b: 0, alpha: 0 },
+          },
+        })
+          .composite(compositeList)
+          .png()
           .toFile(logoPngPath);
+      } else if (logoResizedBuf) {
+        await sharp(logoResizedBuf).png().toFile(logoPngPath);
+      } else {
+        logoPngPath = "";
       }
     } catch {
       logoPngPath = "";
@@ -317,6 +409,12 @@ export async function renderFramedStockVideo(
   if (logoPngPath && fs.existsSync(/*turbopackIgnore: true*/ logoPngPath)) {
     inputs.push("-i", logoPngPath);
     logoInputIdx = filterStreamIdx++;
+  }
+
+  let customOverlayInputIdx = -1;
+  if (customOverlayPath && fs.existsSync(/*turbopackIgnore: true*/ customOverlayPath)) {
+    inputs.push("-i", customOverlayPath);
+    customOverlayInputIdx = filterStreamIdx++;
   }
 
   let musicInputIdx = -1;
@@ -361,6 +459,13 @@ export async function renderFramedStockVideo(
     }
     const nextOut = "v_logo";
     filterParts.push(`[${currentVideoOut}][${logoInputIdx}:v]overlay=${logoX}:${logoY}[${nextOut}]`);
+    currentVideoOut = nextOut;
+  }
+
+  // Overlay custom frame PNG if exists (1080x1920)
+  if (customOverlayInputIdx >= 0) {
+    const nextOut = "v_custom_overlay";
+    filterParts.push(`[${currentVideoOut}][${customOverlayInputIdx}:v]overlay=0:0[${nextOut}]`);
     currentVideoOut = nextOut;
   }
 

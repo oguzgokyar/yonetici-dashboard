@@ -158,6 +158,11 @@ function runMigrations(database: DatabaseSync) {
       headline_bg_color TEXT NOT NULL DEFAULT 'rgba(10, 12, 20, 0.82)',
       logo_position TEXT NOT NULL DEFAULT 'top_right',
       logo_size INTEGER NOT NULL DEFAULT 130,
+      show_brand_name INTEGER NOT NULL DEFAULT 0,
+      brand_name_text TEXT NOT NULL DEFAULT '',
+      brand_name_layout TEXT NOT NULL DEFAULT 'row',
+      brand_name_color TEXT NOT NULL DEFAULT '#ffffff',
+      selected_overlay_id TEXT NOT NULL DEFAULT '',
       music_track TEXT NOT NULL DEFAULT '/audio/ambient_track.mp3',
       original_volume REAL NOT NULL DEFAULT 1.0,
       music_volume REAL NOT NULL DEFAULT 0.4,
@@ -174,6 +179,15 @@ function runMigrations(database: DatabaseSync) {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_project_outros_project ON project_outro_videos(project_id);
+    CREATE TABLE IF NOT EXISTS project_frame_overlays (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      image_url TEXT NOT NULL,
+      local_path TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_overlays_project ON project_frame_overlays(project_id);
   `);
 }
 
@@ -297,6 +311,30 @@ export function getDatabase() {
   if (driveAccountColumns.length && !driveAccountColumns.some((column) => column.name === "token_expires_at")) database.exec("ALTER TABLE drive_accounts ADD COLUMN token_expires_at TEXT");
   if (driveAccountColumns.length && !driveAccountColumns.some((column) => column.name === "last_validated_at")) database.exec("ALTER TABLE drive_accounts ADD COLUMN last_validated_at TEXT");
   if (driveAccountColumns.length && !driveAccountColumns.some((column) => column.name === "last_error")) database.exec("ALTER TABLE drive_accounts ADD COLUMN last_error TEXT");
+
+  // Dynamic migrations for stock_project_settings
+  const settingsColumns = database.prepare("PRAGMA table_info(stock_project_settings)").all() as unknown as { name: string }[];
+  if (settingsColumns.length) {
+    if (!settingsColumns.some((c) => c.name === "show_brand_name")) database.exec("ALTER TABLE stock_project_settings ADD COLUMN show_brand_name INTEGER NOT NULL DEFAULT 0;");
+    if (!settingsColumns.some((c) => c.name === "brand_name_text")) database.exec("ALTER TABLE stock_project_settings ADD COLUMN brand_name_text TEXT NOT NULL DEFAULT '';");
+    if (!settingsColumns.some((c) => c.name === "brand_name_layout")) database.exec("ALTER TABLE stock_project_settings ADD COLUMN brand_name_layout TEXT NOT NULL DEFAULT 'row';");
+    if (!settingsColumns.some((c) => c.name === "brand_name_color")) database.exec("ALTER TABLE stock_project_settings ADD COLUMN brand_name_color TEXT NOT NULL DEFAULT '#ffffff';");
+    if (!settingsColumns.some((c) => c.name === "selected_overlay_id")) database.exec("ALTER TABLE stock_project_settings ADD COLUMN selected_overlay_id TEXT NOT NULL DEFAULT '';");
+  }
+
+  // Ensure project_frame_overlays table exists
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS project_frame_overlays (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      image_url TEXT NOT NULL,
+      local_path TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_overlays_project ON project_frame_overlays(project_id);
+  `);
+
   const globalAccountCount = database
     .prepare("SELECT COUNT(*) AS total FROM drive_accounts")
     .get() as { total: number };

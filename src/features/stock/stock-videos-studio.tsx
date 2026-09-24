@@ -32,8 +32,9 @@ import { useProjects } from "@/features/projects/projects-context";
 import { StockFramedVideo, type StockFrameStyle } from "@/remotion/StockFramedVideo";
 import { DriveSettingsModal } from "./drive-settings-modal";
 import { OutroLibraryModal } from "./outro-library-modal";
+import { OverlayLibraryModal } from "./overlay-library-modal";
 import { StockAccordionSection } from "./stock-accordion-section";
-import type { DriveConfig, OutroItem } from "./types";
+import type { DriveConfig, OutroItem, OverlayItem } from "./types";
 
 type StockVideoItem = {
   id: string;
@@ -123,6 +124,17 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
   const [selectedOutroId, setSelectedOutroId] = useState<string>("");
   const [uploadingOutro, setUploadingOutro] = useState(false);
 
+  // Overlay states
+  const [overlays, setOverlays] = useState<OverlayItem[]>([]);
+  const [selectedOverlayId, setSelectedOverlayId] = useState<string>("");
+  const [uploadingOverlay, setUploadingOverlay] = useState(false);
+
+  // Brand Name states
+  const [showBrandName, setShowBrandName] = useState(false);
+  const [brandNameText, setBrandNameText] = useState("");
+  const [brandNameLayout, setBrandNameLayout] = useState<"row" | "stack">("row");
+  const [brandNameColor, setBrandNameColor] = useState("#ffffff");
+
   // Settings persistence
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsSavedNotice, setSettingsSavedNotice] = useState(false);
@@ -137,6 +149,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
   const [driveModalTab, setDriveModalTab] = useState<"accounts" | "folders">("folders");
   const [driveAccountLabel, setDriveAccountLabel] = useState("Drive hesabı");
   const [outroModalOpen, setOutroModalOpen] = useState(false);
+  const [overlayModalOpen, setOverlayModalOpen] = useState(false);
   const [openCustomizerSection, setOpenCustomizerSection] = useState("frame");
 
   const brandColor = project?.brand.primaryColor || "#6d5dfc";
@@ -168,6 +181,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
       if (settingsRes.ok) {
         const sData = await settingsRes.json();
         if (sData.outros) setOutros(sData.outros);
+        if (sData.overlays) setOverlays(sData.overlays);
         if (sData.settings) {
           const s = sData.settings;
           if (s.frameStyle) setFrameStyle(s.frameStyle);
@@ -176,6 +190,11 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
           if (s.headlineBgColor) setHeadlineBgColor(s.headlineBgColor);
           if (s.logoPosition) setLogoPosition(s.logoPosition);
           if (typeof s.logoSize === "number") setLogoSize(s.logoSize);
+          if (typeof s.showBrandName === "boolean") setShowBrandName(s.showBrandName);
+          if (s.brandNameText) setBrandNameText(s.brandNameText);
+          if (s.brandNameLayout) setBrandNameLayout(s.brandNameLayout);
+          if (s.brandNameColor) setBrandNameColor(s.brandNameColor);
+          if (s.selectedOverlayId) setSelectedOverlayId(s.selectedOverlayId);
           if (s.musicTrack) setMusicTrack(s.musicTrack);
           if (typeof s.originalVolume === "number") setOriginalVolume(s.originalVolume);
           if (typeof s.musicVolume === "number") setMusicVolume(s.musicVolume);
@@ -210,6 +229,11 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
           headlineBgColor,
           logoPosition,
           logoSize,
+          showBrandName,
+          brandNameText,
+          brandNameLayout,
+          brandNameColor,
+          selectedOverlayId,
           musicTrack,
           originalVolume,
           musicVolume,
@@ -251,6 +275,50 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
       setFeedback(err instanceof Error ? err.message : String(err));
     } finally {
       setUploadingOutro(false);
+    }
+  }
+
+  async function handleUploadOverlay(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingOverlay(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("title", file.name.replace(/\.[^/.]+$/, ""));
+
+      const res = await fetch(`/api/projects/${projectId}/stock-videos/overlays`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "Çerçeve yüklenemedi.");
+      }
+      setOverlays((prev) => [data.overlay, ...prev]);
+      setSelectedOverlayId(data.overlay.id);
+      setOverlayModalOpen(true);
+      setFeedback("Özel çerçeve katmanı başarıyla yüklendi ve seçildi.");
+    } catch (err) {
+      setFeedback(err instanceof Error ? err.message : String(err));
+    } finally {
+      setUploadingOverlay(false);
+      if (e.target) e.target.value = "";
+    }
+  }
+
+  async function handleDeleteOverlay(id: string) {
+    try {
+      await fetch(`/api/projects/${projectId}/stock-videos/overlays?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      setOverlays((prev) => prev.filter((o) => o.id !== id));
+      if (selectedOverlayId === id) setSelectedOverlayId("");
+      setFeedback("Özel çerçeve katmanı silindi.");
+    } catch {
+      setFeedback("Çerçeve silinirken bir hata oluştu.");
     }
   }
 
@@ -360,6 +428,11 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
           logoUrl: brandLogo,
           logoPosition,
           logoSize,
+          showBrandName,
+          brandNameText,
+          brandNameLayout,
+          brandNameColor,
+          customOverlayId: selectedOverlayId || undefined,
           outroId: selectedOutroId || undefined,
           musicTrack: musicTrack !== "none" ? musicTrack : undefined,
           originalVolume,
@@ -740,6 +813,11 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                       logoSrc: brandLogo,
                       logoPosition,
                       logoSize,
+                      showBrandName,
+                      brandNameText: brandNameText || project.brand.brandName || project.name,
+                      brandNameLayout,
+                      brandNameColor,
+                      customOverlaySrc: overlays.find((o) => o.id === selectedOverlayId)?.imageUrl,
                       outroSrc: outros.find((o) => o.id === selectedOutroId)?.videoUrl,
                       musicSrc: musicTrack !== "none" ? musicTrack : undefined,
                       originalVolume,
@@ -769,7 +847,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                 <StockAccordionSection
                   id="frame"
                   title="Çerçeve"
-                  summary={frameStyles.find((style) => style.id === frameStyle)?.name || "Düzen seçin"}
+                  summary={overlays.find((o) => o.id === selectedOverlayId)?.title || frameStyles.find((style) => style.id === frameStyle)?.name || "Düzen seçin"}
                   icon={<Layers size={15} />}
                   openSection={openCustomizerSection}
                   onToggle={(id) => setOpenCustomizerSection((current) => current === id ? "" : id)}
@@ -781,6 +859,16 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                         {frameStyle === style.id && <Check size={13} />}
                       </button>
                     ))}
+                  </div>
+
+                  <div className="selected-outro-summary" style={{ marginTop: "10px" }}>
+                    <span>
+                      <strong>{overlays.find((o) => o.id === selectedOverlayId)?.title || "Özel Çerçeve Yok"}</strong>
+                      <small>{selectedOverlayId ? "1080×1920 Şeffaf PNG katmanı aktif" : "Harici PNG çerçeve giydirilmedi"}</small>
+                    </span>
+                    <button type="button" className="button secondary" onClick={() => setOverlayModalOpen(true)}>
+                      Özel Çerçeve Seç / Yönet
+                    </button>
                   </div>
                 </StockAccordionSection>
 
@@ -810,8 +898,8 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
 
                 <StockAccordionSection
                   id="logo"
-                  title="Logo"
-                  summary={logoPosition === "none" ? "Gizli" : `${logoPosition === "top_right" ? "Sağ üst" : logoPosition === "top_left" ? "Sol üst" : "Alt merkez"} · ${logoSize}px`}
+                  title="Logo & Marka Adı"
+                  summary={logoPosition === "none" ? "Gizli" : `${logoPosition === "top_right" ? "Sağ üst" : logoPosition === "top_left" ? "Sol üst" : "Alt merkez"} · ${logoSize}px${showBrandName ? " · Marka Metni" : ""}`}
                   icon={<Sparkles size={15} />}
                   openSection={openCustomizerSection}
                   onToggle={(id) => setOpenCustomizerSection((current) => current === id ? "" : id)}
@@ -821,7 +909,72 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                       <button type="button" key={position.id} className={logoPosition === position.id ? "active" : ""} onClick={() => setLogoPosition(position.id as typeof logoPosition)}>{position.label}</button>
                     ))}
                   </div>
-                  {logoPosition !== "none" && <div className="slider-item"><small>Logo genişliği: {logoSize}px</small><input type="range" min="60" max="240" step="5" value={logoSize} onChange={(event) => setLogoSize(Number(event.target.value))} /></div>}
+                  {logoPosition !== "none" && (
+                    <>
+                      <div className="slider-item">
+                        <small>Logo boyutu: {logoSize}px</small>
+                        <input type="range" min="60" max="240" step="5" value={logoSize} onChange={(event) => setLogoSize(Number(event.target.value))} />
+                      </div>
+
+                      <div style={{ marginTop: "10px", padding: "10px", background: "rgba(255,255,255,0.03)", borderRadius: "8px", border: "1px solid var(--border)" }}>
+                        <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontWeight: 600, fontSize: "12px", marginBottom: "8px" }}>
+                          <input
+                            type="checkbox"
+                            checked={showBrandName}
+                            onChange={(e) => setShowBrandName(e.target.checked)}
+                          />
+                          <span>Logonun Yanında Marka Adını Göster</span>
+                        </label>
+
+                        {showBrandName && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "8px" }}>
+                            <div>
+                              <small style={{ display: "block", marginBottom: "4px", color: "var(--muted)", fontSize: "11px" }}>Marka Adı Metni:</small>
+                              <input
+                                type="text"
+                                className="custom-input"
+                                value={brandNameText}
+                                placeholder={project?.brand.brandName || project?.name || "Marka Adı"}
+                                onChange={(e) => setBrandNameText(e.target.value)}
+                              />
+                            </div>
+
+                            <div style={{ display: "flex", gap: "10px", alignItems: "center", justifyContent: "space-between" }}>
+                              <div>
+                                <small style={{ display: "block", marginBottom: "4px", color: "var(--muted)", fontSize: "11px" }}>Yerleşim:</small>
+                                <div className="segmented-grid" style={{ minWidth: "160px" }}>
+                                  <button
+                                    type="button"
+                                    className={brandNameLayout === "row" ? "active" : ""}
+                                    onClick={() => setBrandNameLayout("row")}
+                                  >
+                                    Yan Yana
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={brandNameLayout === "stack" ? "active" : ""}
+                                    onClick={() => setBrandNameLayout("stack")}
+                                  >
+                                    Alt Alta
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div>
+                                <small style={{ display: "block", marginBottom: "4px", color: "var(--muted)", fontSize: "11px" }}>Metin Rengi:</small>
+                                <input
+                                  type="color"
+                                  value={brandNameColor}
+                                  onChange={(e) => setBrandNameColor(e.target.value)}
+                                  style={{ height: "30px", width: "42px", padding: 0, border: "none", borderRadius: "4px", cursor: "pointer" }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </StockAccordionSection>
 
                 <StockAccordionSection
@@ -957,6 +1110,18 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
           onUpload={handleUploadOutro}
           onDelete={(id) => void handleDeleteOutro(id)}
           onClose={() => setOutroModalOpen(false)}
+        />
+      )}
+
+      {overlayModalOpen && (
+        <OverlayLibraryModal
+          overlays={overlays}
+          selectedOverlayId={selectedOverlayId}
+          uploading={uploadingOverlay}
+          onSelect={setSelectedOverlayId}
+          onUpload={handleUploadOverlay}
+          onDelete={(id) => void handleDeleteOverlay(id)}
+          onClose={() => setOverlayModalOpen(false)}
         />
       )}
     </div>

@@ -65,6 +65,7 @@ type RecentAsset = {
     concept?: string;
   };
   sourceTopic?: string;
+  metadata?: Record<string, unknown>;
   createdAt?: string;
 };
 
@@ -140,6 +141,30 @@ export function PublishingStudio({
     if (asset.type === "video") setPostType("reel");
     setCopyFeedback(null);
 
+    // If stock video has rich metadata from Drive .json
+    if (asset.metadata && Object.keys(asset.metadata).length > 0) {
+      const meta = asset.metadata;
+      const rawTitle = (meta.title || meta.name || meta.başlık || asset.sourceTopic || "") as string;
+      const rawDesc = (meta.description || meta.desc || meta.açıklama || "") as string;
+      const rawKeywords = (meta.keywords || meta.tags || meta.anahtar_kelimeler || []) as string[];
+
+      // Set tags directly if available
+      if (Array.isArray(rawKeywords) && rawKeywords.length > 0) {
+        const tagStr = rawKeywords
+          .map((k) => (k.startsWith("#") ? k : `#${k.replace(/\s+/g, "")}`))
+          .join(" ");
+        setHashtags(tagStr);
+      }
+
+      // Populate draft title and caption
+      setTitle(rawTitle.slice(0, 50));
+      setCaption(rawDesc || rawTitle);
+
+      // Trigger AI copy revision automatically to polish Turkish text without altering hashtags
+      void generateAiCopy(asset);
+      return;
+    }
+
     // If an idea was chosen during generation, use it
     if (asset.idea?.title || asset.idea?.concept) {
       setTitle(asset.idea.title || "");
@@ -157,11 +182,17 @@ export function PublishingStudio({
     }
   }
 
-  async function generateAiCopy() {
+  async function generateAiCopy(overrideAsset?: RecentAsset | React.MouseEvent) {
+    const targetAsset = (overrideAsset && "category" in overrideAsset) ? overrideAsset : selectedMedia;
     setGeneratingCopy(true);
     setCopyFeedback(null);
     setError(null);
     try {
+      const meta = targetAsset?.metadata;
+      const rawTitle = meta ? ((meta.title || meta.name || meta.başlık || targetAsset?.sourceTopic || "") as string) : undefined;
+      const rawDesc = meta ? ((meta.description || meta.desc || meta.açıklama || "") as string) : undefined;
+      const rawKeywords = meta ? ((meta.keywords || meta.tags || meta.anahtar_kelimeler || []) as string[]) : undefined;
+
       const response = await fetch("/api/ai/posts/generate-copy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -169,8 +200,15 @@ export function PublishingStudio({
           projectId,
           postType,
           style: aiStyle,
-          idea: selectedMedia?.idea,
-          sourceTopic: selectedMedia?.sourceTopic || caption || title,
+          idea: targetAsset?.idea,
+          sourceTopic: targetAsset?.sourceTopic || caption || title,
+          stockVideoMeta: (rawTitle || rawDesc || rawKeywords)
+            ? {
+                rawTitle,
+                rawDescription: rawDesc,
+                keywords: Array.isArray(rawKeywords) ? rawKeywords : [],
+              }
+            : undefined,
         }),
       });
 
@@ -182,7 +220,7 @@ export function PublishingStudio({
       if (result.copy.title) setTitle(result.copy.title);
       if (result.copy.caption) setCaption(result.copy.caption);
       if (result.copy.hashtags) setHashtags(result.copy.hashtags);
-      setCopyFeedback("Sosyal medya metni ve etiketler AI ile başarıyla üretildi.");
+      setCopyFeedback("Sosyal medya metni ve etiketler AI ile Türkçe sosyal medya diline göre revize edildi.");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -259,6 +297,7 @@ export function PublishingStudio({
             name: string;
             thumbnailUrl?: string;
             streamUrl: string;
+            metadata?: Record<string, unknown>;
             createdAt?: string;
           }) => {
             items.push({
@@ -269,6 +308,7 @@ export function PublishingStudio({
               thumbnailUrl: s.thumbnailUrl,
               prompt: `Stok Video: ${s.name}`,
               sourceTopic: s.name.replace(/\.[^/.]+$/, ""),
+              metadata: s.metadata,
               createdAt: s.createdAt,
             });
           }

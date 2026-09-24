@@ -10,6 +10,11 @@ type StockProjectSettingsRow = {
   headline_bg_color: string;
   logo_position: string;
   logo_size: number;
+  show_brand_name?: number;
+  brand_name_text?: string;
+  brand_name_layout?: string;
+  brand_name_color?: string;
+  selected_overlay_id?: string;
   music_track: string;
   original_volume: number;
   music_volume: number;
@@ -24,6 +29,15 @@ type OutroRow = {
   video_url: string;
   local_path: string;
   duration_seconds: number;
+  created_at: string;
+};
+
+type OverlayRow = {
+  id: string;
+  project_id: string;
+  title: string;
+  image_url: string;
+  local_path: string;
   created_at: string;
 };
 
@@ -42,6 +56,10 @@ export async function GET(
     .prepare("SELECT * FROM project_outro_videos WHERE project_id = ? ORDER BY created_at DESC")
     .all(projectId) as unknown as OutroRow[];
 
+  const overlaysRows = db
+    .prepare("SELECT * FROM project_frame_overlays WHERE project_id = ? ORDER BY created_at DESC")
+    .all(projectId) as unknown as OverlayRow[];
+
   return Response.json({
     ok: true,
     settings: settingsRow
@@ -52,6 +70,11 @@ export async function GET(
           headlineBgColor: settingsRow.headline_bg_color,
           logoPosition: settingsRow.logo_position,
           logoSize: settingsRow.logo_size,
+          showBrandName: Boolean(settingsRow.show_brand_name),
+          brandNameText: settingsRow.brand_name_text || "",
+          brandNameLayout: settingsRow.brand_name_layout || "row",
+          brandNameColor: settingsRow.brand_name_color || "#ffffff",
+          selectedOverlayId: settingsRow.selected_overlay_id || "",
           musicTrack: settingsRow.music_track,
           originalVolume: settingsRow.original_volume,
           musicVolume: settingsRow.music_volume,
@@ -63,6 +86,12 @@ export async function GET(
       title: o.title,
       videoUrl: o.video_url,
       durationSeconds: o.duration_seconds,
+      createdAt: o.created_at,
+    })),
+    overlays: overlaysRows.map((o) => ({
+      id: o.id,
+      title: o.title,
+      imageUrl: o.image_url,
       createdAt: o.created_at,
     })),
   });
@@ -81,6 +110,11 @@ export async function POST(
     headlineBgColor?: string;
     logoPosition?: string;
     logoSize?: number;
+    showBrandName?: boolean;
+    brandNameText?: string;
+    brandNameLayout?: string;
+    brandNameColor?: string;
+    selectedOverlayId?: string;
     musicTrack?: string;
     originalVolume?: number;
     musicVolume?: number;
@@ -94,10 +128,16 @@ export async function POST(
   const headlineBgColor = body.headlineBgColor || "rgba(10, 12, 20, 0.82)";
   const logoPosition = body.logoPosition || "top_right";
   const logoSize = typeof body.logoSize === "number" ? body.logoSize : 130;
+  const showBrandName = body.showBrandName ? 1 : 0;
+  const brandNameText = (body.brandNameText || "").trim();
+  const brandNameLayout = body.brandNameLayout === "stack" ? "stack" : "row";
+  const brandNameColor = body.brandNameColor || "#ffffff";
+  const selectedOverlayId = (body.selectedOverlayId || "").trim();
   const musicTrack = body.musicTrack || "/audio/ambient_track.mp3";
   const originalVolume = typeof body.originalVolume === "number" ? body.originalVolume : 1.0;
   const musicVolume = typeof body.musicVolume === "number" ? body.musicVolume : 0.4;
   const selectedOutroId = body.selectedOutroId || "";
+
   if (selectedOutroId) {
     const outro = db.prepare("SELECT id FROM project_outro_videos WHERE id = ? AND project_id = ?")
       .get(selectedOutroId, projectId);
@@ -106,11 +146,20 @@ export async function POST(
     }
   }
 
+  if (selectedOverlayId) {
+    const overlay = db.prepare("SELECT id FROM project_frame_overlays WHERE id = ? AND project_id = ?")
+      .get(selectedOverlayId, projectId);
+    if (!overlay) {
+      return Response.json({ ok: false, message: "Seçilen çerçeve katmanı bu projeye ait değil." }, { status: 400 });
+    }
+  }
+
   db.prepare(`
     INSERT INTO stock_project_settings (
       project_id, frame_style, headline_color, subtitle_color, headline_bg_color,
-      logo_position, logo_size, music_track, original_volume, music_volume, selected_outro_id, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      logo_position, logo_size, show_brand_name, brand_name_text, brand_name_layout, brand_name_color, selected_overlay_id,
+      music_track, original_volume, music_volume, selected_outro_id, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(project_id) DO UPDATE SET
       frame_style = excluded.frame_style,
       headline_color = excluded.headline_color,
@@ -118,6 +167,11 @@ export async function POST(
       headline_bg_color = excluded.headline_bg_color,
       logo_position = excluded.logo_position,
       logo_size = excluded.logo_size,
+      show_brand_name = excluded.show_brand_name,
+      brand_name_text = excluded.brand_name_text,
+      brand_name_layout = excluded.brand_name_layout,
+      brand_name_color = excluded.brand_name_color,
+      selected_overlay_id = excluded.selected_overlay_id,
       music_track = excluded.music_track,
       original_volume = excluded.original_volume,
       music_volume = excluded.music_volume,
@@ -131,6 +185,11 @@ export async function POST(
     headlineBgColor,
     logoPosition,
     logoSize,
+    showBrandName,
+    brandNameText,
+    brandNameLayout,
+    brandNameColor,
+    selectedOverlayId,
     musicTrack,
     originalVolume,
     musicVolume,
@@ -140,6 +199,6 @@ export async function POST(
 
   return Response.json({
     ok: true,
-    message: "Stok video ayarları bu firma için varsayılan olarak kaydedildi.",
+    message: "Stok video ve marka ayarları bu firma için varsayılan olarak kaydedildi.",
   });
 }

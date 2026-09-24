@@ -34,3 +34,10 @@ export type OutroItem = {
   durationSeconds?: number;
   createdAt?: string;
 };
+
+export type OverlayItem = {
+  id: string;
+  title: string;
+  imageUrl: string;
+  createdAt?: string;
+};

@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { getDatabase } from "@/lib/server/database";
 import { getAllFolderIdsUnderRoot, listDriveFolders, listDriveVideos } from "@/lib/server/google-drive";
+import { chunkFolderIds } from "@/lib/stock-drive-architecture";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -84,20 +85,28 @@ export async function GET(
           syncStatus: config.sync_status,
         }
       : null,
-    videos: rows.map((r) => ({
-      id: r.id,
-      driveFileId: r.drive_file_id,
-      name: r.name,
-      sizeBytes: r.size_bytes,
-      mimeType: r.mime_type,
-      thumbnailUrl: r.thumbnail_url || undefined,
-      durationSeconds: r.duration_seconds || 0,
-      width: r.width || 0,
-      height: r.height || 0,
-      hasCache: Boolean(r.local_path),
-      streamUrl: `/api/projects/${projectId}/stock-videos/${r.id}`,
-      createdAt: r.created_at,
-    })),
+    videos: rows.map((r) => {
+      let parsedMeta: Record<string, unknown> = {};
+      try {
+        parsedMeta = JSON.parse(r.metadata_json || "{}");
+      } catch {}
+
+      return {
+        id: r.id,
+        driveFileId: r.drive_file_id,
+        name: r.name,
+        sizeBytes: r.size_bytes,
+        mimeType: r.mime_type,
+        thumbnailUrl: r.thumbnail_url || undefined,
+        durationSeconds: r.duration_seconds || 0,
+        width: r.width || 0,
+        height: r.height || 0,
+        hasCache: Boolean(r.local_path),
+        streamUrl: `/api/projects/${projectId}/stock-videos/${r.id}`,
+        metadata: parsedMeta,
+        createdAt: r.created_at,
+      };
+    }),
   });
 }
 
@@ -217,8 +226,54 @@ export async function POST(
           updated_at = excluded.updated_at
       `);
 
+      // Also discover matching .json metadata files in the same folders
+      const jsonFileMap = new Map<string, string>(); // baseName -> jsonFileId
+      try {
+        const { getValidAccessToken } = await import("@/lib/server/google-drive");
+        const accessToken = await getValidAccessToken(projectId);
+        const foldersToScan = targetFolderIds || [];
+        const folderBatches = foldersToScan.length ? chunkFolderIds(foldersToScan, 20) : [[]];
+        for (const fb of folderBatches) {
+          let q = "mimeType = 'application/json' and trashed = false";
+          if (fb.length === 1) q += ` and '${fb[0]}' in parents`;
+          else if (fb.length > 1) q += ` and (${fb.map((id: string) => `'${id}' in parents`).join(" or ")})`;
+          const jRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&pageSize=100&fields=files(id,name)`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (jRes.ok) {
+            const jData = (await jRes.json()) as { files?: Array<{ id: string; name: string }> };
+            (jData.files || []).forEach((jf) => {
+              const base = jf.name.replace(/\.[^/.]+$/, "").trim().toLowerCase();
+              jsonFileMap.set(base, jf.id);
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("[GoogleDrive] Metadata .json tespiti sırasında hata:", err);
+      }
+
       for (const file of files) {
         const id = crypto.randomUUID();
+        const baseName = file.name.replace(/\.[^/.]+$/, "").trim().toLowerCase();
+        let metaObj: Record<string, unknown> = { parents: file.parents || [] };
+
+        // Check if there is an existing matching json file
+        const matchingJsonId = jsonFileMap.get(baseName);
+        if (matchingJsonId) {
+          metaObj.metaJsonFileId = matchingJsonId;
+          try {
+            const { getValidAccessToken } = await import("@/lib/server/google-drive");
+            const accessToken = await getValidAccessToken(projectId);
+            const contentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${matchingJsonId}?alt=media`, {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            });
+            if (contentRes.ok) {
+              const parsed = await contentRes.json();
+              metaObj = { ...metaObj, ...parsed };
+            }
+          } catch {}
+        }
+
         const res = insertStmt.run(
           id,
           projectId,
@@ -230,7 +285,7 @@ export async function POST(
           file.durationSeconds || 0,
           file.width || 0,
           file.height || 0,
-          JSON.stringify({ parents: file.parents || [] }),
+          JSON.stringify(metaObj),
           now,
           now
         );

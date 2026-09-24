@@ -4,8 +4,8 @@ import { AbsoluteFill, Audio, Img, Sequence, spring, useCurrentFrame, useVideoCo
 export type StockFrameStyle = "blur_padding" | "modern_card" | "split_screen" | "minimal_glow";
 
 export type StockFramedVideoProps = {
-  videoSrc: string;
-  frameStyle: StockFrameStyle;
+  videoSrc?: string;
+  frameStyle?: StockFrameStyle;
   headline?: string;
   subtitle?: string;
   headlineColor?: string;
@@ -15,6 +15,11 @@ export type StockFramedVideoProps = {
   logoSrc?: string;
   logoPosition?: "top_left" | "top_right" | "bottom_left" | "bottom_right" | "bottom_center" | "none";
   logoSize?: number;
+  showBrandName?: boolean;
+  brandNameText?: string;
+  brandNameLayout?: "row" | "stack";
+  brandNameColor?: string;
+  customOverlaySrc?: string;
   outroSrc?: string;
   musicSrc?: string;
   originalVolume?: number;
@@ -32,6 +37,10 @@ export const defaultStockFramedProps: StockFramedVideoProps = {
   accentColor: "#6d5dfc",
   logoPosition: "top_right",
   logoSize: 130,
+  showBrandName: false,
+  brandNameText: "",
+  brandNameLayout: "row",
+  brandNameColor: "#ffffff",
   originalVolume: 1,
   musicVolume: 0.5,
 };
@@ -48,6 +57,11 @@ export function StockFramedVideo({
   logoSrc,
   logoPosition = "top_right",
   logoSize = 130,
+  showBrandName = false,
+  brandNameText = "",
+  brandNameLayout = "row",
+  brandNameColor = "#ffffff",
+  customOverlaySrc,
   outroSrc,
   musicSrc,
   originalVolume = 1,
@@ -66,7 +80,7 @@ export function StockFramedVideo({
     config: { damping: 15, stiffness: 120 },
   });
 
-  // Entrance for logo
+  // Entrance for logo & brand
   const logoSpring = spring({
     frame: frame - 6,
     fps,
@@ -75,30 +89,50 @@ export function StockFramedVideo({
 
   const titleText = (headline || "").trim();
   const subText = (subtitle || "").trim();
+  const brandText = (brandNameText || "").trim();
 
-  // Logo position styles
-  const getLogoStyle = (): React.CSSProperties => {
+  // Logo position container styles
+  const getLogoContainerStyle = (): React.CSSProperties => {
     const base: React.CSSProperties = {
       position: "absolute",
-      zIndex: 30,
+      zIndex: 35,
       opacity: logoSpring,
       transform: `scale(${0.85 + logoSpring * 0.15})`,
-      maxHeight: Math.round(logoSize * 0.75),
-      maxWidth: logoSize,
-      filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.5))",
+      display: "flex",
+      alignItems: "center",
+      filter: "drop-shadow(0 6px 14px rgba(0,0,0,0.6))",
+      flexDirection: brandNameLayout === "stack" ? "column" : "row",
+      gap: brandNameLayout === "stack" ? 6 : 12,
     };
 
     switch (logoPosition) {
       case "top_left":
         return { ...base, top: 40, left: 40 };
       case "top_right":
-        return { ...base, top: 40, right: 40 };
+        return {
+          ...base,
+          top: 40,
+          right: 40,
+          flexDirection: brandNameLayout === "stack" ? "column" : "row-reverse",
+        };
       case "bottom_left":
         return { ...base, bottom: 50, left: 40 };
       case "bottom_right":
-        return { ...base, bottom: 50, right: 40 };
+        return {
+          ...base,
+          bottom: 50,
+          right: 40,
+          flexDirection: brandNameLayout === "stack" ? "column" : "row-reverse",
+        };
       case "bottom_center":
-        return { ...base, bottom: 50, left: "50%", transform: `translateX(-50%) scale(${0.85 + logoSpring * 0.15})` };
+        return {
+          ...base,
+          bottom: 50,
+          left: "50%",
+          transform: `translateX(-50%) scale(${0.85 + logoSpring * 0.15})`,
+          flexDirection: "column",
+          alignItems: "center",
+        };
       default:
         return { display: "none" };
     }
@@ -214,33 +248,66 @@ export function StockFramedVideo({
           )}
         </AbsoluteFill>
 
-        {/* Branded Logo Overlay */}
-        {logoSrc && logoPosition !== "none" && (
-          <div style={getLogoStyle()}>
-            <Img src={logoSrc} style={{ maxHeight: Math.round(logoSize * 0.7), maxWidth: logoSize, objectFit: "contain" }} />
+        {/* Custom PNG Overlay Frame (If chosen) */}
+        {customOverlaySrc && (
+          <AbsoluteFill style={{ zIndex: 25, pointerEvents: "none" }}>
+            <Img
+              src={customOverlaySrc}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          </AbsoluteFill>
+        )}
+
+        {/* Brand Logo & Brand Name Badge */}
+        {logoPosition !== "none" && (logoSrc || (showBrandName && brandText)) && (
+          <div style={getLogoContainerStyle()}>
+            {logoSrc && (
+              <Img
+                src={logoSrc}
+                style={{
+                  maxWidth: logoSize,
+                  maxHeight: Math.round(logoSize * 0.75),
+                  objectFit: "contain",
+                }}
+              />
+            )}
+            {showBrandName && brandText && (
+              <span
+                style={{
+                  color: brandNameColor,
+                  fontFamily: '"Manrope", "DM Sans", Arial, sans-serif',
+                  fontWeight: 800,
+                  fontSize: Math.max(16, Math.min(Math.round(logoSize * 0.22), 30)),
+                  letterSpacing: "-0.01em",
+                  textShadow: "0 2px 8px rgba(0,0,0,0.8)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {brandText}
+              </span>
+            )}
           </div>
         )}
 
-        {/* Branded Headline & Subtitle Card Overlay */}
+        {/* Headline & Subtitle Banner Card */}
         {(titleText || subText) && (
           <div
             style={{
               position: "absolute",
-              top: frameStyle === "split_screen" ? 70 : 120,
               left: "50%",
-              transform: `translateX(-50%) translateY(${(1 - headlineSpring) * -40}px)`,
+              top: frameStyle === "split_screen" ? 70 : 120,
+              transform: `translateX(-50%) translateY(${(1 - headlineSpring) * -30}px) scale(${0.9 + headlineSpring * 0.1})`,
               opacity: headlineSpring,
-              width: "84%",
-              maxWidth: 900,
-              zIndex: 25,
-              padding: "20px 28px",
+              zIndex: 20,
+              width: "86%",
+              maxWidth: 920,
+              backgroundColor: headlineBgColor,
               borderRadius: 22,
-              background: headlineBgColor,
-              backdropFilter: "blur(16px)",
-              WebkitBackdropFilter: "blur(16px)",
+              padding: "18px 28px",
+              boxShadow: "0 18px 50px rgba(0,0,0,0.65), 0 0 20px rgba(0,0,0,0.3)",
               border: `1.5px solid ${accentColor}66`,
-              boxShadow: `0 18px 45px rgba(0,0,0,0.55), 0 0 20px ${accentColor}22`,
               textAlign: "center",
+              backdropFilter: "blur(12px)",
             }}
           >
             {titleText && (
