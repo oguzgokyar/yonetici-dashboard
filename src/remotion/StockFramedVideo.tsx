@@ -281,7 +281,7 @@ export function StockFramedVideo({
               <span
                 style={{
                   color: brandNameColor,
-                  fontFamily: '"Manrope", "DM Sans", Arial, sans-serif',
+                  fontFamily: '"DejaVu Sans", Arial, sans-serif',
                   fontWeight: 800,
                   fontSize: Math.max(16, Math.min(Math.round(logoSize * 0.22), 30)),
                   letterSpacing: "-0.01em",
@@ -321,7 +321,7 @@ export function StockFramedVideo({
                 style={{
                   margin: 0,
                   color: headlineColor,
-                  fontFamily: '"Manrope", "DM Sans", Arial, sans-serif',
+                  fontFamily: '"DejaVu Sans", Arial, sans-serif',
                   fontSize: headlineFontSize || 34,
                   fontWeight: 800,
                   lineHeight: 1.2,
@@ -337,7 +337,7 @@ export function StockFramedVideo({
                 style={{
                   margin: "8px 0 0",
                   color: subtitleColor,
-                  fontFamily: '"DM Sans", Arial, sans-serif',
+                  fontFamily: '"DejaVu Sans", Arial, sans-serif',
                   fontSize: subtitleFontSize || 20,
                   fontWeight: 500,
                   lineHeight: 1.3,

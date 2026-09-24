@@ -296,12 +296,12 @@ export async function renderFramedStockVideo(
         <g filter="url(#text_card_shadow)">
           <rect x="${cardX}" y="${cardY}" width="${cardW}" height="${cardH}" rx="22" fill="${headlineBgColor}" stroke="${accentColor}" stroke-width="2" stroke-opacity="0.5" />
           ${titleLines.length ? `
-            <text x="540" y="${titleFirstY}" font-family="'DejaVu Sans', 'Liberation Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${headlineFontSize}" font-weight="800" fill="${headlineColor}" text-anchor="middle">
+            <text x="540" y="${titleFirstY}" font-family="DejaVu Sans" font-size="${headlineFontSize}" font-weight="bold" fill="${headlineColor}" text-anchor="middle">
               ${titleTspans}
             </text>
           ` : ""}
           ${subLines.length ? `
-            <text x="540" y="${subFirstY}" font-family="'DejaVu Sans', 'Liberation Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${subtitleFontSize}" font-weight="500" fill="${subtitleColor}" text-anchor="middle">
+            <text x="540" y="${subFirstY}" font-family="DejaVu Sans" font-size="${subtitleFontSize}" font-weight="normal" fill="${subtitleColor}" text-anchor="middle">
               ${subTspans}
             </text>
           ` : ""}
@@ -309,7 +309,7 @@ export async function renderFramedStockVideo(
       </svg>
     `;
 
-    await sharp(Buffer.from(svg)).png().toFile(overlaySvgPath);
+    await sharp(Buffer.from(svg), { density: 144 }).png().toFile(overlaySvgPath);
   }
 
   // 4. Handle Logo & Brand Name Badge
@@ -402,7 +402,7 @@ export async function renderFramedStockVideo(
                 <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.85"/>
               </filter>
             </defs>
-            <text x="${textX}" y="${textY}" font-family="'DejaVu Sans', 'Liberation Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${fontSize}" font-weight="800" fill="${brandColor}" ${brandLayout === "stack" ? 'text-anchor="middle"' : 'text-anchor="start"'} filter="url(#badge_text_shadow)">
+            <text x="${textX}" y="${textY}" font-family="DejaVu Sans" font-size="${fontSize}" font-weight="bold" fill="${brandColor}" ${brandLayout === "stack" ? 'text-anchor="middle"' : 'text-anchor="start"'} filter="url(#badge_text_shadow)">
               ${escapeXml(brandName)}
             </text>
           </svg>
