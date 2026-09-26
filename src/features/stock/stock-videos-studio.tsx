@@ -48,6 +48,7 @@ type StockVideoItem = {
   height: number;
   hasCache: boolean;
   streamUrl: string;
+  metadata?: Record<string, unknown>;
   createdAt: string;
 };
 
@@ -57,6 +58,7 @@ type RenderedItem = {
   url: string;
   title?: string;
   durationSeconds?: number;
+  metadata?: Record<string, unknown>;
   createdAt: string;
 };
 
@@ -445,7 +447,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
           musicTrack: musicTrack !== "none" ? musicTrack : undefined,
           originalVolume,
           musicVolume: musicTrack !== "none" ? musicVolume : 0,
-          maxDurationSeconds: Math.min(selectedVideo.durationSeconds || 25, 30),
+          maxDurationSeconds: selectedVideo.durationSeconds && selectedVideo.durationSeconds > 0 ? selectedVideo.durationSeconds : undefined,
         }),
       });
 
@@ -834,7 +836,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                       musicVolume: musicTrack !== "none" ? musicVolume : 0,
                     }}
                     durationInFrames={
-                      Math.min((selectedVideo.durationSeconds || 15) * 30, 450) +
+                      Math.max(150, Math.min((selectedVideo.durationSeconds || 30) * 30, 5400)) +
                       (selectedOutroId ? 90 : 0)
                     }
                     compositionWidth={1080}

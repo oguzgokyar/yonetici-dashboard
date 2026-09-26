@@ -66,7 +66,7 @@ export async function POST(
       musicTrack: body.musicTrack,
       originalVolume: body.originalVolume,
       musicVolume: body.musicVolume,
-      maxDurationSeconds: body.maxDurationSeconds || 30,
+      maxDurationSeconds: typeof body.maxDurationSeconds === "number" && body.maxDurationSeconds > 0 ? body.maxDurationSeconds : undefined,
     });
 
     return Response.json({ ok: true, video: result });

@@ -44,6 +44,7 @@ export type RenderedStockVideoResult = {
   title: string;
   durationSeconds: number;
   frameStyle: FrameStyle;
+  metadata?: Record<string, unknown>;
   createdAt: string;
 };
 
@@ -109,17 +110,39 @@ export async function renderFramedStockVideo(
   // Ensure local video is cached
   const { localPath } = await ensureCachedVideo(stockRow.drive_file_id, options.projectId);
 
-  // Probe if source video contains an audio stream
+  // Probe if source video contains an audio stream and check real video duration
   let hasSourceAudio = false;
+  let sourceDurationSeconds = typeof stockRow.duration_seconds === "number" && stockRow.duration_seconds > 0
+    ? stockRow.duration_seconds
+    : 0;
+
   try {
     const probeRes = await execFileAsync("/usr/bin/ffprobe", [
       "-v", "error",
-      "-select_streams", "a",
-      "-show_entries", "stream=codec_type",
+      "-show_entries", "stream=codec_type:format=duration",
       "-of", "default=noprint_wrappers=1:nokey=1",
       localPath,
     ]);
-    hasSourceAudio = probeRes.stdout.trim().toLowerCase().includes("audio");
+    const probeOutput = probeRes.stdout.trim().toLowerCase();
+    hasSourceAudio = probeOutput.includes("audio");
+
+    // Extract duration from probe output lines
+    const lines = probeRes.stdout.trim().split("\n");
+    for (const line of lines) {
+      const parsed = parseFloat(line.trim());
+      if (!isNaN(parsed) && parsed > 0) {
+        sourceDurationSeconds = Math.round(parsed);
+        break;
+      }
+    }
+
+    if (sourceDurationSeconds > 0 && (!stockRow.duration_seconds || stockRow.duration_seconds <= 0)) {
+      try {
+        db.prepare("UPDATE stock_videos SET duration_seconds = ? WHERE id = ?").run(sourceDurationSeconds, stockRow.id);
+      } catch {
+        // ignore db update error
+      }
+    }
   } catch {
     hasSourceAudio = false;
   }
@@ -547,13 +570,20 @@ export async function renderFramedStockVideo(
     }
   } else if (hasSourceAudio && originalVol > 0) {
     audioMapArgs.push("-map", "0:a");
-  } else if (hasOutro) {
+  }
+
+  const effectiveDuration = (typeof options.maxDurationSeconds === "number" && options.maxDurationSeconds > 0)
+    ? options.maxDurationSeconds
+    : (sourceDurationSeconds > 0 ? sourceDurationSeconds : 0);
+
+  if (hasOutro) {
     const silentAudioIdx = filterStreamIdx++;
-    inputs.push("-f", "lavfi", "-t", String(options.maxDurationSeconds || 30), "-i", "anullsrc=r=44100:cl=stereo");
+    inputs.push("-f", "lavfi", "-t", String(effectiveDuration > 0 ? effectiveDuration : 300), "-i", "anullsrc=r=44100:cl=stereo");
     audioMapArgs.push("-map", `${silentAudioIdx}:a`);
   }
 
-  const durationLimit = options.maxDurationSeconds || 30;
+  const durationArgs = effectiveDuration > 0 ? ["-t", String(effectiveDuration)] : [];
+  const durationLimit = effectiveDuration > 0 ? effectiveDuration : (sourceDurationSeconds || 30);
 
   const ffmpegArgs: string[] = [
     "-y",
@@ -563,8 +593,7 @@ export async function renderFramedStockVideo(
     "-map",
     `[${currentVideoOut}]`,
     ...audioMapArgs,
-    "-t",
-    String(durationLimit),
+    ...durationArgs,
     "-c:v",
     "libx264",
     "-preset",
@@ -680,6 +709,13 @@ export async function renderFramedStockVideo(
     }
 
     const finalUrl = `/api/videos/${renderId}`;
+    const resultMetadata = {
+      ...sourceMetadata,
+      headline: titleText,
+      subtitle: subText,
+      sourceStockVideoId: stockRow.id,
+    };
+
     db.prepare(`
       UPDATE generation_jobs
       SET status = 'complete', response_json = ?, completed_at = ?
@@ -690,6 +726,7 @@ export async function renderFramedStockVideo(
         title: videoTitle,
         durationSeconds: durationLimit,
         frameStyle,
+        metadata: resultMetadata,
       }),
       new Date().toISOString(),
       renderId
@@ -701,6 +738,7 @@ export async function renderFramedStockVideo(
       title: videoTitle,
       durationSeconds: durationLimit,
       frameStyle,
+      metadata: resultMetadata,
       createdAt: new Date().toISOString(),
     };
   } catch (err) {

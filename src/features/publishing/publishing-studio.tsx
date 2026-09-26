@@ -27,6 +27,7 @@ import {
   extractStockPublishingMetadata,
   mergeHashtagText,
 } from "@/lib/stock-publishing-metadata";
+import { useProjects } from "@/features/projects/projects-context";
 
 type ConnectedAccount = {
   id: string;
@@ -80,6 +81,8 @@ export function PublishingStudio({
   projectId: string;
   initialAssetId?: string;
 }) {
+  const { getProject } = useProjects();
+  const currentProject = getProject(projectId);
   const [posts, setPosts] = useState<PostRecord[]>([]);
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -145,19 +148,33 @@ export function PublishingStudio({
     if (asset.type === "video") setPostType("reel");
     setCopyFeedback(null);
 
-    // If stock video has rich metadata from Drive .json
-    if (asset.metadata && Object.keys(asset.metadata).length > 0) {
-      const meta = asset.metadata;
-      const extracted = extractStockPublishingMetadata(meta);
-      const rawTitle = extracted.title || asset.sourceTopic || "";
-      const rawDesc = extracted.description;
-      if (extracted.hashtags) setHashtags(extracted.hashtags);
+    const isStockOrStockRender = asset.category === "stock" || asset.category === "stock_render";
+    const brandName = currentProject?.brand.brandName || currentProject?.name;
 
-      // Populate draft title and caption
-      setTitle(rawTitle.slice(0, 50));
-      setCaption(rawDesc || rawTitle);
+    const fallbackTitle = asset.idea?.title || asset.sourceTopic || (asset.prompt ? asset.prompt.split("\n")[0].trim() : "");
+    const fallbackDesc = asset.idea?.concept || asset.sourceTopic || fallbackTitle;
 
-      // Trigger AI copy revision automatically to polish Turkish text without altering hashtags
+    // Extract publishing metadata (including hashtags from metadata, embedded text, or derived fallback)
+    const extracted = extractStockPublishingMetadata(asset.metadata, {
+      title: fallbackTitle,
+      topic: fallbackDesc,
+      brandName,
+    });
+
+    const rawTitle = extracted.title || fallbackTitle;
+    const rawDesc = extracted.description || fallbackDesc;
+
+    // Populate draft title and caption immediately
+    setTitle(rawTitle.slice(0, 50));
+    setCaption(rawDesc || rawTitle);
+
+    // Populate hashtags immediately so they appear as soon as the modal opens
+    if (extracted.hashtags) {
+      setHashtags(extracted.hashtags);
+    }
+
+    // Trigger AI copy revision automatically for stock videos or when metadata is available
+    if (isStockOrStockRender || (asset.metadata && Object.keys(asset.metadata).length > 0)) {
       void generateAiCopy(asset);
       return;
     }
@@ -186,9 +203,18 @@ export function PublishingStudio({
     setError(null);
     try {
       const meta = targetAsset?.metadata;
-      const extracted = extractStockPublishingMetadata(meta);
-      const rawTitle = extracted.title || targetAsset?.sourceTopic;
-      const rawDesc = extracted.description || undefined;
+      const brandName = currentProject?.brand.brandName || currentProject?.name;
+      const fallbackTitle = targetAsset?.idea?.title || targetAsset?.sourceTopic || title;
+      const fallbackDesc = targetAsset?.idea?.concept || targetAsset?.sourceTopic || caption || title;
+
+      const extracted = extractStockPublishingMetadata(meta, {
+        title: fallbackTitle,
+        topic: fallbackDesc,
+        brandName,
+      });
+
+      const rawTitle = extracted.title || fallbackTitle;
+      const rawDesc = extracted.description || fallbackDesc;
       const rawKeywords = extracted.hashtags ? extracted.hashtags.split(/\s+/) : [];
 
       const response = await fetch("/api/ai/posts/generate-copy", {
@@ -199,8 +225,8 @@ export function PublishingStudio({
           postType,
           style: aiStyle,
           idea: targetAsset?.idea,
-          sourceTopic: targetAsset?.sourceTopic || caption || title,
-          stockVideoMeta: (rawTitle || rawDesc || rawKeywords)
+          sourceTopic: rawTitle || rawDesc || caption || title,
+          stockVideoMeta: (rawTitle || rawDesc || rawKeywords.length > 0)
             ? {
                 rawTitle,
                 rawDescription: rawDesc,
@@ -215,10 +241,10 @@ export function PublishingStudio({
         throw new Error(result.message || "Metin üretilemedi.");
       }
 
-      if (result.copy.title) setTitle(result.copy.title);
+      if (result.copy.title) setTitle(result.copy.title.slice(0, 50));
       if (result.copy.caption) setCaption(result.copy.caption);
       if (result.copy.hashtags) {
-        setHashtags((current) => mergeHashtagText(current, result.copy.hashtags));
+        setHashtags((current) => mergeHashtagText(current || extracted.hashtags, result.copy.hashtags));
       }
       setCopyFeedback("Sosyal medya metni ve etiketler AI ile Türkçe sosyal medya diline göre revize edildi.");
     } catch (err) {

@@ -74,7 +74,7 @@ export async function GET(request: Request) {
       motionStyle,
       idea,
       sourceTopic,
-      metadata,
+      metadata: responseState.metadata || metadata,
       createdAt: row.completed_at || row.created_at,
     };
   });

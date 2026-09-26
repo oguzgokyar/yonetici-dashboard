@@ -36,3 +36,26 @@ test("supports rendered stock metadata fields", () => {
   assert.equal(result.description, "Çocuklar için teknoloji");
   assert.equal(result.hashtags, "#stem #kodlama");
 });
+
+test("extracts hashtags embedded in description and headline text", () => {
+  const result = extractStockPublishingMetadata({
+    title: "Yeni Proje #arduino",
+    description: "Robotik kodlama dersleri #maker #stem",
+  });
+
+  assert.equal(result.hashtags, "#maker #stem #arduino");
+});
+
+test("derives fallback hashtags when metadata has no tags", () => {
+  const result = extractStockPublishingMetadata(
+    {
+      title: "Öğren, Tasarla, Üret",
+      description: "Çocuklar için robotik kodlama ve 3B tasarım",
+    },
+    { brandName: "Atölye Hanem" }
+  );
+
+  assert.ok(result.hashtags.includes("#AtölyeHanem"));
+  assert.ok(result.hashtags.includes("#robotik"));
+  assert.ok(result.hashtags.includes("#kodlama"));
+});
