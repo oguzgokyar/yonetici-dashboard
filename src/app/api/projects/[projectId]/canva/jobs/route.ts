@@ -272,3 +272,69 @@ export async function POST(request: Request, context: Context) {
     return Response.json({ ok: false, message: errMsg, jobId }, { status: 502 });
   }
 }
+
+export async function DELETE(request: Request, context: Context) {
+  if (!isCanvaStudioEnabled()) {
+    return Response.json({ ok: false, message: "Canva Studio devre dışı." }, { status: 404 });
+  }
+
+  const { projectId } = await context.params;
+  const database = getDatabase();
+
+  const project = database.prepare("SELECT id FROM projects WHERE id=?").get(projectId);
+  if (!project) {
+    return Response.json({ ok: false, message: "Proje bulunamadı." }, { status: 404 });
+  }
+
+  const body = (await request.json().catch(() => ({}))) as { jobId?: string };
+  const jobId = body.jobId?.trim();
+
+  if (jobId) {
+    const job = database
+      .prepare("SELECT id, status, type FROM generation_jobs WHERE id=? AND project_id=?")
+      .get(jobId, projectId) as { id: string; status: string; type: string } | undefined;
+
+    if (!job) {
+      return Response.json({ ok: false, message: "İş bulunamadı." }, { status: 404 });
+    }
+
+    if (["complete", "failed"].includes(job.status)) {
+      return Response.json({ ok: true, message: "İş zaten tamamlanmış veya sonlanmış." });
+    }
+
+    const cancelProgress = JSON.stringify({
+      phase: "failed",
+      percent: 0,
+      detail: "Kullanıcı tarafından iptal edildi.",
+      updatedAt: new Date().toISOString(),
+    });
+
+    database
+      .prepare(
+        "UPDATE generation_jobs SET status='failed', error='Kullanıcı tarafından iptal edildi.', progress_json=?, completed_at=? WHERE id=?"
+      )
+      .run(cancelProgress, new Date().toISOString(), jobId);
+
+    return Response.json({ ok: true, message: "İşlem iptal edildi.", jobId });
+  }
+
+  // If no jobId specified, cancel any active canva jobs for this project
+  const cancelProgress = JSON.stringify({
+    phase: "failed",
+    percent: 0,
+    detail: "Kullanıcı tarafından iptal edildi.",
+    updatedAt: new Date().toISOString(),
+  });
+
+  const result = database
+    .prepare(
+      "UPDATE generation_jobs SET status='failed', error='Kullanıcı tarafından iptal edildi.', progress_json=?, completed_at=? WHERE project_id=? AND type='canva' AND status IN ('queued', 'dispatching', 'running', 'exporting', 'uploading')"
+    )
+    .run(cancelProgress, new Date().toISOString(), projectId);
+
+  return Response.json({
+    ok: true,
+    message: `${result.changes} aktif işlem iptal edildi.`,
+    cancelledCount: result.changes,
+  });
+}

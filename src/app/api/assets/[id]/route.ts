@@ -11,9 +11,10 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
   try {
     const url = new URL(request.url);
-    const isThumb = url.searchParams.get("thumb") === "1" || url.searchParams.has("w");
+    const isThumb = url.searchParams.get("thumb") === "1";
+    const isPreview = url.searchParams.get("preview") === "1" || url.searchParams.has("w");
 
-    // 1. Thumbnail Request (Lightweight ~8KB WebP Cached on Disk)
+    // 1. Thumbnail Request (Lightweight ~8-15KB WebP Cached on Disk)
     if (isThumb) {
       const thumbPath = path.join(assetDir, `${id}_thumb.webp`);
       if (fs.existsSync(thumbPath)) {
@@ -47,7 +48,39 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       });
     }
 
-    // 2. Full-Resolution Original Asset
+    // 2. High-Quality Lightweight Gallery Preview Request (~70-100KB WebP Cached on Disk)
+    if (isPreview) {
+      const previewPath = path.join(assetDir, `${id}_preview.webp`);
+      if (fs.existsSync(previewPath)) {
+        const bytes = fs.readFileSync(previewPath);
+        return new Response(bytes, {
+          headers: {
+            "Content-Type": "image/webp",
+            "Cache-Control": "public, max-age=31536000, immutable",
+          },
+        });
+      }
+
+      const metadata = JSON.parse(fs.readFileSync(path.join(assetDir, `${id}.json`), "utf8")) as {
+        extension: string;
+      };
+      const origBytes = fs.readFileSync(path.join(assetDir, `${id}.${metadata.extension}`));
+      const previewBytes = await sharp(origBytes)
+        .resize(720, null, { withoutEnlargement: true })
+        .webp({ quality: 85 })
+        .toBuffer();
+
+      fs.writeFile(previewPath, previewBytes, () => {});
+
+      return new Response(previewBytes, {
+        headers: {
+          "Content-Type": "image/webp",
+          "Cache-Control": "public, max-age=31536000, immutable",
+        },
+      });
+    }
+
+    // 3. Full-Resolution Original Asset (Exact PNG/JPEG preserved for publishing & download)
     const metadata = JSON.parse(fs.readFileSync(path.join(assetDir, `${id}.json`), "utf8")) as {
       mimeType: string;
       extension: string;

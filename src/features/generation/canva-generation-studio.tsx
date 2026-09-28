@@ -19,6 +19,7 @@ import {
   X,
   AlertCircle,
   FileImage,
+  StopCircle,
 } from "lucide-react";
 import type { CanvaContentType } from "@/lib/server/hermes-canva-task";
 import type { Project } from "@/features/projects/projects-context";
@@ -100,6 +101,7 @@ export function CanvaGenerationStudio({
   const [packages, setPackages] = useState<CanvaPackage[]>([]);
   const [loadingPackages, setLoadingPackages] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
 
   // Gallery / Lightbox state for Carousel packages
   const [activePackage, setActivePackage] = useState<CanvaPackage | null>(null);
@@ -244,9 +246,52 @@ export function CanvaGenerationStudio({
       }
       setMessage("Paket başarıyla silindi.");
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Silme işlemi başarısız.");
+      setMessage(err instanceof Error ? err.message : "Paket silinemedi.");
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  async function handleCancelJob(jobId: string) {
+    if (!window.confirm("Devam eden Canva tasarım üretimini durdurup iptal etmek istediğinize emin misiniz?")) {
+      return;
+    }
+    setCancellingJobId(jobId);
+    setMessage("");
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/canva/jobs`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        message?: string;
+      };
+      if (!res.ok || !data.ok) {
+        throw new Error(data.message || "İşlem iptal edilemedi.");
+      }
+      setJobs((curr) =>
+        curr.map((j) =>
+          j.id === jobId
+            ? {
+                ...j,
+                status: "failed",
+                progress: {
+                  ...j.progress,
+                  phase: "failed",
+                  detail: "Kullanıcı tarafından iptal edildi.",
+                },
+              }
+            : j
+        )
+      );
+      setProducing(false);
+      setMessage("Tasarım üretimi başarıyla durduruldu ve iptal edildi.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "İşlem iptal edilemedi.");
+    } finally {
+      setCancellingJobId(null);
     }
   }
 
@@ -444,7 +489,12 @@ export function CanvaGenerationStudio({
 
         {/* Aktif Üretim Stepper */}
         {isProducing && activeJob && (
-          <CanvaProductionStepper job={activeJob} requestedSlides={slideCount} />
+          <CanvaProductionStepper
+            job={activeJob}
+            requestedSlides={slideCount}
+            cancelling={cancellingJobId === activeJob.id}
+            onCancel={() => void handleCancelJob(activeJob.id)}
+          />
         )}
 
         {/* Paket Listesi */}
@@ -504,9 +554,13 @@ export function CanvaGenerationStudio({
 function CanvaProductionStepper({
   job,
   requestedSlides,
+  cancelling,
+  onCancel,
 }: {
   job: CanvaJob;
   requestedSlides: number;
+  cancelling?: boolean;
+  onCancel?: () => void;
 }) {
   const phase = job.progress.phase || job.status || "queued";
   const percent = job.progress.percent ?? 15;
@@ -542,7 +596,33 @@ function CanvaProductionStepper({
         <span className="production-scan" />
       </div>
       <div className="production-copy">
-        <span>CANVA ÜRETİMİ DEVAM EDİYOR</span>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span>CANVA ÜRETİMİ DEVAM EDİYOR</span>
+          {onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={cancelling}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "5px",
+                padding: "3px 8px",
+                fontSize: "11px",
+                fontWeight: 600,
+                color: "#dc2626",
+                background: "#fef2f2",
+                border: "1px solid #fecaca",
+                borderRadius: "6px",
+                cursor: "pointer",
+              }}
+              title="İşlemi durdur ve iptal et"
+            >
+              {cancelling ? <LoaderCircle className="spin" size={12} /> : <StopCircle size={12} />}
+              {cancelling ? "İptal Ediliyor..." : "İşlemi Durdur"}
+            </button>
+          )}
+        </div>
         <h3>{detail}</h3>
         <p>
           Sayfadan ayrılsanız da üretim arka planda devam eder. Tasarım tamamlandığında ve
@@ -894,7 +974,7 @@ function CanvaGalleryModal({
       >
         {currentItem ? (
           <Image
-            src={currentItem.url}
+            src={currentItem.url ? `${currentItem.url}?preview=1` : ""}
             alt={`Slide ${currentIndex + 1}`}
             fill
             sizes="600px"
@@ -986,7 +1066,7 @@ function CanvaGalleryModal({
                 }}
               >
                 <Image
-                  src={it.url}
+                  src={it.url ? `${it.url}?thumb=1` : ""}
                   alt={`Thumb ${idx + 1}`}
                   fill
                   sizes="56px"

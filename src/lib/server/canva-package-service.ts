@@ -163,6 +163,30 @@ export async function saveSinglePackageAsset(params: {
     })
   );
 
+  // Pre-generate lightweight preview (~70KB) and thumbnail (~15KB) asynchronously for instant UI load
+  void (async () => {
+    try {
+      const previewPath = path.join(params.assetsDir, `${assetId}_preview.webp`);
+      const thumbPath = path.join(params.assetsDir, `${assetId}_thumb.webp`);
+
+      const [previewBytes, thumbBytes] = await Promise.all([
+        sharp(pngBuffer)
+          .resize(720, null, { withoutEnlargement: true })
+          .webp({ quality: 85 })
+          .toBuffer(),
+        sharp(pngBuffer)
+          .resize(360, null, { withoutEnlargement: true })
+          .webp({ quality: 80 })
+          .toBuffer(),
+      ]);
+
+      fs.writeFile(previewPath, previewBytes, () => {});
+      fs.writeFile(thumbPath, thumbBytes, () => {});
+    } catch {
+      // ignore background optimization errors; on-demand route will generate if missing
+    }
+  })();
+
   return {
     assetId,
     position,
