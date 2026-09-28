@@ -4,9 +4,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Download, History, ImageIcon, Info, Lightbulb, LoaderCircle,
+  ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Download, History, ImageIcon, Info, Layers, Lightbulb, LoaderCircle,
   Maximize2, Pencil, Plus, RefreshCw, Send, Settings2, Sparkles, Trash2, WandSparkles, X,
 } from "lucide-react";
+import { CanvaGenerationStudio } from "./canva-generation-studio";
 import { useProjects } from "@/features/projects/projects-context";
 
 type BrandKey = "logo" | "brandName" | "phone" | "email" | "address" | "website";
@@ -50,6 +51,8 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
   const [ideasLoading, setIdeasLoading] = useState(false);
   const [enhancing, setEnhancing] = useState(false);
   const [activeIdea, setActiveIdea] = useState<ContentIdea | null>(null);
+  const [activeTab, setActiveTab] = useState<"ai" | "canva">("ai");
+  const [canvaAvailable, setCanvaAvailable] = useState<boolean>(false);
 
   const available = useMemo(() => project?.brand, [project]);
   const currentIds = useMemo(() => new Set(results.map((item) => item.id)), [results]);
@@ -58,6 +61,28 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
   const lightboxIndex = lightboxId ? viewable.findIndex((item) => item.id === lightboxId) : -1;
   const activeJob = runningJobs[0];
   const isProducing = generating || runningJobs.length > 0;
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const requestedStudio = urlParams.get("studio");
+    fetch(`/api/projects/${encodeURIComponent(projectId)}/canva/jobs`, { cache: "no-store" })
+      .then((res) => {
+        if (res.status !== 404) {
+          setCanvaAvailable(true);
+          if (requestedStudio === "canva") {
+            setActiveTab("canva");
+          }
+        }
+      })
+      .catch(() => undefined);
+  }, [projectId]);
+
+  function handleTabChange(tab: "ai" | "canva") {
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set("studio", tab);
+    window.history.replaceState({}, "", url.toString());
+  }
 
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true);
@@ -196,7 +221,49 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div className="generation-studio">
+    <div style={{ display: "grid", gap: "16px" }}>
+      {canvaAvailable && (
+        <div
+          role="tablist"
+          style={{
+            display: "inline-flex",
+            gap: "6px",
+            background: "white",
+            padding: "5px",
+            borderRadius: "12px",
+            border: "1px solid var(--border)",
+            width: "fit-content",
+          }}
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "ai"}
+            onClick={() => handleTabChange("ai")}
+            className={`button ${activeTab === "ai" ? "primary" : "secondary"}`}
+            style={{ height: "34px", fontSize: "12px", padding: "0 14px", border: "none" }}
+          >
+            <Sparkles size={14} />
+            AI Görsel
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "canva"}
+            onClick={() => handleTabChange("canva")}
+            className={`button ${activeTab === "canva" ? "primary" : "secondary"}`}
+            style={{ height: "34px", fontSize: "12px", padding: "0 14px", border: "none" }}
+          >
+            <Layers size={14} />
+            Canva Stüdyosu
+          </button>
+        </div>
+      )}
+
+      {activeTab === "canva" && canvaAvailable ? (
+        <CanvaGenerationStudio projectId={projectId} project={project} />
+      ) : (
+        <div className="generation-studio">
       <section className="generation-controls">
         <div className="generation-control-header"><div><span>HIZLI MOD</span><h2>Yeni görsel üret</h2></div><WandSparkles size={21} /></div>
 
@@ -269,6 +336,8 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
         <div className="idea-list">{ideasLoading ? <div className="ideas-loading"><LoaderCircle className="spin" size={22} /><strong>Birbirinden farklı fikirler hazırlanıyor</strong><span>Daha önce önerilen ve kullanılan konseptler tekrar edilmiyor.</span></div> : ideas.filter((idea) => idea.status === ideasView).length ? ideas.filter((idea) => idea.status === ideasView).map((idea) => <article className="idea-card" key={idea.id}><div><span><Clock3 size={12} />{new Date(idea.createdAt).toLocaleDateString("tr-TR")}</span><h3>{idea.title}</h3><p>{idea.concept}</p><small>{idea.visualDirection}</small></div><button type="button" onClick={() => applyIdea(idea)}>{idea.status === "used" ? "Tekrar kullan" : "Bu fikri kullan"}<ArrowRight size={14} /></button></article>) : <div className="ideas-empty"><Lightbulb size={26} /><strong>{ideasView === "used" ? "Henüz kullanılan fikir yok" : "Henüz öneri oluşturulmadı"}</strong><span>{ideasView === "used" ? "Seçtiğiniz fikirler burada saklanır." : "Prompt alanına ürün veya içerik bilgisini yazıp yeni öneriler alın."}</span></div>}</div>
         <div className="idea-modal-footer"><button type="button" className="button secondary" onClick={suggestIdeas} disabled={ideasLoading}>{ideasLoading ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}Yeni 7 fikir üret</button></div>
       </section></div>}
+        </div>
+      )}
     </div>
   );
 }

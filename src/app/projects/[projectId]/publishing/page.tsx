@@ -5,9 +5,9 @@ export default async function Page({
   searchParams,
 }: {
   params: Promise<{ projectId: string }>;
-  searchParams?: Promise<{ assetId?: string }>;
+  searchParams?: Promise<{ assetId?: string; packageId?: string }>;
 }) {
   const { projectId } = await params;
   const sp = searchParams ? await searchParams : {};
-  return <PublishingStudio projectId={projectId} initialAssetId={sp.assetId} />;
+  return <PublishingStudio projectId={projectId} initialAssetId={sp.packageId || sp.assetId} />;
 }

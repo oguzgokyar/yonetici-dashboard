@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { getDatabase } from "@/lib/server/database";
+import { resolvePackageItemsForPublishing } from "@/lib/server/canva-package-service";
 import {
   createPostizPost,
   deletePostizPost,
@@ -22,6 +23,7 @@ export async function GET(_request: Request, context: Context) {
         id, project_id, title, content_type, media_url, local_path,
         caption, hashtags, status, schedule_type, scheduled_at,
         integration_id, post_type, postiz_post_id, postiz_media_id,
+        media_package_id, media_json,
         release_url, error_message, created_at, updated_at
       FROM content_posts
       WHERE project_id = ?
@@ -46,6 +48,8 @@ export async function GET(_request: Request, context: Context) {
       postType: r.post_type,
       postizPostId: r.postiz_post_id,
       postizMediaId: r.postiz_media_id,
+      mediaPackageId: r.media_package_id,
+      mediaJson: r.media_json,
       releaseUrl: r.release_url,
       errorMessage: r.error_message,
       createdAt: r.created_at,
@@ -61,6 +65,7 @@ export async function POST(request: Request, context: Context) {
     contentType?: "image" | "video";
     mediaUrl?: string;
     assetId?: string;
+    mediaPackageId?: string;
     caption?: string;
     hashtags?: string;
     scheduleType?: "now" | "schedule" | "draft";
@@ -78,6 +83,171 @@ export async function POST(request: Request, context: Context) {
 
   if (!integrationId) {
     return Response.json({ ok: false, message: "Hedef sosyal medya hesabı seçilmedi." }, { status: 400 });
+  }
+
+  // --- Canva / Multi-Media Package Publishing Branch ---
+  const mediaPackageId = body.mediaPackageId?.trim();
+  if (mediaPackageId) {
+    const dataDir = path.join(process.cwd(), ".data");
+    const assetDir = path.join(dataDir, "assets");
+    let packageItems;
+    try {
+      packageItems = resolvePackageItemsForPublishing({
+        database: getDatabase(),
+        packageId: mediaPackageId,
+        projectId,
+        assetsDir: assetDir,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Medya paketi çözümlenemedi.";
+      return Response.json({ ok: false, message: msg }, { status: 400 });
+    }
+
+    if (packageItems.length > 1 && postType !== "post") {
+      return Response.json(
+        { ok: false, message: "Carousel paketleri yalnızca Instagram gönderisi olarak paylaşılabilir." },
+        { status: 400 },
+      );
+    }
+
+    const postId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const database = getDatabase();
+
+    // Sequentially upload each item to Postiz
+    const postizMediaList: Array<{ id: string; path: string }> = [];
+    try {
+      for (const item of packageItems) {
+        const uploaded = await uploadMediaToPostiz(item.buffer, item.filename, item.mimeType);
+        postizMediaList.push({ id: uploaded.id, path: uploaded.path });
+      }
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      database
+        .prepare(`
+          INSERT INTO content_posts (
+            id, project_id, title, content_type, media_url, caption, hashtags,
+            status, schedule_type, scheduled_at, integration_id, post_type,
+            media_package_id, error_message, created_at, updated_at
+          ) VALUES (?, ?, ?, 'image', '', ?, ?, 'failed', ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .run(
+          postId,
+          projectId,
+          body.title || "Canva Paketi",
+          caption,
+          hashtags,
+          scheduleType,
+          body.scheduledAt || null,
+          integrationId,
+          postType,
+          mediaPackageId,
+          `Postiz Medya Yükleme Hatası: ${errMsg}`,
+          now,
+          now
+        );
+      return Response.json(
+        { ok: false, message: `Paket medyalarını Postiz'e yükleme başarısız: ${errMsg}` },
+        { status: 500 }
+      );
+    }
+
+    let fullCaption = caption;
+    if (hashtags) {
+      const formattedTags = hashtags
+        .split(/[\s,]+/)
+        .map((t) => (t.startsWith("#") ? t : `#${t}`))
+        .join(" ");
+      fullCaption = `${caption}\n\n${formattedTags}`.trim();
+    }
+
+    try {
+      const postizResult = await createPostizPost({
+        type: scheduleType,
+        date: body.scheduledAt,
+        integrationId,
+        caption: fullCaption,
+        media: postizMediaList,
+        postType,
+      });
+
+      const createdPostId = postizResult[0]?.postId || "";
+      const finalStatus = scheduleType === "draft" ? "draft" : scheduleType === "now" ? "published" : "scheduled";
+
+      database
+        .prepare(`
+          INSERT INTO content_posts (
+            id, project_id, title, content_type, media_url, caption, hashtags,
+            status, schedule_type, scheduled_at, integration_id, post_type,
+            postiz_post_id, postiz_media_id, media_package_id, media_json, created_at, updated_at
+          ) VALUES (?, ?, ?, 'image', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .run(
+          postId,
+          projectId,
+          body.title || "Canva Paketi",
+          postizMediaList[0]?.path || "",
+          caption,
+          hashtags,
+          finalStatus,
+          scheduleType,
+          body.scheduledAt || null,
+          integrationId,
+          postType,
+          createdPostId,
+          postizMediaList[0]?.id || "",
+          mediaPackageId,
+          JSON.stringify(postizMediaList),
+          now,
+          now
+        );
+
+      return Response.json({
+        ok: true,
+        message:
+          scheduleType === "now"
+            ? "Gönderi Postiz üzerinden derhal yayın kuyruğuna alındı!"
+            : scheduleType === "schedule"
+            ? "Gönderi başarıyla zamanlandı!"
+            : "Gönderi taslak olarak Postiz'e kaydedildi.",
+        post: {
+          id: postId,
+          postizPostId: createdPostId,
+          status: finalStatus,
+          mediaPath: postizMediaList[0]?.path || "",
+        },
+      });
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      database
+        .prepare(`
+          INSERT INTO content_posts (
+            id, project_id, title, content_type, media_url, caption, hashtags,
+            status, schedule_type, scheduled_at, integration_id, post_type,
+            postiz_media_id, media_package_id, media_json, error_message, created_at, updated_at
+          ) VALUES (?, ?, ?, 'image', ?, ?, ?, 'failed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .run(
+          postId,
+          projectId,
+          body.title || "Canva Paketi",
+          postizMediaList[0]?.path || "",
+          caption,
+          hashtags,
+          scheduleType,
+          body.scheduledAt || null,
+          integrationId,
+          postType,
+          postizMediaList[0]?.id || null,
+          mediaPackageId,
+          JSON.stringify(postizMediaList),
+          `Postiz Gönderi Hatası: ${errMsg}`,
+          now,
+          now
+        );
+
+      return Response.json({ ok: false, message: `Gönderi oluşturulamadı: ${errMsg}` }, { status: 500 });
+    }
   }
 
   // 1. Resolve Media Buffer
@@ -294,8 +464,8 @@ export async function POST(request: Request, context: Context) {
         INSERT INTO content_posts (
           id, project_id, title, content_type, media_url, caption, hashtags,
           status, schedule_type, scheduled_at, integration_id, post_type,
-          postiz_post_id, postiz_media_id, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          postiz_post_id, postiz_media_id, media_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .run(
         postId,
@@ -312,6 +482,7 @@ export async function POST(request: Request, context: Context) {
         postType,
         createdPostId,
         postizMedia.id,
+        JSON.stringify(postizMedia ? [{ id: postizMedia.id, path: postizMedia.path }] : []),
         now,
         now
       );

@@ -60,8 +60,11 @@ type PostRecord = {
 type RecentAsset = {
   id: string;
   type: "image" | "video";
-  category: "image" | "video" | "stock" | "stock_render";
+  category: "image" | "video" | "stock" | "stock_render" | "canva_package";
   url: string;
+  packageId?: string;
+  packageType?: "single" | "carousel";
+  itemCount?: number;
   thumbnailUrl?: string;
   prompt?: string;
   idea?: {
@@ -109,7 +112,7 @@ export function PublishingStudio({
   // Recent generated assets
   const [recentAssets, setRecentAssets] = useState<RecentAsset[]>([]);
   const [loadingAssets, setLoadingAssets] = useState(false);
-  const [modalMediaTab, setModalMediaTab] = useState<"image" | "video" | "stock" | "stock_render">("image");
+  const [modalMediaTab, setModalMediaTab] = useState<"image" | "canva_package" | "video" | "stock" | "stock_render">("image");
 
   // Status
   const [submitting, setSubmitting] = useState(false);
@@ -145,7 +148,8 @@ export function PublishingStudio({
 
   function applyAssetSelection(asset: RecentAsset) {
     setSelectedMedia(asset);
-    if (asset.type === "video") setPostType("reel");
+    if (asset.category === "canva_package" && asset.packageType === "carousel") setPostType("post");
+    else if (asset.type === "video") setPostType("reel");
     setCopyFeedback(null);
 
     const isStockOrStockRender = asset.category === "stock" || asset.category === "stock_render";
@@ -257,10 +261,11 @@ export function PublishingStudio({
   async function loadRecentAssets(targetId?: string) {
     setLoadingAssets(true);
     try {
-      const [imgRes, vidRes, stockRes] = await Promise.all([
+      const [imgRes, vidRes, stockRes, canvaRes] = await Promise.all([
         fetch(`/api/ai/images?projectId=${projectId}`).catch(() => null),
         fetch(`/api/videos?projectId=${projectId}`).catch(() => null),
         fetch(`/api/projects/${projectId}/stock-videos`).catch(() => null),
+        fetch(`/api/projects/${projectId}/canva/packages`).catch(() => null),
       ]);
 
       const items: RecentAsset[] = [];
@@ -342,6 +347,33 @@ export function PublishingStudio({
           }
         );
       }
+      if (canvaRes && canvaRes.ok) {
+        const canvaData = await canvaRes.json();
+        (canvaData.packages || []).forEach(
+          (p: {
+            id: string;
+            title?: string;
+            packageType: "single" | "carousel";
+            coverUrl: string;
+            itemCount: number;
+            createdAt?: string;
+          }) => {
+            items.push({
+              id: p.id,
+              type: "image",
+              category: "canva_package",
+              url: p.coverUrl,
+              thumbnailUrl: p.coverUrl,
+              prompt: p.title || (p.packageType === "carousel" ? `Canva Carousel (${p.itemCount} sayfa)` : "Canva Tasarımı"),
+              sourceTopic: p.title,
+              packageId: p.id,
+              packageType: p.packageType,
+              itemCount: p.itemCount,
+              createdAt: p.createdAt,
+            });
+          }
+        );
+      }
       setRecentAssets(items);
 
       const target = targetId ? items.find((i) => i.id === targetId) : null;
@@ -399,14 +431,16 @@ export function PublishingStudio({
     const formattedDate = scheduleType === "schedule" && scheduledAt ? new Date(scheduledAt).toISOString() : undefined;
 
     try {
+      const isPackage = mediaSourceTab === "recent" && selectedMedia?.category === "canva_package";
       const response = await fetch(`/api/projects/${projectId}/posts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: title || (isVideo ? "Video Paylaşımı" : "Görsel Paylaşımı"),
+          title: title || (isPackage ? selectedMedia?.prompt : isVideo ? "Video Paylaşımı" : "Görsel Paylaşımı"),
           contentType: isVideo ? "video" : "image",
           mediaUrl,
-          assetId: mediaSourceTab === "recent" ? selectedMedia?.id : undefined,
+          assetId: mediaSourceTab === "recent" && !isPackage ? selectedMedia?.id : undefined,
+          mediaPackageId: isPackage ? selectedMedia?.packageId : undefined,
           caption,
           hashtags,
           scheduleType,
@@ -804,6 +838,13 @@ export function PublishingStudio({
                       </button>
                       <button
                         type="button"
+                        className={modalMediaTab === "canva_package" ? "active" : ""}
+                        onClick={() => setModalMediaTab("canva_package")}
+                      >
+                        Canva Paketleri ({recentAssets.filter((a) => a.category === "canva_package").length})
+                      </button>
+                      <button
+                        type="button"
                         className={modalMediaTab === "video" ? "active" : ""}
                         onClick={() => setModalMediaTab("video")}
                       >
@@ -857,7 +898,7 @@ export function PublishingStudio({
                                     loading="lazy"
                                   />
                                 )}
-                                <span>{asset.category === "stock_render" ? "ÜRETİM" : asset.category === "stock" ? "STOK" : asset.type === "video" ? "MP4" : "IMG"}</span>
+                                <span>{asset.category === "canva_package" ? (asset.packageType === "carousel" ? `CAROUSEL (${asset.itemCount})` : "CANVA") : asset.category === "stock_render" ? "ÜRETİM" : asset.category === "stock" ? "STOK" : asset.type === "video" ? "MP4" : "IMG"}</span>
                               </button>
                             );
                           })}
@@ -866,6 +907,7 @@ export function PublishingStudio({
                       <div className="panel-empty" style={{ minHeight: "100px" }}>
                         <p>
                           {modalMediaTab === "image" && "Bu projede henüz üretilmiş görsel bulunamadı."}
+                          {modalMediaTab === "canva_package" && "Bu projede henüz üretilmiş Canva paketi bulunamadı."}
                           {modalMediaTab === "video" && "Bu projede henüz üretilmiş video bulunamadı."}
                           {modalMediaTab === "stock" && "Bu projede henüz senkronize edilmiş stok video bulunamadı."}
                           {modalMediaTab === "stock_render" && "Bu projede henüz stok içerikten üretilmiş video bulunamadı."}
@@ -922,6 +964,7 @@ export function PublishingStudio({
                   <select
                     value={postType}
                     onChange={(e) => setPostType(e.target.value as "post" | "reel" | "story")}
+                    disabled={selectedMedia?.category === "canva_package" && selectedMedia.packageType === "carousel"}
                     style={{
                       width: "100%",
                       height: "40px",

@@ -19,6 +19,9 @@ function runMigrations(database: DatabaseSync) {
   if (providerColumns.length && !providerColumns.some((column) => column.name === "edit_model")) database.exec("ALTER TABLE ai_provider_configs ADD COLUMN edit_model TEXT NOT NULL DEFAULT ''");
   const jobColumns = database.prepare("PRAGMA table_info(generation_jobs)").all() as unknown as { name: string }[];
   if (jobColumns.length && !jobColumns.some((column) => column.name === "progress_json")) database.exec("ALTER TABLE generation_jobs ADD COLUMN progress_json TEXT NOT NULL DEFAULT '{}'");
+  const postColumns = database.prepare("PRAGMA table_info(content_posts)").all() as unknown as { name: string }[];
+  if (postColumns.length && !postColumns.some((column) => column.name === "media_package_id")) database.exec("ALTER TABLE content_posts ADD COLUMN media_package_id TEXT");
+  if (postColumns.length && !postColumns.some((column) => column.name === "media_json")) database.exec("ALTER TABLE content_posts ADD COLUMN media_json TEXT NOT NULL DEFAULT '[]'");
   database.exec(`
     CREATE TABLE IF NOT EXISTS content_ideas (
       id TEXT PRIMARY KEY,
@@ -72,6 +75,8 @@ function runMigrations(database: DatabaseSync) {
       post_type TEXT NOT NULL DEFAULT 'post',
       postiz_post_id TEXT,
       postiz_media_id TEXT,
+      media_package_id TEXT,
+      media_json TEXT NOT NULL DEFAULT '[]',
       release_url TEXT,
       error_message TEXT,
       created_at TEXT NOT NULL,
@@ -190,6 +195,36 @@ function runMigrations(database: DatabaseSync) {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_project_overlays_project ON project_frame_overlays(project_id);
+    CREATE TABLE IF NOT EXISTS media_packages (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      generation_job_id TEXT NOT NULL REFERENCES generation_jobs(id) ON DELETE CASCADE,
+      source TEXT NOT NULL,
+      package_type TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT '',
+      cover_asset_id TEXT NOT NULL DEFAULT '',
+      item_count INTEGER NOT NULL DEFAULT 0,
+      canva_design_id TEXT NOT NULL DEFAULT '',
+      canva_edit_url TEXT NOT NULL DEFAULT '',
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_media_packages_project_created ON media_packages(project_id, created_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_media_packages_generation_job ON media_packages(generation_job_id);
+    CREATE TABLE IF NOT EXISTS media_package_items (
+      id TEXT PRIMARY KEY,
+      package_id TEXT NOT NULL REFERENCES media_packages(id) ON DELETE CASCADE,
+      asset_id TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      mime_type TEXT NOT NULL DEFAULT 'image/png',
+      width INTEGER NOT NULL DEFAULT 0,
+      height INTEGER NOT NULL DEFAULT 0,
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      UNIQUE(package_id, position)
+    );
+    CREATE INDEX IF NOT EXISTS idx_media_package_items_package_position ON media_package_items(package_id, position ASC);
   `);
 }
 
@@ -337,6 +372,36 @@ export function getDatabase() {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_project_overlays_project ON project_frame_overlays(project_id);
+    CREATE TABLE IF NOT EXISTS media_packages (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      generation_job_id TEXT NOT NULL REFERENCES generation_jobs(id) ON DELETE CASCADE,
+      source TEXT NOT NULL,
+      package_type TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT '',
+      cover_asset_id TEXT NOT NULL DEFAULT '',
+      item_count INTEGER NOT NULL DEFAULT 0,
+      canva_design_id TEXT NOT NULL DEFAULT '',
+      canva_edit_url TEXT NOT NULL DEFAULT '',
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_media_packages_project_created ON media_packages(project_id, created_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_media_packages_generation_job ON media_packages(generation_job_id);
+    CREATE TABLE IF NOT EXISTS media_package_items (
+      id TEXT PRIMARY KEY,
+      package_id TEXT NOT NULL REFERENCES media_packages(id) ON DELETE CASCADE,
+      asset_id TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      mime_type TEXT NOT NULL DEFAULT 'image/png',
+      width INTEGER NOT NULL DEFAULT 0,
+      height INTEGER NOT NULL DEFAULT 0,
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      UNIQUE(package_id, position)
+    );
+    CREATE INDEX IF NOT EXISTS idx_media_package_items_package_position ON media_package_items(package_id, position ASC);
   `);
 
   const globalAccountCount = database
