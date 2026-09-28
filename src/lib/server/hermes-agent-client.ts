@@ -80,7 +80,7 @@ export async function dispatchHermesCanvaTask(options: {
   const baseUrl = (options.baseUrl || config.baseUrl).replace(/\/+$/, "");
   const apiKey = options.apiKey ?? config.apiKey;
   const timeoutMs = options.timeoutMs ?? 8000;
-  const endpoint = options.endpoint || "/v1/chat/completions";
+  const endpoint = options.endpoint || "/v1/runs";
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -91,15 +91,21 @@ export async function dispatchHermesCanvaTask(options: {
     headers["Authorization"] = `Bearer ${apiKey}`;
   }
 
-  const payload = {
-    model: "hermes-agent",
-    messages: [
-      {
-        role: "user",
-        content: options.taskPrompt,
-      },
-    ],
-  };
+  const payload =
+    endpoint === "/v1/runs"
+      ? {
+          model: "hermes-agent",
+          input: options.taskPrompt,
+        }
+      : {
+          model: "hermes-agent",
+          messages: [
+            {
+              role: "user",
+              content: options.taskPrompt,
+            },
+          ],
+        };
 
   try {
     const response = await requestWithAcknowledgementTimeout(
