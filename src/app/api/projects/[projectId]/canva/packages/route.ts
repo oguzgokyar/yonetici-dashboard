@@ -38,6 +38,7 @@ export async function GET(_request: Request, context: Context) {
   const rows = database
     .prepare(`
       SELECT p.*,
+        g.prompt as job_prompt,
         (
           SELECT json_group_array(
             json_object(
@@ -55,11 +56,12 @@ export async function GET(_request: Request, context: Context) {
           ORDER BY i.position ASC
         ) as items_json
       FROM media_packages p
+      LEFT JOIN generation_jobs g ON g.id = p.generation_job_id
       WHERE p.project_id = ?
       ORDER BY p.created_at DESC
       LIMIT 100
     `)
-    .all(projectId) as unknown as PackageRow[];
+    .all(projectId) as unknown as (PackageRow & { job_prompt?: string })[];
 
   const packages = rows.map((row) => {
     let items = [];
@@ -76,6 +78,7 @@ export async function GET(_request: Request, context: Context) {
       source: row.source,
       packageType: row.package_type,
       title: row.title,
+      prompt: row.job_prompt || "",
       coverAssetId: row.cover_asset_id,
       coverUrl: row.cover_asset_id ? `/api/assets/${row.cover_asset_id}` : "",
       itemCount: row.item_count,

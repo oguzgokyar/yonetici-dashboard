@@ -353,19 +353,21 @@ export function PublishingStudio({
           (p: {
             id: string;
             title?: string;
+            prompt?: string;
             packageType: "single" | "carousel";
             coverUrl: string;
             itemCount: number;
             createdAt?: string;
           }) => {
+            const packagePrompt = p.prompt || p.title || (p.packageType === "carousel" ? `Canva Carousel (${p.itemCount} sayfa)` : "Canva Tasarımı");
             items.push({
               id: p.id,
               type: "image",
               category: "canva_package",
               url: p.coverUrl,
               thumbnailUrl: p.coverUrl,
-              prompt: p.title || (p.packageType === "carousel" ? `Canva Carousel (${p.itemCount} sayfa)` : "Canva Tasarımı"),
-              sourceTopic: p.title,
+              prompt: packagePrompt,
+              sourceTopic: p.prompt || p.title,
               packageId: p.id,
               packageType: p.packageType,
               itemCount: p.itemCount,
