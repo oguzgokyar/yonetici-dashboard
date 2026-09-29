@@ -357,6 +357,8 @@ export function PublishingStudio({
             packageType: "single" | "carousel";
             coverUrl: string;
             itemCount: number;
+            videoAssetId?: string | null;
+            videoUrl?: string | null;
             createdAt?: string;
           }) => {
             const packagePrompt = p.prompt || p.title || (p.packageType === "carousel" ? `Canva Carousel (${p.itemCount} sayfa)` : "Canva Tasarımı");
@@ -373,6 +375,21 @@ export function PublishingStudio({
               itemCount: p.itemCount,
               createdAt: p.createdAt,
             });
+
+            // If package has exported video, also expose it as a video asset for Reels
+            if (p.videoUrl) {
+              items.push({
+                id: p.videoAssetId || `canva_video_${p.id}`,
+                type: "video",
+                category: "video",
+                url: p.videoUrl,
+                thumbnailUrl: p.coverUrl,
+                prompt: packagePrompt,
+                sourceTopic: p.prompt || p.title,
+                packageId: p.id,
+                createdAt: p.createdAt,
+              });
+            }
           }
         );
       }

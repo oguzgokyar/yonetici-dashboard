@@ -20,6 +20,10 @@ import {
   AlertCircle,
   FileImage,
   StopCircle,
+  Video,
+  Play,
+  Download,
+  Film,
 } from "lucide-react";
 import type { CanvaContentType } from "@/lib/server/hermes-canva-task";
 import type { Project } from "@/features/projects/projects-context";
@@ -57,6 +61,9 @@ export interface CanvaPackage {
   itemCount: number;
   canvaDesignId: string;
   canvaEditUrl: string;
+  videoAssetId?: string | null;
+  videoUrl?: string | null;
+  videoDuration?: number | null;
   createdAt: string;
   items: CanvaPackageItem[];
 }
@@ -102,6 +109,13 @@ export function CanvaGenerationStudio({
   const [loadingPackages, setLoadingPackages] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
+  const [archiveTab, setArchiveTab] = useState<"packages" | "videos">("packages");
+
+  // Video conversion and playback state
+  const [convertingVideoPkgId, setConvertingVideoPkgId] = useState<string | null>(null);
+  const [videoModalPkg, setVideoModalPkg] = useState<CanvaPackage | null>(null);
+  const [durationPerSlide, setDurationPerSlide] = useState<number>(3.5);
+  const [activeVideoPlayerPkg, setActiveVideoPlayerPkg] = useState<CanvaPackage | null>(null);
 
   // Gallery / Lightbox state for Carousel packages
   const [activePackage, setActivePackage] = useState<CanvaPackage | null>(null);
@@ -295,6 +309,52 @@ export function CanvaGenerationStudio({
     }
   }
 
+  async function handleConvertVideo(packageId: string, durationSec: number) {
+    setConvertingVideoPkgId(packageId);
+    setMessage("");
+    try {
+      const res = await fetch(
+        `/api/projects/${encodeURIComponent(projectId)}/canva/packages/${encodeURIComponent(
+          packageId
+        )}/export-video`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ durationPerSlide: durationSec }),
+        }
+      );
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        message?: string;
+        videoUrl?: string;
+        videoAssetId?: string;
+        duration?: number;
+      };
+      if (!res.ok || !data.ok) {
+        throw new Error(data.message || "Video oluşturulamadı.");
+      }
+      setPackages((curr) =>
+        curr.map((p) =>
+          p.id === packageId
+            ? {
+                ...p,
+                videoAssetId: data.videoAssetId || null,
+                videoUrl: data.videoUrl || null,
+                videoDuration: data.duration || Math.round((p.itemCount || 1) * durationSec),
+              }
+            : p
+        )
+      );
+      setVideoModalPkg(null);
+      setArchiveTab("videos");
+      setMessage("Canva tasarımı başarıyla videoya dönüştürüldü!");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Video dönüştürme başarısız.");
+    } finally {
+      setConvertingVideoPkgId(null);
+    }
+  }
+
   function openGallery(pkg: CanvaPackage) {
     setActivePackage(pkg);
     setActiveSlideIndex(0);
@@ -477,12 +537,25 @@ export function CanvaGenerationStudio({
       <section className="generation-results">
         <div className="results-toolbar">
           <div>
-            <h2>Canva Tasarımları & Paketler</h2>
-            <span>Arşive kaydedilen Canva şablon ve export paketleri</span>
+            <h2>Canva Stüdyosu Arşivi</h2>
+            <span>Arşive kaydedilen Canva görsel şablonları ve üretilen videolar</span>
           </div>
           <div className="result-tabs">
-            <button type="button" className="active">
-              Tüm Paketler ({packages.length})
+            <button
+              type="button"
+              className={archiveTab === "packages" ? "active" : ""}
+              onClick={() => setArchiveTab("packages")}
+            >
+              <FileImage size={14} style={{ marginRight: "6px", verticalAlign: "middle" }} />
+              Tasarımlar & Paketler ({packages.length})
+            </button>
+            <button
+              type="button"
+              className={archiveTab === "videos" ? "active" : ""}
+              onClick={() => setArchiveTab("videos")}
+            >
+              <Video size={14} style={{ marginRight: "6px", verticalAlign: "middle" }} />
+              Üretilen Videolar ({packages.filter((p) => Boolean(p.videoUrl)).length})
             </button>
           </div>
         </div>
@@ -497,59 +570,126 @@ export function CanvaGenerationStudio({
           />
         )}
 
-        {/* Paket Listesi */}
-        {packages.length > 0 ? (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-              gap: "16px",
-              marginTop: "16px",
-            }}
-          >
-            {packages.map((pkg) => (
-              <CanvaPackageCard
-                key={pkg.id}
-                pkg={pkg}
-                projectId={projectId}
-                deleting={deletingId === pkg.id}
-                onOpenGallery={() => openGallery(pkg)}
-                onDelete={() => void handleDeletePackage(pkg.id)}
-              />
-            ))}
-          </div>
-        ) : !isProducing && !loadingPackages ? (
-          <div className="results-empty">
-            <div className="empty-canvas">
-              <div
-                className="canvas-glow"
-                style={{ background: available.primaryColor || "#7a6deb" }}
-              />
-              <Layers size={38} />
-              <span>CANVA AGENT STÜDYOSU</span>
+        {/* Sekme 1: Tasarımlar & Paketler */}
+        {archiveTab === "packages" && (
+          packages.length > 0 ? (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                gap: "16px",
+                marginTop: "16px",
+              }}
+            >
+              {packages.map((pkg) => (
+                <CanvaPackageCard
+                  key={pkg.id}
+                  pkg={pkg}
+                  projectId={projectId}
+                  deleting={deletingId === pkg.id}
+                  convertingVideo={convertingVideoPkgId === pkg.id}
+                  onOpenGallery={() => openGallery(pkg)}
+                  onOpenVideoModal={() => setVideoModalPkg(pkg)}
+                  onWatchVideo={() => setActiveVideoPlayerPkg(pkg)}
+                  onDelete={() => void handleDeletePackage(pkg.id)}
+                />
+              ))}
             </div>
-            <h3>Henüz Canva paketi yok</h3>
-            <p>
-              Soldaki briefi oluşturup &quot;Canva ile üret&quot; butonuna tıklayın.
-              Üretilen çoklu sayfalar tek galeri paketi olarak burada listelenecektir.
-            </p>
-          </div>
-        ) : null}
+          ) : !isProducing && !loadingPackages ? (
+            <div className="results-empty">
+              <div className="empty-canvas">
+                <div
+                  className="canvas-glow"
+                  style={{ background: available.primaryColor || "#7a6deb" }}
+                />
+                <Layers size={38} />
+                <span>CANVA AGENT STÜDYOSU</span>
+              </div>
+              <h3>Henüz Canva paketi yok</h3>
+              <p>
+                Soldaki briefi oluşturup &quot;Canva ile üret&quot; butonuna tıklayın.
+                Üretilen çoklu sayfalar tek galeri paketi olarak burada listelenecektir.
+              </p>
+            </div>
+          ) : null
+        )}
+
+        {/* Sekme 2: Üretilen Videolar */}
+        {archiveTab === "videos" && (
+          packages.filter((p) => Boolean(p.videoUrl)).length > 0 ? (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                gap: "16px",
+                marginTop: "16px",
+              }}
+            >
+              {packages
+                .filter((p) => Boolean(p.videoUrl))
+                .map((pkg) => (
+                  <CanvaVideoCard
+                    key={pkg.id}
+                    pkg={pkg}
+                    projectId={projectId}
+                    onPlay={() => setActiveVideoPlayerPkg(pkg)}
+                  />
+                ))}
+            </div>
+          ) : (
+            <div className="results-empty">
+              <div className="empty-canvas">
+                <div
+                  className="canvas-glow"
+                  style={{ background: available.primaryColor || "#7a6deb" }}
+                />
+                <Film size={38} />
+                <span>CANVA REELS VİDEOLARI</span>
+              </div>
+              <h3>Henüz üretilmiş video yok</h3>
+              <p>
+                &quot;Tasarımlar & Paketler&quot; sekmesindeki bir carousel paketinin üzerindeki
+                &quot;Videoya Dönüştür&quot; butonuna basarak sihirli animasyonlu MP4 video türetebilirsiniz.
+              </p>
+            </div>
+          )
+        )}
       </section>
 
-      {/* Carousel Lightbox / Galeri Modalı */}
-      {activePackage && (
-        <CanvaGalleryModal
-          pkg={activePackage}
-          projectId={projectId}
-          currentIndex={activeSlideIndex}
-          onIndexChange={setActiveSlideIndex}
-          onClose={() => setActivePackage(null)}
-        />
-      )}
-    </div>
-  );
-}
+        {/* Carousel Lightbox / Galeri Modalı */}
+        {activePackage && (
+          <CanvaGalleryModal
+            pkg={activePackage}
+            projectId={projectId}
+            currentIndex={activeSlideIndex}
+            onIndexChange={setActiveSlideIndex}
+            onClose={() => setActivePackage(null)}
+          />
+        )}
+
+        {/* Videoya Dönüştür Modalı */}
+        {videoModalPkg && (
+          <CanvaVideoConvertModal
+            pkg={videoModalPkg}
+            converting={convertingVideoPkgId === videoModalPkg.id}
+            durationPerSlide={durationPerSlide}
+            onDurationChange={setDurationPerSlide}
+            onConvert={() => void handleConvertVideo(videoModalPkg.id, durationPerSlide)}
+            onClose={() => setVideoModalPkg(null)}
+          />
+        )}
+
+        {/* Video Oynatıcı Modalı */}
+        {activeVideoPlayerPkg && (
+          <CanvaVideoPlayerModal
+            pkg={activeVideoPlayerPkg}
+            projectId={projectId}
+            onClose={() => setActiveVideoPlayerPkg(null)}
+          />
+        )}
+      </div>
+    );
+  }
 
 function CanvaProductionStepper({
   job,
@@ -663,17 +803,24 @@ function CanvaPackageCard({
   pkg,
   projectId,
   deleting,
+  convertingVideo,
   onOpenGallery,
+  onOpenVideoModal,
+  onWatchVideo,
   onDelete,
 }: {
   pkg: CanvaPackage;
   projectId: string;
   deleting: boolean;
+  convertingVideo?: boolean;
   onOpenGallery: () => void;
+  onOpenVideoModal?: () => void;
+  onWatchVideo?: () => void;
   onDelete: () => void;
 }) {
   const isCarousel = pkg.packageType === "carousel";
   const thumbUrl = pkg.coverUrl ? `${pkg.coverUrl}?thumb=1` : "";
+  const hasVideo = Boolean(pkg.videoUrl);
 
   return (
     <article
@@ -782,6 +929,53 @@ function CanvaPackageCard({
         </span>
 
         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          {/* Videoya Dönüştür / İzle Butonu */}
+          {hasVideo ? (
+            <button
+              type="button"
+              onClick={onWatchVideo}
+              title="Videoyu İzle (MP4)"
+              style={{
+                display: "grid",
+                placeItems: "center",
+                width: "28px",
+                height: "28px",
+                borderRadius: "6px",
+                border: "1px solid #c7d2fe",
+                color: "#4f46e5",
+                background: "#eef2ff",
+                cursor: "pointer",
+              }}
+            >
+              <Play size={13} fill="#4f46e5" />
+            </button>
+          ) : isCarousel && onOpenVideoModal ? (
+            <button
+              type="button"
+              onClick={onOpenVideoModal}
+              disabled={convertingVideo}
+              title="Sihirli Animasyonlu Videoya Dönüştür (MP4)"
+              style={{
+                display: "grid",
+                placeItems: "center",
+                width: "28px",
+                height: "28px",
+                borderRadius: "6px",
+                border: "1px solid #e0e7ff",
+                color: "#4338ca",
+                background: "#faf5ff",
+                cursor: "pointer",
+              }}
+            >
+              {convertingVideo ? (
+                <LoaderCircle className="spin" size={13} />
+              ) : (
+                <Video size={13} />
+              )}
+            </button>
+          ) : null}
+
+          {/* Canva Edit Link */}
           {pkg.canvaEditUrl && (
             <a
               href={pkg.canvaEditUrl}
@@ -1093,6 +1287,611 @@ function CanvaGalleryModal({
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function CanvaVideoCard({
+  pkg,
+  projectId,
+  onPlay,
+}: {
+  pkg: CanvaPackage;
+  projectId: string;
+  onPlay: () => void;
+}) {
+  const thumbUrl = pkg.coverUrl ? `${pkg.coverUrl}?thumb=1` : "";
+
+  return (
+    <article
+      className="generated-card"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        border: "1px solid #e0e7ff",
+        borderRadius: "14px",
+        overflow: "hidden",
+        background: "white",
+        boxShadow: "0 2px 8px rgba(79, 70, 229, 0.06)",
+      }}
+    >
+      <div
+        className="creative-card-media"
+        style={{
+          position: "relative",
+          width: "100%",
+          paddingTop: "125%",
+          background: "#0f172a",
+          cursor: "pointer",
+          overflow: "hidden",
+        }}
+        onClick={onPlay}
+      >
+        {thumbUrl ? (
+          <Image
+            src={thumbUrl}
+            alt={pkg.title || "Canva Video"}
+            fill
+            sizes="(max-width: 768px) 100vw, 320px"
+            unoptimized
+            style={{ objectFit: "cover", opacity: 0.8 }}
+          />
+        ) : (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "grid",
+              placeItems: "center",
+              color: "#94a3b8",
+            }}
+          >
+            <Film size={36} />
+          </div>
+        )}
+
+        {/* Video Oynat İkonu (Merkez) */}
+        <div
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            width: "52px",
+            height: "52px",
+            borderRadius: "50%",
+            background: "rgba(79, 70, 229, 0.9)",
+            display: "grid",
+            placeItems: "center",
+            boxShadow: "0 4px 14px rgba(0, 0, 0, 0.35)",
+            backdropFilter: "blur(4px)",
+            color: "white",
+          }}
+        >
+          <Play size={24} fill="white" style={{ marginLeft: "3px" }} />
+        </div>
+
+        {/* Süre Rozeti */}
+        <span
+          style={{
+            position: "absolute",
+            top: "10px",
+            left: "10px",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "4px",
+            padding: "4px 8px",
+            borderRadius: "6px",
+            background: "rgba(15, 23, 42, 0.8)",
+            backdropFilter: "blur(4px)",
+            color: "#f8fafc",
+            fontSize: "11px",
+            fontWeight: 600,
+          }}
+        >
+          <Film size={11} />
+          {pkg.videoDuration ? `${pkg.videoDuration} sn` : "Reels"}
+        </span>
+
+        {/* MP4 Rozeti */}
+        <span
+          style={{
+            position: "absolute",
+            top: "10px",
+            right: "10px",
+            display: "inline-flex",
+            alignItems: "center",
+            padding: "4px 7px",
+            borderRadius: "6px",
+            background: "rgba(99, 102, 241, 0.9)",
+            color: "white",
+            fontSize: "10px",
+            fontWeight: 700,
+            letterSpacing: "0.5px",
+          }}
+        >
+          MP4
+        </span>
+
+        {/* Hover İzle Butonu */}
+        <div
+          className="preview-hover-overlay"
+          style={{
+            position: "absolute",
+            bottom: "10px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "rgba(15, 23, 42, 0.85)",
+            color: "white",
+            fontSize: "11px",
+            fontWeight: 500,
+            padding: "5px 12px",
+            borderRadius: "20px",
+            display: "flex",
+            alignItems: "center",
+            gap: "5px",
+            pointerEvents: "none",
+          }}
+        >
+          <Play size={11} fill="white" />
+          Videoyu İzle
+        </div>
+      </div>
+
+      <div
+        className="creative-card-body"
+        style={{
+          padding: "12px 14px 8px 14px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "4px",
+        }}
+      >
+        <h4
+          style={{
+            margin: 0,
+            fontSize: "13px",
+            fontWeight: 600,
+            color: "#1e293b",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+          title={pkg.title}
+        >
+          {pkg.title || "Canva Video"}
+        </h4>
+        <span style={{ fontSize: "11px", color: "#64748b" }}>
+          {pkg.itemCount} Slayt • Canva Bulut Animasyonu
+        </span>
+      </div>
+
+      <div
+        className="creative-card-footer"
+        style={{
+          padding: "10px 12px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderTop: "1px solid #f1f5f9",
+          marginTop: "auto",
+        }}
+      >
+        <span style={{ fontSize: "11px", color: "#64748b" }}>
+          {new Date(pkg.createdAt).toLocaleDateString("tr-TR", {
+            day: "numeric",
+            month: "short",
+          })}
+        </span>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          {/* İndir Butonu */}
+          {pkg.videoUrl && (
+            <a
+              href={pkg.videoUrl}
+              download={`${pkg.title || "canva-video"}.mp4`}
+              title="MP4 İndir"
+              style={{
+                display: "grid",
+                placeItems: "center",
+                width: "28px",
+                height: "28px",
+                borderRadius: "6px",
+                border: "1px solid #e2e8f0",
+                color: "#475569",
+                background: "#f8fafc",
+              }}
+            >
+              <Download size={14} />
+            </a>
+          )}
+
+          {/* Reels Olarak Planla */}
+          <Link
+            href={`/projects/${projectId}/publishing?packageId=${pkg.id}&mediaType=video`}
+            title="Reels Olarak Planla"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "5px",
+              height: "28px",
+              padding: "0 10px",
+              borderRadius: "6px",
+              background: "#4f46e5",
+              color: "white",
+              fontSize: "11px",
+              fontWeight: 600,
+              textDecoration: "none",
+            }}
+          >
+            <Send size={12} />
+            Reels Planla
+          </Link>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function CanvaVideoConvertModal({
+  pkg,
+  converting,
+  durationPerSlide,
+  onDurationChange,
+  onConvert,
+  onClose,
+}: {
+  pkg: CanvaPackage;
+  converting: boolean;
+  durationPerSlide: number;
+  onDurationChange: (v: number) => void;
+  onConvert: () => void;
+  onClose: () => void;
+}) {
+  const slideCount = pkg.itemCount || 1;
+  const totalDuration = Math.round(slideCount * durationPerSlide);
+
+  return (
+    <div
+      className="modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      style={{
+        position: "fixed",
+        inset: 0,
+        backgroundColor: "rgba(15, 23, 42, 0.7)",
+        backdropFilter: "blur(4px)",
+        zIndex: 9999,
+        display: "grid",
+        placeItems: "center",
+        padding: "16px",
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !converting) onClose();
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "480px",
+          background: "white",
+          borderRadius: "16px",
+          padding: "24px",
+          boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.2)",
+          display: "flex",
+          flexDirection: "column",
+          gap: "18px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <div
+              style={{
+                width: "36px",
+                height: "36px",
+                borderRadius: "10px",
+                background: "#eef2ff",
+                color: "#4f46e5",
+                display: "grid",
+                placeItems: "center",
+              }}
+            >
+              <Video size={20} />
+            </div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#1e293b" }}>
+                Sihirli Animasyonlu Videoya Dönüştür
+              </h3>
+              <span style={{ fontSize: "12px", color: "#64748b" }}>
+                Canva bulut motoru ile MP4 Reels üretimi
+              </span>
+            </div>
+          </div>
+          {!converting && (
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#94a3b8",
+                cursor: "pointer",
+                padding: "4px",
+              }}
+            >
+              <X size={18} />
+            </button>
+          )}
+        </div>
+
+        <div style={{ background: "#f8fafc", borderRadius: "10px", padding: "12px 14px" }}>
+          <div style={{ fontSize: "12px", fontWeight: 600, color: "#334155", marginBottom: "4px" }}>
+            Hedef Tasarım:
+          </div>
+          <div style={{ fontSize: "13px", color: "#0f172a", fontWeight: 500 }}>
+            {pkg.title || "Canva Tasarımı"} ({slideCount} Slayt)
+          </div>
+        </div>
+
+        {/* Süre Belirleme */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          <label style={{ fontSize: "13px", fontWeight: 600, color: "#1e293b" }}>
+            Slayt Başına Süre Seçimi:
+          </label>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+            {[
+              { val: 2, label: "2.0 sn", desc: "Hızlı / Dinamik" },
+              { val: 3.5, label: "3.5 sn", desc: "Dengeli (İdeal)" },
+              { val: 5, label: "5.0 sn", desc: "Detaylı Okuma" },
+            ].map((opt) => (
+              <button
+                key={opt.val}
+                type="button"
+                onClick={() => onDurationChange(opt.val)}
+                disabled={converting}
+                style={{
+                  padding: "10px 8px",
+                  borderRadius: "10px",
+                  border: durationPerSlide === opt.val ? "2px solid #4f46e5" : "1px solid #e2e8f0",
+                  background: durationPerSlide === opt.val ? "#eef2ff" : "white",
+                  cursor: "pointer",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "2px",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    color: durationPerSlide === opt.val ? "#4f46e5" : "#1e293b",
+                  }}
+                >
+                  {opt.label}
+                </span>
+                <span style={{ fontSize: "10px", color: "#64748b" }}>{opt.desc}</span>
+              </button>
+            ))}
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "8px 12px",
+              background: "#faf5ff",
+              borderRadius: "8px",
+              border: "1px solid #f3e8ff",
+              fontSize: "12px",
+              color: "#6b21a8",
+            }}
+          >
+            <span>Toplam Video Süresi:</span>
+            <strong>
+              {slideCount} Slayt × {durationPerSlide} sn = {totalDuration} Saniye
+            </strong>
+          </div>
+        </div>
+
+        {/* Bilgilendirme */}
+        <div style={{ fontSize: "11px", color: "#64748b", lineHeight: 1.5 }}>
+          💡 Video render işlemi doğrudan Canva Cloud üzerinde gerçekleştirilir; sunucunuza CPU/bellek
+          yükü bindirmez. Tamamlandığında &quot;Üretilen Videolar&quot; sekmesine eklenecektir.
+        </div>
+
+        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "6px" }}>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={converting}
+            style={{
+              padding: "9px 16px",
+              borderRadius: "8px",
+              border: "1px solid #e2e8f0",
+              background: "white",
+              color: "#475569",
+              fontSize: "13px",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Vazgeç
+          </button>
+          <button
+            type="button"
+            onClick={onConvert}
+            disabled={converting}
+            style={{
+              padding: "9px 20px",
+              borderRadius: "8px",
+              border: "none",
+              background: "#4f46e5",
+              color: "white",
+              fontSize: "13px",
+              fontWeight: 600,
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            {converting && <LoaderCircle className="spin" size={14} />}
+            {converting ? "Canva Render Ediyor (~20-40 sn)..." : "Videoyu Başlat"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CanvaVideoPlayerModal({
+  pkg,
+  projectId,
+  onClose,
+}: {
+  pkg: CanvaPackage;
+  projectId: string;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      style={{
+        position: "fixed",
+        inset: 0,
+        backgroundColor: "rgba(0, 0, 0, 0.88)",
+        zIndex: 9999,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "20px",
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "420px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "12px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", color: "white" }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 700 }}>
+              {pkg.title || "Canva Video"}
+            </h3>
+            <span style={{ fontSize: "11px", color: "#94a3b8" }}>
+              {pkg.videoDuration ? `${pkg.videoDuration} sn • ` : ""}Instagram Reels Formatı (MP4)
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: "rgba(255,255,255,0.15)",
+              border: "none",
+              borderRadius: "50%",
+              width: "32px",
+              height: "32px",
+              display: "grid",
+              placeItems: "center",
+              color: "white",
+              cursor: "pointer",
+            }}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Video Oynatıcı */}
+        <div
+          style={{
+            position: "relative",
+            width: "100%",
+            borderRadius: "14px",
+            overflow: "hidden",
+            background: "#000",
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+          }}
+        >
+          {pkg.videoUrl ? (
+            <video
+              src={pkg.videoUrl}
+              controls
+              autoPlay
+              loop
+              playsInline
+              style={{
+                width: "100%",
+                maxHeight: "75vh",
+                objectFit: "contain",
+                display: "block",
+              }}
+            />
+          ) : (
+            <div style={{ padding: "40px", textAlign: "center", color: "white" }}>
+              Video dosyası bulunamadı.
+            </div>
+          )}
+        </div>
+
+        {/* Aksiyon Butonları */}
+        <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+          {pkg.videoUrl && (
+            <a
+              href={pkg.videoUrl}
+              download={`${pkg.title || "canva-video"}.mp4`}
+              style={{
+                flex: 1,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+                height: "38px",
+                borderRadius: "8px",
+                background: "rgba(255,255,255,0.12)",
+                color: "white",
+                fontSize: "12px",
+                fontWeight: 600,
+                textDecoration: "none",
+              }}
+            >
+              <Download size={14} />
+              MP4 İndir
+            </a>
+          )}
+
+          <Link
+            href={`/projects/${projectId}/publishing?packageId=${pkg.id}&mediaType=video`}
+            style={{
+              flex: 1.4,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "6px",
+              height: "38px",
+              borderRadius: "8px",
+              background: "#4f46e5",
+              color: "white",
+              fontSize: "12px",
+              fontWeight: 600,
+              textDecoration: "none",
+            }}
+          >
+            <Send size={14} />
+            Reels Olarak Planla
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

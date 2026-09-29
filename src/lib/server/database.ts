@@ -207,6 +207,9 @@ function runMigrations(database: DatabaseSync) {
       canva_design_id TEXT NOT NULL DEFAULT '',
       canva_edit_url TEXT NOT NULL DEFAULT '',
       metadata_json TEXT NOT NULL DEFAULT '{}',
+      video_asset_id TEXT,
+      video_url TEXT,
+      video_duration INTEGER,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -384,6 +387,9 @@ export function getDatabase() {
       canva_design_id TEXT NOT NULL DEFAULT '',
       canva_edit_url TEXT NOT NULL DEFAULT '',
       metadata_json TEXT NOT NULL DEFAULT '{}',
+      video_asset_id TEXT,
+      video_url TEXT,
+      video_duration INTEGER,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -403,6 +409,20 @@ export function getDatabase() {
     );
     CREATE INDEX IF NOT EXISTS idx_media_package_items_package_position ON media_package_items(package_id, position ASC);
   `);
+
+  // Dynamic migrations for media_packages (video fields)
+  const pkgCols = database.prepare("PRAGMA table_info(media_packages)").all() as unknown as { name: string }[];
+  if (pkgCols.length) {
+    if (!pkgCols.some((c) => c.name === "video_asset_id")) {
+      try { database.exec("ALTER TABLE media_packages ADD COLUMN video_asset_id TEXT;"); } catch {}
+    }
+    if (!pkgCols.some((c) => c.name === "video_url")) {
+      try { database.exec("ALTER TABLE media_packages ADD COLUMN video_url TEXT;"); } catch {}
+    }
+    if (!pkgCols.some((c) => c.name === "video_duration")) {
+      try { database.exec("ALTER TABLE media_packages ADD COLUMN video_duration INTEGER;"); } catch {}
+    }
+  }
 
   const globalAccountCount = database
     .prepare("SELECT COUNT(*) AS total FROM drive_accounts")

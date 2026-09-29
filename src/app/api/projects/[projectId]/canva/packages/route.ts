@@ -17,6 +17,9 @@ type PackageRow = {
   canva_design_id: string;
   canva_edit_url: string;
   metadata_json: string;
+  video_asset_id?: string | null;
+  video_url?: string | null;
+  video_duration?: number | null;
   created_at: string;
   updated_at: string;
   items_json?: string;
@@ -84,6 +87,9 @@ export async function GET(_request: Request, context: Context) {
       itemCount: row.item_count,
       canvaDesignId: row.canva_design_id,
       canvaEditUrl: row.canva_edit_url,
+      videoAssetId: row.video_asset_id || null,
+      videoUrl: row.video_url || null,
+      videoDuration: row.video_duration || null,
       createdAt: row.created_at,
       items,
     };
