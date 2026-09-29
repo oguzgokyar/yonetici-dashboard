@@ -113,7 +113,7 @@ test("buildHermesCanvaTaskPrompt generates versioned prompt with strict constrai
   assert.ok(taskPrompt.includes("job-12345"));
   assert.ok(taskPrompt.includes("canva-carousel-director"));
   assert.ok(taskPrompt.includes("canva-mcp"));
-  assert.ok(taskPrompt.includes("codex exec"));
+  assert.ok(taskPrompt.includes("mcp__canva__create_design"));
   assert.ok(taskPrompt.includes("Telegram"));
   assert.ok(taskPrompt.includes("clarification"));
   assert.ok(taskPrompt.includes("1080x1350"));

@@ -223,55 +223,46 @@ export function buildHermesCanvaTaskPrompt(payload: CanvaTaskPayload): string {
 Bu bir Yönetici Dashboard Canva görsel üretim makine görevidir.
 
 ÖNEMLİ KURALLAR:
-1. Kullanıcıyla sohbet ETME, clarification (netleştirme) sorusu SORMA. Görevi doğrudan yerine getir.
-2. Kesinlikle harici Telegram bildirimi GÖNDERME ('send_tg.py' çağrısı yasaktır). Final cevabın kısa makine özeti olsun.
-3. 'canva-carousel-director' ve 'canva-mcp' skill kurallarını eksiksiz yükle ve uygula.
-4. Canva üretimini YALNIZ Codex CLI üzerinden yürüt:
-   codex exec --approve-for-me --skip-git-repo-check --ephemeral "<STRUCTURED_PROMPT>"
-5. Doğrudan ${meta.width}x${meta.height} boyutunda üret (Asla 16:9 sunumdan resize yapma).
+1. Kullanıcıyla sohbet ETME, clarification sorusu SORMA. Görevi doğrudan yerine getir.
+2. Kesinlikle harici Telegram bildirimi GÖNDERME ('send_tg.py' yasaktır).
+3. Codex CLI subprocess ÇALIŞTIRMA — terminal aracını kullanma. Sen zaten Canva MCP (canva-mcp) araçlarına sahipsin.
+4. Canva MCP araçlarını DOĞRUDAN bu ajan dönüşünden çağır (mcp__canva__create_design vb.).
+5. Doğrudan ${meta.width}x${meta.height} boyutunda üret. Asla 16:9 sunum oluşturup resize yapma.
 6. Sayfa sayısı birebir ${payload.slideCount} olmalıdır.
-7. Kilitli Türkçe içerik sözleşmesine uy: Metinleri harfiyen koru, paraphrase yapma, bullet point atlama.
-8. Güvenli alanlar: 100px yatay, 140px dikey. Tipografi ve hero görselleri çakışmamalı, maksimum 2 font ailesi, mobil okunabilirlik.
+7. Kilitli içerik: Metinleri harfiyen koru, paraphrase yapma, bullet point atlama.
+8. Güvenli alanlar: 100px yatay, 140px dikey marjin. Max 2 font ailesi. Bounding box çakışması yok.
 
-İLERLEME VE BİTİŞ CALLBACK BİLGİSİ:
-Her aşamada ilerleme gönder (Authorization: Bearer ${payload.callbackToken}):
-- Aşama bildirimleri için: POST ${progressEndpoint}
-  Body JSON: { "phase": "preparing|generating|verifying|exporting|uploading", "percent": 0-100, "completed": X, "total": Y, "detail": "Açıklama" }
+CANVA TASARIM KURALLARI (canva-carousel-director v2):
+- Format: Doğrudan Instagram Post (Portrait) = ${meta.width}×${meta.height}px. ASLA sunum formatı seçme.
+- Layout — 60/40 Dikey Bölünme:
+    Üst %45 (y:140–600): Hero görsel / ikon / illüstrasyon alanı.
+    Alt %45 (y:650–1210): Tipografi alanı (başlık + 2-3 bullet).
+    Kutular kesişmemeli, min 24px dikey boşluk.
+- Tipografi: Başlık min 52pt kalın, gövde min 26pt temiz sans-serif, max 2 font ailesi.
+- Karakter limitleri: Kapak başlığı max 32 karakter, slayt başlığı max 24 karakter, açıklama max 80 karakter, bullet max 35 karakter.
+- Style: "${payload.style || "Modern ve minimalist"}". Marka renkleri ve logoya uygun.
+- Marka bilgileri: ${JSON.stringify(payload.brandSnapshot || {})}
 
-BAŞARI DURUMU (COMPLETE):
-Canva tasarımı oluşturulup sayfalar PNG olarak dışa aktarıldıktan sonra:
-POST ${completeEndpoint}
-Headers:
-  Authorization: Bearer ${payload.callbackToken}
-  Content-Type: multipart/form-data
-Alanlar:
-  - manifest: JSON string içeren obje:
-    {
-      "designId": "<canva_design_id>",
-      "editUrl": "<canva_edit_url>",
-      "contentType": "${payload.contentType}",
-      "width": ${meta.width},
-      "height": ${meta.height},
-      "pageCount": ${payload.slideCount},
-      "exports": [
-        { "position": 1, "name": "slide-01" },
-        ...
-      ]
-    }
-  - Dosyalar: "slide-01", "slide-02", ... (${payload.slideCount} adet PNG dosyası)
+ADIM ADIM YAPMAN GEREKENLER:
+1. İlerleme bildir: POST ${progressEndpoint} — { "phase":"generating", "percent":20, "completed":0, "total":${payload.slideCount}, "detail":"Canva tasarımı oluşturuluyor..." }
+2. mcp__canva__create_design çağır: brief="${payload.prompt}", format="Instagram Post (Portrait)", sayfa sayısı=${payload.slideCount}.
+3. Asenkronsa mcp__canva__get_create_design_async_job ile tamamlanmasını bekle.
+4. get_design ile design_id ve edit_url al; get_design_pages ile sayfa sayısını ve boyutları doğrula.
+5. İlerleme bildir: POST ${progressEndpoint} — { "phase":"exporting", "percent":70, "completed":${Math.floor(payload.slideCount / 2)}, "total":${payload.slideCount}, "detail":"Sayfalar dışa aktarılıyor..." }
+6. Her sayfa için get_design_thumbnail veya get_design_pages ile signed thumbnail URL'lerini al.
+7. terminal aracıyla her URL'yi /tmp/canva_slides_<jobId>/ dizinine PNG olarak indir (curl veya python3 urllib).
+8. İlerleme bildir: POST ${progressEndpoint} — { "phase":"uploading", "percent":90, "completed":${payload.slideCount}, "total":${payload.slideCount}, "detail":"Paket arşive kaydediliyor..." }
+9. Tüm PNG'leri ve manifest'i multipart/form-data olarak POST ${completeEndpoint} adresine gönder:
+   - Header: Authorization: Bearer ${payload.callbackToken}
+   - manifest alanı (JSON string):
+     { "designId":"<id>", "editUrl":"<url>", "contentType":"${payload.contentType}", "width":${meta.width}, "height":${meta.height}, "pageCount":${payload.slideCount}, "exports":[{"position":1,"name":"slide-01"},{"position":2,"name":"slide-02"},...] }
+   - Dosya alanları: "slide-01", "slide-02", ... (${payload.slideCount} adet PNG)
+10. Başarıysa: Kısa özet döndür (design_id + edit_url).
 
-BAŞARISIZLIK DURUMU (FAIL):
-Tasarım üretilemezse veya hata oluşursa:
+HATA DURUMUNDA:
 POST ${failEndpoint}
-Headers:
-  Authorization: Bearer ${payload.callbackToken}
-  Content-Type: application/json
-Body JSON:
-  {
-    "jobId": "${payload.jobId}",
-    "error": "Hata açıklaması",
-    "pipelineVersion": "${HERMES_CANVA_PIPELINE_VERSION}"
-  }
+Header: Authorization: Bearer ${payload.callbackToken}
+Body JSON: { "jobId":"${payload.jobId}", "error":"<hata açıklaması>", "pipelineVersion":"${HERMES_CANVA_PIPELINE_VERSION}" }
 
 ### USER_BRIEF (KİLİTLİ GİRDİ)
 \`\`\`json
