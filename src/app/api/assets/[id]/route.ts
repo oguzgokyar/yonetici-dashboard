@@ -80,15 +80,49 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       });
     }
 
-    // 3. Full-Resolution Original Asset (Exact PNG/JPEG preserved for publishing & download)
+    // 3. Full-Resolution Original Asset (Exact PNG/JPEG/MP4 preserved)
     const metadata = JSON.parse(fs.readFileSync(path.join(assetDir, `${id}.json`), "utf8")) as {
       mimeType: string;
       extension: string;
     };
-    const bytes = fs.readFileSync(path.join(assetDir, `${id}.${metadata.extension}`));
+    const filePath = path.join(assetDir, `${id}.${metadata.extension}`);
+    const stat = fs.statSync(filePath);
+    const fileSize = stat.size;
+
+    // Support HTTP Range requests (crucial for HTML5 video playback in Safari/Chrome)
+    const rangeHeader = request.headers.get("range");
+    if (rangeHeader && metadata.mimeType.startsWith("video/")) {
+      const parts = rangeHeader.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunksize = end - start + 1;
+
+      const fileStream = fs.createReadStream(filePath, { start, end });
+      const stream = new ReadableStream({
+        start(controller) {
+          fileStream.on("data", (chunk) => controller.enqueue(chunk));
+          fileStream.on("end", () => controller.close());
+          fileStream.on("error", (err) => controller.error(err));
+        },
+      });
+
+      return new Response(stream, {
+        status: 206,
+        headers: {
+          "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+          "Accept-Ranges": "bytes",
+          "Content-Length": String(chunksize),
+          "Content-Type": metadata.mimeType,
+        },
+      });
+    }
+
+    const bytes = fs.readFileSync(filePath);
     return new Response(bytes, {
       headers: {
         "Content-Type": metadata.mimeType,
+        "Content-Length": String(fileSize),
+        "Accept-Ranges": "bytes",
         "Cache-Control": "public, max-age=31536000, immutable",
       },
     });
