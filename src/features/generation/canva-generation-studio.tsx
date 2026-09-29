@@ -116,6 +116,7 @@ export function CanvaGenerationStudio({
   const [videoModalPkg, setVideoModalPkg] = useState<CanvaPackage | null>(null);
   const [durationPerSlide, setDurationPerSlide] = useState<number>(3.5);
   const [activeVideoPlayerPkg, setActiveVideoPlayerPkg] = useState<CanvaPackage | null>(null);
+  const [useMagicAnimate, setUseMagicAnimate] = useState<boolean>(true);
 
   // Gallery / Lightbox state for Carousel packages
   const [activePackage, setActivePackage] = useState<CanvaPackage | null>(null);
@@ -309,7 +310,7 @@ export function CanvaGenerationStudio({
     }
   }
 
-  async function handleConvertVideo(packageId: string, durationSec: number) {
+  async function handleConvertVideo(packageId: string, durationSec: number, magicAnimate: boolean) {
     setConvertingVideoPkgId(packageId);
     setMessage("");
     try {
@@ -320,7 +321,7 @@ export function CanvaGenerationStudio({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ durationPerSlide: durationSec }),
+          body: JSON.stringify({ durationPerSlide: durationSec, useMagicAnimate: magicAnimate }),
         }
       );
       const data = (await res.json().catch(() => ({}))) as {
@@ -673,8 +674,10 @@ export function CanvaGenerationStudio({
             pkg={videoModalPkg}
             converting={convertingVideoPkgId === videoModalPkg.id}
             durationPerSlide={durationPerSlide}
+            useMagicAnimate={useMagicAnimate}
             onDurationChange={setDurationPerSlide}
-            onConvert={() => void handleConvertVideo(videoModalPkg.id, durationPerSlide)}
+            onMagicAnimateChange={setUseMagicAnimate}
+            onConvert={() => void handleConvertVideo(videoModalPkg.id, durationPerSlide, useMagicAnimate)}
             onClose={() => setVideoModalPkg(null)}
           />
         )}
@@ -1537,14 +1540,18 @@ function CanvaVideoConvertModal({
   pkg,
   converting,
   durationPerSlide,
+  useMagicAnimate,
   onDurationChange,
+  onMagicAnimateChange,
   onConvert,
   onClose,
 }: {
   pkg: CanvaPackage;
   converting: boolean;
   durationPerSlide: number;
+  useMagicAnimate: boolean;
   onDurationChange: (v: number) => void;
+  onMagicAnimateChange: (v: boolean) => void;
   onConvert: () => void;
   onClose: () => void;
 }) {
@@ -1694,6 +1701,36 @@ function CanvaVideoConvertModal({
             </strong>
           </div>
         </div>
+
+        {/* Sihirli Animasyon Onayı */}
+        <label
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "10px",
+            padding: "10px 12px",
+            borderRadius: "10px",
+            background: useMagicAnimate ? "#f0fdf4" : "#f8fafc",
+            border: useMagicAnimate ? "1px solid #bbf7d0" : "1px solid #e2e8f0",
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={useMagicAnimate}
+            onChange={(e) => onMagicAnimateChange(e.target.checked)}
+            disabled={converting}
+            style={{ marginTop: "3px" }}
+          />
+          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+            <span style={{ fontSize: "13px", fontWeight: 600, color: "#166534" }}>
+              ✨ Canva Sihirli Animasyon (Magic Animate) Uygula
+            </span>
+            <span style={{ fontSize: "11px", color: "#64748b" }}>
+              Hermes tarayıcı üzerinden Canva editörüne bağlanır ve tüm slayt öğelerine tek tıkla otomatik hareket/geçiş efekti uygular.
+            </span>
+          </div>
+        </label>
 
         {/* Bilgilendirme */}
         <div style={{ fontSize: "11px", color: "#64748b", lineHeight: 1.5 }}>

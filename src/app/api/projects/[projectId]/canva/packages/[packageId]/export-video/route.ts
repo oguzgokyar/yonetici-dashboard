@@ -15,6 +15,7 @@ type Context = { params: Promise<{ projectId: string; packageId: string }> };
 interface ExportVideoBody {
   durationPerSlide?: number; // e.g. 2, 3.5, 5
   animationType?: "canva" | "crossfade";
+  useMagicAnimate?: boolean;
 }
 
 export async function POST(request: Request, context: Context) {
@@ -57,6 +58,18 @@ export async function POST(request: Request, context: Context) {
   const canvaConfig = getCanvaConfig();
   const apiKey = canvaConfig.apiKey;
   const baseUrl = canvaConfig.baseUrl.replace(/\/+$/, "");
+
+  // 0. Optional: Apply Magic Animate via CDP if requested
+  if (body.useMagicAnimate) {
+    try {
+      await execFileAsync("python3", [
+        "/opt/data/scripts/canva_magic_animate_cdp.py",
+        pkg.canva_design_id,
+      ], { timeout: 35000 });
+    } catch {
+      // Non-fatal: if CDP automation fails or browser is closed, continue with standard export
+    }
+  }
 
   const prompt = `Call mcp__canva__export_design directly on design_id='${pkg.canva_design_id}' with format={'type':'mp4', 'quality':'horizontal_1080p'}.
 Wait for export completion using mcp__canva__get_export_job or check returned download URLs.
