@@ -59,21 +59,17 @@ export async function POST(request: Request, context: Context) {
   const apiKey = canvaConfig.apiKey;
   const baseUrl = canvaConfig.baseUrl.replace(/\/+$/, "");
 
-  // 0. Optional: Apply Magic Animate via CDP if requested
+  let prompt = "";
   if (body.useMagicAnimate) {
-    try {
-      await execFileAsync("python3", [
-        "/opt/data/scripts/canva_magic_animate_cdp.py",
-        pkg.canva_design_id,
-      ], { timeout: 35000 });
-    } catch {
-      // Non-fatal: if CDP automation fails or browser is closed, continue with standard export
-    }
-  }
-
-  const prompt = `Call mcp__canva__export_design directly on design_id='${pkg.canva_design_id}' with format={'type':'mp4', 'quality':'horizontal_1080p'}.
+    prompt = `1. If CDP browser is available, apply magic animation on design_id='${pkg.canva_design_id}':
+/opt/hermes/.venv/bin/python /opt/data/scripts/canva_magic_animate_cdp.py ${pkg.canva_design_id}
+2. Call mcp__canva__export_design on design_id='${pkg.canva_design_id}' with format={'type':'mp4', 'quality':'horizontal_1080p'}.
+3. Return the exact download URL of the exported MP4 file.`;
+  } else {
+    prompt = `Call mcp__canva__export_design directly on design_id='${pkg.canva_design_id}' with format={'type':'mp4', 'quality':'horizontal_1080p'}.
 Wait for export completion using mcp__canva__get_export_job or check returned download URLs.
 Return the exact download URL of the exported MP4 file.`;
+  }
 
   try {
     // 1. Dispatch export to Hermes Agent
@@ -126,12 +122,19 @@ Return the exact download URL of the exported MP4 file.`;
         throw new Error(runStatus.error || "Canva video export başarısız oldu.");
       }
 
-      if (runStatus.status === "completed" && runStatus.output) {
-        const urlMatch = runStatus.output.match(/https:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/i);
-        if (urlMatch) {
-          downloadUrl = urlMatch[0];
-          break;
+      if (runStatus.status === "completed") {
+        if (runStatus.output) {
+          const urlMatch = runStatus.output.match(/https:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/i);
+          if (urlMatch) {
+            downloadUrl = urlMatch[0];
+            break;
+          }
         }
+        const rawErr = (runStatus.output || runStatus.error || "").trim();
+        if (rawErr.toLowerCase().includes("not allowed to access design")) {
+          throw new Error("Bu tasarım eski Canva hesabına ait olduğundan erişilemiyor. Lütfen yeni oluşturulan tasarımları kullanın veya tasarımı ai.deneyleri@gmail.com ile paylaşın.");
+        }
+        throw new Error(rawErr || "Canva video çıktısı üretilemedi.");
       }
     }
 

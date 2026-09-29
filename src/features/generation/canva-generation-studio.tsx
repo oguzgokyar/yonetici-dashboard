@@ -117,6 +117,7 @@ export function CanvaGenerationStudio({
   const [durationPerSlide, setDurationPerSlide] = useState<number>(3.5);
   const [activeVideoPlayerPkg, setActiveVideoPlayerPkg] = useState<CanvaPackage | null>(null);
   const [useMagicAnimate, setUseMagicAnimate] = useState<boolean>(true);
+  const [videoConvertError, setVideoConvertError] = useState<string | null>(null);
 
   // Gallery / Lightbox state for Carousel packages
   const [activePackage, setActivePackage] = useState<CanvaPackage | null>(null);
@@ -312,6 +313,7 @@ export function CanvaGenerationStudio({
 
   async function handleConvertVideo(packageId: string, durationSec: number, magicAnimate: boolean) {
     setConvertingVideoPkgId(packageId);
+    setVideoConvertError(null);
     setMessage("");
     try {
       const res = await fetch(
@@ -350,7 +352,9 @@ export function CanvaGenerationStudio({
       setArchiveTab("videos");
       setMessage("Canva tasarımı başarıyla videoya dönüştürüldü!");
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Video dönüştürme başarısız.");
+      const errText = err instanceof Error ? err.message : "Video dönüştürme başarısız.";
+      setVideoConvertError(errText);
+      setMessage(errText);
     } finally {
       setConvertingVideoPkgId(null);
     }
@@ -590,7 +594,10 @@ export function CanvaGenerationStudio({
                   deleting={deletingId === pkg.id}
                   convertingVideo={convertingVideoPkgId === pkg.id}
                   onOpenGallery={() => openGallery(pkg)}
-                  onOpenVideoModal={() => setVideoModalPkg(pkg)}
+                  onOpenVideoModal={() => {
+                    setVideoConvertError(null);
+                    setVideoModalPkg(pkg);
+                  }}
                   onWatchVideo={() => setActiveVideoPlayerPkg(pkg)}
                   onDelete={() => void handleDeletePackage(pkg.id)}
                 />
@@ -673,6 +680,7 @@ export function CanvaGenerationStudio({
           <CanvaVideoConvertModal
             pkg={videoModalPkg}
             converting={convertingVideoPkgId === videoModalPkg.id}
+            error={videoConvertError}
             durationPerSlide={durationPerSlide}
             useMagicAnimate={useMagicAnimate}
             onDurationChange={setDurationPerSlide}
@@ -1539,6 +1547,7 @@ function CanvaVideoCard({
 function CanvaVideoConvertModal({
   pkg,
   converting,
+  error,
   durationPerSlide,
   useMagicAnimate,
   onDurationChange,
@@ -1548,6 +1557,7 @@ function CanvaVideoConvertModal({
 }: {
   pkg: CanvaPackage;
   converting: boolean;
+  error?: string | null;
   durationPerSlide: number;
   useMagicAnimate: boolean;
   onDurationChange: (v: number) => void;
@@ -1737,6 +1747,26 @@ function CanvaVideoConvertModal({
           💡 Video render işlemi doğrudan Canva Cloud üzerinde gerçekleştirilir; sunucunuza CPU/bellek
           yükü bindirmez. Tamamlandığında &quot;Üretilen Videolar&quot; sekmesine eklenecektir.
         </div>
+
+        {error && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "8px",
+              padding: "10px 12px",
+              borderRadius: "10px",
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+              color: "#991b1b",
+              fontSize: "12px",
+              lineHeight: 1.4,
+            }}
+          >
+            <AlertCircle size={16} style={{ flexShrink: 0, marginTop: "2px" }} />
+            <span>{error}</span>
+          </div>
+        )}
 
         <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "6px" }}>
           <button
