@@ -13,7 +13,7 @@ export function isCanvaStudioEnabled(): boolean {
 }
 
 export function getCanvaConfig(): CanvaConfig {
-  const rawBaseUrl = process.env.HERMES_AGENT_BASE_URL || "http://10.0.1.8:8645";
+  const rawBaseUrl = process.env.HERMES_AGENT_BASE_URL || "http://10.0.1.1:8643";
   const baseUrl = rawBaseUrl.trim().replace(/\/+$/, "");
   const apiKey = (process.env.HERMES_AGENT_API_KEY || "").trim();
   const callbackToken = (process.env.CANVA_CALLBACK_TOKEN || "").trim();
