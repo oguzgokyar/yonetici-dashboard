@@ -240,6 +240,7 @@ export async function POST(request: Request, context: Context) {
     });
 
     if (dispatchResult.dispatched) {
+      console.log(`[Canva Job] Dispatched job ${jobId} to Hermes (runId: ${dispatchResult.runId || 'unknown'})`);
       database
         .prepare("UPDATE generation_jobs SET status='running', progress_json=? WHERE id=?")
         .run(
@@ -247,11 +248,12 @@ export async function POST(request: Request, context: Context) {
             phase: "running",
             percent: 10,
             detail: "Hermes üretimi başlattı",
+            runId: dispatchResult.runId || null,
             updatedAt: new Date().toISOString(),
           }),
           jobId
         );
-      return Response.json({ ok: true, jobId }, { status: 202 });
+      return Response.json({ ok: true, jobId, runId: dispatchResult.runId }, { status: 202 });
     }
 
     // Failed dispatch

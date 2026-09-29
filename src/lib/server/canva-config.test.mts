@@ -52,7 +52,7 @@ test("getCanvaConfig returns expected defaults and overrides", () => {
     delete process.env.CANVA_CALLBACK_TOKEN;
 
     const defaultConfig = getCanvaConfig();
-    assert.equal(defaultConfig.baseUrl, "http://127.0.0.1:8643");
+    assert.equal(defaultConfig.baseUrl, "http://10.0.1.8:8645");
     assert.equal(defaultConfig.apiKey, "");
     assert.equal(defaultConfig.callbackToken, "");
 
