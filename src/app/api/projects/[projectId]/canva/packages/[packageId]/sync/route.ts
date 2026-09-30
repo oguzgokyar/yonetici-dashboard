@@ -151,16 +151,34 @@ export async function POST(_request: Request, context: Context) {
       }
     }
 
+    // 3. Remove orphaned slides if slide count decreased in Canva
+    const newPositions = new Set(Array.from({ length: itemsList.length }, (_, i) => i + 1));
+    for (const oldItem of existingItems) {
+      if (!newPositions.has(oldItem.position)) {
+        // Delete all asset files for orphaned slide
+        for (const ext of [".png", ".json", "_thumb.webp", "_preview.webp"]) {
+          try {
+            const p = path.join(assetsDir, `${oldItem.asset_id}${ext}`);
+            if (fs.existsSync(p)) fs.unlinkSync(p);
+          } catch {}
+        }
+        // Remove from database
+        database.prepare("DELETE FROM media_package_items WHERE id=?").run(oldItem.id);
+      }
+    }
+
     // Update package count & timestamp
     database
       .prepare("UPDATE media_packages SET item_count=?, cover_asset_id=?, updated_at=? WHERE id=?")
       .run(itemsList.length, newCoverAssetId, new Date().toISOString(), packageId);
 
-    // 3. If package has a video or is a video package, re-export the video with Magic Animate
+    // 4. If package has a video or is a video package, clean old video files and re-export with Magic Animate
     let videoUpdated = false;
-    if (pkg.video_asset_id || pkg.package_type === "video") {
+    const oldVideoAssetId = pkg.video_asset_id;
+
+    if (oldVideoAssetId || pkg.package_type === "video") {
       try {
-        await exportPackageVideoHelper({
+        const videoRes = await exportPackageVideoHelper({
           database,
           packageId,
           projectId,
@@ -169,6 +187,17 @@ export async function POST(_request: Request, context: Context) {
           durationPerSlide: 3.5,
           useMagicAnimate: true,
         });
+
+        // If a new video was generated and differs from oldVideoAssetId, delete the old video files immediately
+        if (oldVideoAssetId && videoRes.videoAssetId && oldVideoAssetId !== videoRes.videoAssetId) {
+          for (const ext of [".mp4", ".json"]) {
+            try {
+              const oldFile = path.join(assetsDir, `${oldVideoAssetId}${ext}`);
+              if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
+            } catch {}
+          }
+        }
+
         videoUpdated = true;
       } catch (videoErr) {
         console.error("[Sync Video Error]:", videoErr);

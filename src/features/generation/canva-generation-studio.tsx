@@ -66,6 +66,7 @@ export interface CanvaPackage {
   videoUrl?: string | null;
   videoDuration?: number | null;
   createdAt: string;
+  updatedAt?: string;
   items: CanvaPackageItem[];
 }
 
@@ -277,6 +278,7 @@ export function CanvaGenerationStudio({
   }
 
   async function handleSyncPackage(packageId: string) {
+    if (syncingPkgId) return; // Concurrency guard: only one sync at a time
     setSyncingPkgId(packageId);
     setMessage("");
     try {
@@ -707,6 +709,7 @@ export function CanvaGenerationStudio({
                   deleting={deletingId === pkg.id}
                   convertingVideo={convertingVideoPkgId === pkg.id}
                   syncing={syncingPkgId === pkg.id}
+                  isAnySyncing={Boolean(syncingPkgId)}
                   onOpenGallery={() => openGallery(pkg)}
                   onOpenVideoModal={() => {
                     setVideoConvertError(null);
@@ -756,6 +759,7 @@ export function CanvaGenerationStudio({
                     pkg={pkg}
                     projectId={projectId}
                     syncing={syncingPkgId === pkg.id}
+                    isAnySyncing={Boolean(syncingPkgId)}
                     onPlay={() => setActiveVideoPlayerPkg(pkg)}
                     onSync={() => void handleSyncPackage(pkg.id)}
                   />
@@ -779,6 +783,20 @@ export function CanvaGenerationStudio({
             </div>
           )
         )}
+
+        {/* Global Keyframes Style for Card Pulse */}
+        <style jsx global>{`
+          @keyframes pulseGlow {
+            0%, 100% {
+              box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.45);
+              border-color: #3b82f6;
+            }
+            50% {
+              box-shadow: 0 0 0 10px rgba(59, 130, 246, 0.15);
+              border-color: #60a5fa;
+            }
+          }
+        `}</style>
       </section>
 
         {/* Carousel Lightbox / Galeri Modalı */}
@@ -933,6 +951,7 @@ function CanvaPackageCard({
   deleting,
   convertingVideo,
   syncing,
+  isAnySyncing,
   onOpenGallery,
   onOpenVideoModal,
   onWatchVideo,
@@ -944,6 +963,7 @@ function CanvaPackageCard({
   deleting: boolean;
   convertingVideo: boolean;
   syncing?: boolean;
+  isAnySyncing?: boolean;
   onOpenGallery: () => void;
   onOpenVideoModal?: () => void;
   onWatchVideo?: () => void;
@@ -951,7 +971,7 @@ function CanvaPackageCard({
   onDelete: () => void;
 }) {
   const isCarousel = pkg.packageType === "carousel";
-  const thumbUrl = pkg.coverUrl ? `${pkg.coverUrl}?thumb=1` : "";
+  const thumbUrl = pkg.coverUrl ? `${pkg.coverUrl}?thumb=1&v=${new Date(pkg.updatedAt || pkg.createdAt).getTime()}` : "";
   const hasVideo = Boolean(pkg.videoUrl);
   const cardAspectRatio =
     pkg.items?.[0]?.width && pkg.items?.[0]?.height
@@ -960,14 +980,17 @@ function CanvaPackageCard({
 
   return (
     <article
-      className="generated-card"
+      className={`generated-card ${syncing ? "syncing-card-pulse" : ""}`}
       style={{
         display: "flex",
         flexDirection: "column",
-        border: "1px solid #e5e7eb",
+        border: syncing ? "2px solid #3b82f6" : "1px solid #e5e7eb",
         borderRadius: "14px",
         overflow: "hidden",
         background: "white",
+        position: "relative",
+        boxShadow: syncing ? "0 0 16px rgba(59, 130, 246, 0.45)" : undefined,
+        animation: syncing ? "pulseGlow 1.4s ease-in-out infinite" : undefined,
       }}
     >
       <div
@@ -976,30 +999,59 @@ function CanvaPackageCard({
           width: "100%",
           aspectRatio: cardAspectRatio,
           background: "#f3f4f6",
-          cursor: "pointer",
+          cursor: syncing ? "wait" : "pointer",
         }}
-        onClick={onOpenGallery}
+        onClick={syncing ? undefined : onOpenGallery}
       >
         {thumbUrl ? (
           <Image
             src={thumbUrl}
-            alt={pkg.title}
+            alt={pkg.title || "Canva Tasarım"}
             fill
-            sizes="(max-width: 760px) 100vw, 30vw"
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             unoptimized
-            style={{ objectFit: "cover" }}
+            style={{ objectFit: "cover", opacity: syncing ? 0.4 : 1 }}
           />
         ) : (
           <div
             style={{
-              width: "100%",
-              height: "100%",
+              position: "absolute",
+              inset: 0,
               display: "grid",
               placeItems: "center",
               color: "#9ca3af",
             }}
           >
             <FileImage size={40} />
+          </div>
+        )}
+
+        {/* Syncing Overlay Feedback */}
+        {syncing && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "rgba(15, 23, 42, 0.65)",
+              backdropFilter: "blur(3px)",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              color: "white",
+              zIndex: 10,
+              padding: "16px",
+              textAlign: "center",
+            }}
+          >
+            <RefreshCw className="spin" size={28} color="#60a5fa" />
+            <span style={{ fontSize: "12px", fontWeight: 700, letterSpacing: "0.3px" }}>
+              Canva&apos;dan Güncelleniyor...
+            </span>
+            <span style={{ fontSize: "10px", color: "#93c5fd" }}>
+              Eski dosyalar temizlenip yenileniyor
+            </span>
           </div>
         )}
 
@@ -1137,8 +1189,12 @@ function CanvaPackageCard({
             <button
               type="button"
               onClick={onSync}
-              disabled={syncing}
-              title="Canva'da yaptığınız son değişiklikleri yeniden indirip güncelleyin"
+              disabled={isAnySyncing}
+              title={
+                isAnySyncing
+                  ? "Başka bir güncelleme işlemi devam ediyor..."
+                  : "Canva'da yaptığınız son değişiklikleri yeniden indirip güncelleyin"
+              }
               style={{
                 display: "grid",
                 placeItems: "center",
@@ -1146,9 +1202,10 @@ function CanvaPackageCard({
                 height: "28px",
                 borderRadius: "6px",
                 border: "1px solid #e2e8f0",
-                color: "#0284c7",
-                background: "#f0f9ff",
-                cursor: "pointer",
+                color: isAnySyncing ? "#94a3b8" : "#0284c7",
+                background: isAnySyncing ? "#f1f5f9" : "#f0f9ff",
+                cursor: isAnySyncing ? "not-allowed" : "pointer",
+                opacity: isAnySyncing && !syncing ? 0.5 : 1,
               }}
             >
               {syncing ? <LoaderCircle className="spin" size={13} /> : <RefreshCw size={13} />}
@@ -1454,16 +1511,18 @@ function CanvaVideoCard({
   pkg,
   projectId,
   syncing,
+  isAnySyncing,
   onPlay,
   onSync,
 }: {
   pkg: CanvaPackage;
   projectId: string;
   syncing?: boolean;
+  isAnySyncing?: boolean;
   onPlay: () => void;
   onSync?: () => void;
 }) {
-  const thumbUrl = pkg.coverUrl ? `${pkg.coverUrl}?thumb=1` : "";
+  const thumbUrl = pkg.coverUrl ? `${pkg.coverUrl}?thumb=1&v=${new Date(pkg.updatedAt || pkg.createdAt).getTime()}` : "";
   const videoAspectRatio =
     pkg.items?.[0]?.width && pkg.items?.[0]?.height
       ? `${pkg.items[0].width}/${pkg.items[0].height}`
@@ -1471,15 +1530,17 @@ function CanvaVideoCard({
 
   return (
     <article
-      className="generated-card"
+      className={`generated-card ${syncing ? "syncing-card-pulse" : ""}`}
       style={{
         display: "flex",
         flexDirection: "column",
-        border: "1px solid #e0e7ff",
+        border: syncing ? "2px solid #3b82f6" : "1px solid #e0e7ff",
         borderRadius: "14px",
         overflow: "hidden",
         background: "white",
-        boxShadow: "0 2px 8px rgba(79, 70, 229, 0.06)",
+        boxShadow: syncing ? "0 0 16px rgba(59, 130, 246, 0.45)" : "0 2px 8px rgba(79, 70, 229, 0.06)",
+        position: "relative",
+        animation: syncing ? "pulseGlow 1.4s ease-in-out infinite" : undefined,
       }}
     >
       <div
@@ -1489,10 +1550,10 @@ function CanvaVideoCard({
           width: "100%",
           aspectRatio: videoAspectRatio,
           background: "#0f172a",
-          cursor: "pointer",
+          cursor: syncing ? "wait" : "pointer",
           overflow: "hidden",
         }}
-        onClick={onPlay}
+        onClick={syncing ? undefined : onPlay}
       >
         {thumbUrl ? (
           <Image
@@ -1501,7 +1562,7 @@ function CanvaVideoCard({
             fill
             sizes="(max-width: 768px) 100vw, 320px"
             unoptimized
-            style={{ objectFit: "cover", opacity: 0.8 }}
+            style={{ objectFit: "cover", opacity: syncing ? 0.35 : 0.8 }}
           />
         ) : (
           <div
@@ -1514,6 +1575,35 @@ function CanvaVideoCard({
             }}
           >
             <Film size={36} />
+          </div>
+        )}
+
+        {/* Syncing Overlay Feedback */}
+        {syncing && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "rgba(15, 23, 42, 0.75)",
+              backdropFilter: "blur(3px)",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              color: "white",
+              zIndex: 10,
+              padding: "16px",
+              textAlign: "center",
+            }}
+          >
+            <RefreshCw className="spin" size={30} color="#60a5fa" />
+            <span style={{ fontSize: "12px", fontWeight: 700, letterSpacing: "0.3px" }}>
+              Video Canva&apos;dan Yenileniyor...
+            </span>
+            <span style={{ fontSize: "10px", color: "#93c5fd" }}>
+              Sihirli animasyon render ediliyor, eski video siliniyor
+            </span>
           </div>
         )}
 
@@ -1657,8 +1747,12 @@ function CanvaVideoCard({
             <button
               type="button"
               onClick={onSync}
-              disabled={syncing}
-              title="Canva'da yapılan son düzeltmeleri (metin, animasyon) yeniden indir ve güncelle"
+              disabled={isAnySyncing}
+              title={
+                isAnySyncing
+                  ? "Başka bir güncelleme işlemi devam ediyor..."
+                  : "Canva'da yapılan son düzeltmeleri (metin, animasyon) yeniden indir ve güncelle"
+              }
               style={{
                 display: "grid",
                 placeItems: "center",
@@ -1666,9 +1760,10 @@ function CanvaVideoCard({
                 height: "28px",
                 borderRadius: "6px",
                 border: "1px solid #e2e8f0",
-                color: "#0284c7",
-                background: "#f0f9ff",
-                cursor: "pointer",
+                color: isAnySyncing ? "#94a3b8" : "#0284c7",
+                background: isAnySyncing ? "#f1f5f9" : "#f0f9ff",
+                cursor: isAnySyncing ? "not-allowed" : "pointer",
+                opacity: isAnySyncing && !syncing ? 0.5 : 1,
               }}
             >
               {syncing ? <LoaderCircle className="spin" size={13} /> : <RefreshCw size={13} />}
