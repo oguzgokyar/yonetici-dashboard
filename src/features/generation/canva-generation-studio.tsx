@@ -109,6 +109,7 @@ export function CanvaGenerationStudio({
   const [loadingPackages, setLoadingPackages] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
+  const [dismissedFailedJobId, setDismissedFailedJobId] = useState<string | null>(null);
   const [archiveTab, setArchiveTab] = useState<"packages" | "videos">("packages");
 
   // Video conversion and playback state
@@ -127,6 +128,9 @@ export function CanvaGenerationStudio({
 
   const activeJob = jobs.find((j) =>
     ["queued", "dispatching", "running", "exporting", "uploading"].includes(j.status)
+  );
+  const latestFailedJob = jobs.find(
+    (j) => j.status === "failed" && j.id !== dismissedFailedJobId
   );
   const isProducing = producing || Boolean(activeJob);
 
@@ -595,6 +599,55 @@ export function CanvaGenerationStudio({
             </button>
           </div>
         </div>
+
+        {/* Başarısız Görev Uyarısı */}
+        {!isProducing && latestFailedJob && (
+          <div
+            style={{
+              padding: "14px 18px",
+              borderRadius: "12px",
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+              marginBottom: "16px",
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              gap: "12px",
+            }}
+          >
+            <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+              <AlertCircle size={20} color="#dc2626" style={{ flexShrink: 0, marginTop: "2px" }} />
+              <div>
+                <h4 style={{ margin: "0 0 4px 0", fontSize: "14px", fontWeight: 700, color: "#991b1b" }}>
+                  Üretim Başarısız Oldu
+                </h4>
+                <p style={{ margin: 0, fontSize: "12px", color: "#b91c1c", lineHeight: 1.45 }}>
+                  {(latestFailedJob.progress?.detail || latestFailedJob.error || "").includes("quota_exceeded")
+                    ? "Canva hesabı (ai.deneyleri@gmail.com) yapay zeka tasarım üretme kotasını (AI design generation quota) doldurdu. Canva Free hesaplarında sınırlı sayıda tasarım hakkı bulunur. Mevcut şablonlar üzerinden devam edebilir veya kotanın sıfırlanmasını bekleyebilirsiniz."
+                    : latestFailedJob.progress?.detail || latestFailedJob.error || "Canva üretimi sırasında bir hata oluştu."}
+                </p>
+                <div style={{ marginTop: "6px", fontSize: "11px", color: "#7f1d1d" }}>
+                  Prompt: &quot;{latestFailedJob.prompt.slice(0, 80)}...&quot;
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDismissedFailedJobId(latestFailedJob.id)}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#991b1b",
+                cursor: "pointer",
+                padding: "2px",
+                flexShrink: 0,
+              }}
+              title="Kapat"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
 
         {/* Aktif Üretim Stepper */}
         {isProducing && activeJob && (
