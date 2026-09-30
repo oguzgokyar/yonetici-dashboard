@@ -14,6 +14,7 @@ import {
   Instagram,
   LoaderCircle,
   Megaphone,
+  Music2,
   Plus,
   RefreshCw,
   Send,
@@ -22,6 +23,7 @@ import {
   Trash2,
   Video,
   X,
+  Youtube,
 } from "lucide-react";
 import {
   extractStockPublishingMetadata,
@@ -954,6 +956,8 @@ export function PublishingStudio({
                 <div className="account-select-grid">
                   {accounts.map((acc) => {
                     const isSelected = selectedIntegration === acc.integrationId;
+                    const isYt = acc.identifier === "youtube";
+                    const isTt = acc.identifier === "tiktok";
                     return (
                       <button
                         key={acc.id}
@@ -963,12 +967,18 @@ export function PublishingStudio({
                       >
                         {acc.picture ? (
                           <img src={acc.picture} alt="" />
+                        ) : isYt ? (
+                          <Youtube size={18} style={{ color: "#ff0000" }} />
+                        ) : isTt ? (
+                          <Music2 size={18} style={{ color: "#010101" }} />
                         ) : (
                           <Instagram size={18} style={{ color: "#612bd3" }} />
                         )}
                         <div style={{ minWidth: 0 }}>
                           <strong>{acc.name}</strong>
-                          <small>@{acc.profile || acc.identifier}</small>
+                          <small>
+                            {isYt ? "YouTube Kanalı" : isTt ? "TikTok Hesabı" : `@${acc.profile || acc.identifier}`}
+                          </small>
                         </div>
                       </button>
                     );
@@ -980,24 +990,69 @@ export function PublishingStudio({
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <label className="field-label">
                   3. Format
-                  <select
-                    value={postType}
-                    onChange={(e) => setPostType(e.target.value as "post" | "reel" | "story")}
-                    disabled={selectedMedia?.category === "canva_package" && selectedMedia.packageType === "carousel"}
-                    style={{
-                      width: "100%",
-                      height: "40px",
-                      border: "1px solid #dedfe6",
-                      borderRadius: "10px",
-                      padding: "0 10px",
-                      background: "white",
-                      fontSize: "12px",
-                    }}
-                  >
-                    <option value="post">Instagram Gönderi (Feed)</option>
-                    <option value="reel">Instagram Reels</option>
-                    <option value="story">Instagram Hikâye (Story)</option>
-                  </select>
+                  {(() => {
+                    const currentAcc = accounts.find((a) => a.integrationId === selectedIntegration);
+                    if (currentAcc?.identifier === "youtube") {
+                      return (
+                        <select
+                          value={postType}
+                          onChange={(e) => setPostType(e.target.value as "post" | "reel" | "story")}
+                          style={{
+                            width: "100%",
+                            height: "40px",
+                            border: "1px solid #dedfe6",
+                            borderRadius: "10px",
+                            padding: "0 10px",
+                            background: "white",
+                            fontSize: "12px",
+                          }}
+                        >
+                          <option value="reel">YouTube Shorts (Dikey &le;60s)</option>
+                          <option value="post">Standart Video (Yatay/Genel)</option>
+                        </select>
+                      );
+                    }
+                    if (currentAcc?.identifier === "tiktok") {
+                      return (
+                        <select
+                          value={postType}
+                          onChange={(e) => setPostType(e.target.value as "post" | "reel" | "story")}
+                          style={{
+                            width: "100%",
+                            height: "40px",
+                            border: "1px solid #dedfe6",
+                            borderRadius: "10px",
+                            padding: "0 10px",
+                            background: "white",
+                            fontSize: "12px",
+                          }}
+                        >
+                          <option value="reel">TikTok Video (Akış / Doğrudan Paylaşım)</option>
+                          <option value="post">TikTok Fotoğraf Gönderisi</option>
+                        </select>
+                      );
+                    }
+                    return (
+                      <select
+                        value={postType}
+                        onChange={(e) => setPostType(e.target.value as "post" | "reel" | "story")}
+                        disabled={selectedMedia?.category === "canva_package" && selectedMedia.packageType === "carousel"}
+                        style={{
+                          width: "100%",
+                          height: "40px",
+                          border: "1px solid #dedfe6",
+                          borderRadius: "10px",
+                          padding: "0 10px",
+                          background: "white",
+                          fontSize: "12px",
+                        }}
+                      >
+                        <option value="post">Instagram Gönderi (Feed)</option>
+                        <option value="reel">Instagram Reels</option>
+                        <option value="story">Instagram Hikâye (Story)</option>
+                      </select>
+                    );
+                  })()}
                 </label>
 
                 <label className="field-label">

@@ -13,6 +13,8 @@ import {
   Settings,
   Share2,
   Unlink,
+  Youtube,
+  Music2,
 } from "lucide-react";
 
 type ConnectedAccount = {
@@ -44,6 +46,44 @@ type AccountsResponse = {
   postizError?: string;
   postizWebUrl: string;
 };
+
+// Platform bilgilerini döndüren yardımcı fonksiyon
+function getPlatformMeta(identifier: string): {
+  label: string;
+  color: string;
+  bg: string;
+  icon: React.ReactNode;
+  description: string;
+} {
+  switch (identifier) {
+    case "youtube":
+      return {
+        label: "YouTube",
+        color: "#ff0000",
+        bg: "#fff0f0",
+        icon: <Youtube size={18} />,
+        description: "Shorts & Uzun Video",
+      };
+    case "tiktok":
+      return {
+        label: "TikTok",
+        color: "#010101",
+        bg: "#f0f0f0",
+        icon: <Music2 size={18} />,
+        description: "Video & Fotoğraf Karesi",
+      };
+    case "instagram-standalone":
+    case "instagram":
+    default:
+      return {
+        label: "Instagram",
+        color: "#e1306c",
+        bg: "#fff0f5",
+        icon: <Instagram size={18} />,
+        description: "Reels, Story, Feed",
+      };
+  }
+}
 
 export function ProjectAccounts({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true);
@@ -123,6 +163,22 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
   const unlinkedAvailable = (data?.available || []).filter((item) => !connectedIds.has(item.id));
   const connectedCount = data?.connected.length || 0;
 
+  // Platform sayıları
+  const platformCounts = (data?.connected || []).reduce<Record<string, number>>((acc, a) => {
+    const id = a.identifier || "instagram";
+    acc[id] = (acc[id] || 0) + 1;
+    return acc;
+  }, {});
+  const platformLabels = Object.keys(platformCounts)
+    .map((id) => getPlatformMeta(id).label)
+    .join(", ") || "—";
+
+  // Desteklenen platformlar: YouTube ve TikTok bağlama kılavuzu
+  const hasYoutube = (data?.available || []).some((a) => a.identifier === "youtube") ||
+    (data?.connected || []).some((a) => a.identifier === "youtube");
+  const hasTiktok = (data?.available || []).some((a) => a.identifier === "tiktok") ||
+    (data?.connected || []).some((a) => a.identifier === "tiktok");
+
   return (
     <>
       {/* 1. Page Intro */}
@@ -171,8 +227,8 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
           <div className="metric-icon blue"><Instagram size={19} /></div>
           <div>
             <span>Platformlar</span>
-            <strong>{connectedCount > 0 ? "Instagram" : "—"}</strong>
-            <small>Reels, Story, Feed</small>
+            <strong>{connectedCount > 0 ? platformLabels : "—"}</strong>
+            <small>Bağlı Kanallar</small>
           </div>
         </div>
 
@@ -240,47 +296,59 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
 
         {connectedCount > 0 ? (
           <div className="accounts-grid">
-            {data?.connected.map((account) => (
-              <div key={account.id} className="account-card">
-                {account.picture ? (
-                  <img
-                    src={account.picture}
-                    alt={account.name}
-                    className="account-avatar"
-                  />
-                ) : (
-                  <div className="account-avatar-placeholder">
-                    <Instagram size={20} />
-                  </div>
-                )}
-                <div className="account-info">
-                  <h4 className="account-name">{account.name || "İsimsiz"}</h4>
-                  <span className="account-meta">
-                    {account.profile ? `@${account.profile}` : account.identifier}
-                  </span>
-                  <div style={{ marginTop: "4px" }}>
-                    <span className="badge-pill success">
-                      <CheckCircle2 size={10} /> Bağlı
-                    </span>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => unlinkAccount(account.id)}
-                  disabled={actionLoading === `unlink-${account.id}`}
-                  className="icon-button"
-                  style={{ color: "#d83d45" }}
-                  title="Bağlantıyı Kaldır"
-                >
-                  {actionLoading === `unlink-${account.id}` ? (
-                    <LoaderCircle className="spin" size={16} />
+            {data?.connected.map((account) => {
+              const meta = getPlatformMeta(account.identifier || account.service);
+              return (
+                <div key={account.id} className="account-card">
+                  {account.picture ? (
+                    <img
+                      src={account.picture}
+                      alt={account.name}
+                      className="account-avatar"
+                    />
                   ) : (
-                    <Unlink size={16} />
+                    <div
+                      className="account-avatar-placeholder"
+                      style={{ background: meta.bg, color: meta.color }}
+                    >
+                      {meta.icon}
+                    </div>
                   )}
-                </button>
-              </div>
-            ))}
+                  <div className="account-info">
+                    <h4 className="account-name">{account.name || "İsimsiz"}</h4>
+                    <span className="account-meta">
+                      {account.profile ? `@${account.profile}` : account.identifier}
+                    </span>
+                    <div style={{ marginTop: "4px", display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                      <span className="badge-pill success">
+                        <CheckCircle2 size={10} /> Bağlı
+                      </span>
+                      <span
+                        className="badge-pill"
+                        style={{ background: meta.bg, color: meta.color, border: `1px solid ${meta.color}22` }}
+                      >
+                        {meta.label} · {meta.description}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => unlinkAccount(account.id)}
+                    disabled={actionLoading === `unlink-${account.id}`}
+                    className="icon-button"
+                    style={{ color: "#d83d45" }}
+                    title="Bağlantıyı Kaldır"
+                  >
+                    {actionLoading === `unlink-${account.id}` ? (
+                      <LoaderCircle className="spin" size={16} />
+                    ) : (
+                      <Unlink size={16} />
+                    )}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="panel-empty" style={{ minHeight: "180px" }}>
@@ -308,42 +376,54 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
 
           {unlinkedAvailable.length > 0 ? (
             <div className="accounts-grid">
-              {unlinkedAvailable.map((integration) => (
-                <div key={integration.id} className="account-card">
-                  {integration.picture ? (
-                    <img
-                      src={integration.picture}
-                      alt={integration.name}
-                      className="account-avatar"
-                    />
-                  ) : (
-                    <div className="account-avatar-placeholder" style={{ background: "#f0f1f5", color: "#747785" }}>
-                      <Instagram size={20} />
-                    </div>
-                  )}
-                  <div className="account-info">
-                    <h4 className="account-name">{integration.name}</h4>
-                    <span className="account-meta">
-                      {integration.profile ? `@${integration.profile}` : integration.identifier}
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => linkAccount(integration.id)}
-                    disabled={actionLoading === `link-${integration.id}`}
-                    className="button secondary"
-                    style={{ height: "34px", padding: "0 10px", fontSize: "11px" }}
-                  >
-                    {actionLoading === `link-${integration.id}` ? (
-                      <LoaderCircle className="spin" size={13} />
+              {unlinkedAvailable.map((integration) => {
+                const meta = getPlatformMeta(integration.identifier);
+                return (
+                  <div key={integration.id} className="account-card">
+                    {integration.picture ? (
+                      <img
+                        src={integration.picture}
+                        alt={integration.name}
+                        className="account-avatar"
+                      />
                     ) : (
-                      <Plus size={13} />
+                      <div
+                        className="account-avatar-placeholder"
+                        style={{ background: meta.bg, color: meta.color }}
+                      >
+                        {meta.icon}
+                      </div>
                     )}
-                    Eşle
-                  </button>
-                </div>
-              ))}
+                    <div className="account-info">
+                      <h4 className="account-name">{integration.name}</h4>
+                      <span className="account-meta">
+                        {integration.profile ? `@${integration.profile}` : integration.identifier}
+                      </span>
+                      <span
+                        className="badge-pill"
+                        style={{ marginTop: "4px", background: meta.bg, color: meta.color, border: `1px solid ${meta.color}22` }}
+                      >
+                        {meta.label} · {meta.description}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => linkAccount(integration.id)}
+                      disabled={actionLoading === `link-${integration.id}`}
+                      className="button secondary"
+                      style={{ height: "34px", padding: "0 10px", fontSize: "11px" }}
+                    >
+                      {actionLoading === `link-${integration.id}` ? (
+                        <LoaderCircle className="spin" size={13} />
+                      ) : (
+                        <Plus size={13} />
+                      )}
+                      Eşle
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <div className="panel-empty" style={{ minHeight: "160px" }}>
@@ -351,7 +431,7 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
               <strong>{data.available.length === 0 ? "Postiz'de bağlı hesap bulunamadı" : "Tüm hesaplar eşleştirildi"}</strong>
               <p>
                 {data.available.length === 0
-                  ? "Yeni bir Instagram hesabı bağlamak için Postiz panelini açıp yetkilendirme yapın."
+                  ? "Yeni bir hesap bağlamak için Postiz panelini açıp yetkilendirme yapın."
                   : "Postiz'deki tüm hesaplar bu projeyle zaten eşleştirilmiş durumda."}
               </p>
               {data.postizWebUrl && (
@@ -370,6 +450,99 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
           )}
         </section>
       )}
+
+      {/* 5. YouTube ve TikTok Bağlama Kılavuzu */}
+      {!hasYoutube || !hasTiktok ? (
+        <section className="panel" style={{ marginTop: "18px" }}>
+          <div className="panel-header">
+            <div>
+              <h3>YouTube & TikTok Bağlama Kılavuzu</h3>
+              <p>Bu platformları aktifleştirmek için gereken adımlar</p>
+            </div>
+            <span className="badge-pill" style={{ background: "#fff8e6", color: "#b57c00" }}>API Anahtarı Bekleniyor</span>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", padding: "4px 0" }}>
+            {/* YouTube */}
+            {!hasYoutube && (
+              <div
+                style={{
+                  padding: "20px",
+                  borderRadius: "12px",
+                  border: "1px solid #ffd0d0",
+                  background: "#fff8f8",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+                  <div style={{ padding: "8px", borderRadius: "10px", background: "#fff0f0", color: "#ff0000" }}>
+                    <Youtube size={20} />
+                  </div>
+                  <div>
+                    <strong style={{ fontSize: "14px" }}>YouTube</strong>
+                    <div style={{ fontSize: "11px", color: "#888" }}>Shorts & Uzun Video</div>
+                  </div>
+                </div>
+                <ol style={{ margin: 0, paddingLeft: "16px", fontSize: "12px", lineHeight: 1.8, color: "#555" }}>
+                  <li>Google Cloud Console&apos;da proje oluşturun</li>
+                  <li><strong>YouTube Data API v3</strong> etkinleştirin</li>
+                  <li>OAuth 2.0 Client ID alın (Web Application)</li>
+                  <li>Redirect URI ekleyin: <code style={{ fontSize: "10px" }}>sm.atolyehanem.com/api/v1/integrations/social/youtube/callback</code></li>
+                  <li>Bize <strong>CLIENT_ID</strong> ve <strong>CLIENT_SECRET</strong> gönderin</li>
+                </ol>
+                <a
+                  href="https://console.cloud.google.com/apis/dashboard"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="button secondary"
+                  style={{ marginTop: "12px", width: "100%", justifyContent: "center", fontSize: "11px", height: "34px" }}
+                >
+                  <ExternalLink size={12} />
+                  Google Cloud Console ↗
+                </a>
+              </div>
+            )}
+
+            {/* TikTok */}
+            {!hasTiktok && (
+              <div
+                style={{
+                  padding: "20px",
+                  borderRadius: "12px",
+                  border: "1px solid #d0d0d0",
+                  background: "#f8f8f8",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+                  <div style={{ padding: "8px", borderRadius: "10px", background: "#f0f0f0", color: "#010101" }}>
+                    <Music2 size={20} />
+                  </div>
+                  <div>
+                    <strong style={{ fontSize: "14px" }}>TikTok</strong>
+                    <div style={{ fontSize: "11px", color: "#888" }}>Video & Doğrudan Yayın</div>
+                  </div>
+                </div>
+                <ol style={{ margin: 0, paddingLeft: "16px", fontSize: "12px", lineHeight: 1.8, color: "#555" }}>
+                  <li>developers.tiktok.com&apos;da Developer App oluşturun</li>
+                  <li><strong>Content Posting API</strong> ve <strong>Direct Post</strong> izinlerini ekleyin</li>
+                  <li>Redirect URI ekleyin: <code style={{ fontSize: "10px" }}>sm.atolyehanem.com/api/v1/integrations/social/tiktok/callback</code></li>
+                  <li>Uygulama onayını bekleyin (1-3 iş günü)</li>
+                  <li>Bize <strong>Client Key</strong> ve <strong>Client Secret</strong> gönderin</li>
+                </ol>
+                <a
+                  href="https://developers.tiktok.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="button secondary"
+                  style={{ marginTop: "12px", width: "100%", justifyContent: "center", fontSize: "11px", height: "34px" }}
+                >
+                  <ExternalLink size={12} />
+                  TikTok Developers ↗
+                </a>
+              </div>
+            )}
+          </div>
+        </section>
+      ) : null}
     </>
   );
 }

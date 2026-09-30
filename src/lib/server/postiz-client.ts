@@ -202,14 +202,96 @@ export async function uploadMediaToPostiz(
   return (await response.json()) as PostizUploadedMedia;
 }
 
+// Platform-specific settings types
+export type YouTubePostSettings = {
+  title: string;                              // Required, 2-100 chars
+  type: "public" | "unlisted" | "private";
+  selfDeclaredMadeForKids?: "yes" | "no";
+  tags?: string[];                            // Each tag max 30 chars, total max 500
+};
+
+export type TikTokPostSettings = {
+  content_posting_method: "DIRECT_POST" | "UPLOAD";
+  privacy_level: "PUBLIC_TO_EVERYONE" | "MUTUAL_FOLLOW_FRIENDS" | "FOLLOWER_OF_CREATOR" | "SELF_ONLY";
+  comment?: boolean;
+  duet?: boolean;
+  stitch?: boolean;
+  video_made_with_ai?: boolean;
+};
+
 export type CreatePostizPostParams = {
   type: "now" | "schedule" | "draft";
   date?: string; // ISO 8601 UTC
   integrationId: string;
+  platformIdentifier?: string; // "instagram" | "instagram-standalone" | "youtube" | "tiktok"
   caption: string;
   media?: { id: string; path: string }[];
   postType?: "post" | "reel" | "story";
+  // Platform-specific settings
+  youtubeSettings?: YouTubePostSettings;
+  tiktokSettings?: TikTokPostSettings;
+  // Video metadata for auto-detection
+  videoDurationSeconds?: number;
+  videoAspectRatio?: "9:16" | "16:9" | "1:1" | "4:5";
 };
+
+/**
+ * Detects if a video should be published as YouTube Shorts.
+ * Criteria: 9:16 aspect ratio AND duration <= 60 seconds.
+ */
+export function isYouTubeShorts(params: Pick<CreatePostizPostParams, "videoDurationSeconds" | "videoAspectRatio">): boolean {
+  return params.videoAspectRatio === "9:16" && (params.videoDurationSeconds ?? 999) <= 60;
+}
+
+/**
+ * Builds platform-specific settings for a Postiz post based on the platform identifier.
+ */
+function buildPlatformSettings(params: CreatePostizPostParams): Record<string, unknown> {
+  const platform = params.platformIdentifier || "instagram";
+
+  if (platform === "youtube") {
+    // Auto-detect Shorts and append #Shorts to caption if needed
+    const isShorts = isYouTubeShorts(params);
+    const title = params.youtubeSettings?.title
+      || params.caption.slice(0, 97).trim()
+      || "Video";
+    return {
+      title: title.slice(0, 100),
+      type: params.youtubeSettings?.type || "public",
+      selfDeclaredMadeForKids: params.youtubeSettings?.selfDeclaredMadeForKids || "no",
+      ...(isShorts && { shorts: true }),
+      ...(params.youtubeSettings?.tags?.length && { tags: params.youtubeSettings.tags }),
+    };
+  }
+
+  if (platform === "tiktok") {
+    return {
+      content_posting_method: params.tiktokSettings?.content_posting_method || "DIRECT_POST",
+      privacy_level: params.tiktokSettings?.privacy_level || "PUBLIC_TO_EVERYONE",
+      comment: params.tiktokSettings?.comment ?? true,
+      duet: params.tiktokSettings?.duet ?? true,
+      stitch: params.tiktokSettings?.stitch ?? true,
+      // Always mark AI-generated content for TikTok compliance
+      video_made_with_ai: params.tiktokSettings?.video_made_with_ai ?? true,
+    };
+  }
+
+  // Instagram / Instagram Standalone (default)
+  const postizPostType = params.postType === "story" ? "story" : "post";
+  return { post_type: postizPostType };
+}
+
+/**
+ * Auto-appends #Shorts to caption for YouTube Shorts videos.
+ */
+function buildCaption(params: CreatePostizPostParams): string {
+  const platform = params.platformIdentifier || "instagram";
+  if (platform === "youtube" && isYouTubeShorts(params)) {
+    const hasShorts = params.caption.toLowerCase().includes("#shorts");
+    return hasShorts ? params.caption : `${params.caption}\n\n#Shorts`;
+  }
+  return params.caption;
+}
 
 export async function createPostizPost(
   params: CreatePostizPostParams
@@ -220,9 +302,8 @@ export async function createPostizPost(
   }
 
   const scheduleDate = params.date || new Date(Date.now() + 60_000).toISOString();
-  // Postiz Instagram/Facebook DTO accepts only 'post' | 'story' in settings.post_type.
-  // Single mp4 videos with post_type='post' are automatically published as REELS by Postiz.
-  const postizPostType = params.postType === "story" ? "story" : "post";
+  const platformSettings = buildPlatformSettings(params);
+  const caption = buildCaption(params);
 
   const payload = {
     type: params.type,
@@ -234,13 +315,11 @@ export async function createPostizPost(
         integration: { id: params.integrationId },
         value: [
           {
-            content: params.caption,
+            content: caption,
             image: params.media || [],
           },
         ],
-        settings: {
-          post_type: postizPostType,
-        },
+        settings: platformSettings,
       },
     ],
   };

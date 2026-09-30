@@ -161,11 +161,17 @@ export async function POST(request: Request, context: Context) {
       fullCaption = `${caption}\n\n${formattedTags}`.trim();
     }
 
+    const targetAccount = database
+      .prepare("SELECT identifier FROM project_social_accounts WHERE project_id=? AND integration_id=?")
+      .get(projectId, integrationId) as { identifier?: string } | undefined;
+    const platformIdentifier = targetAccount?.identifier || "instagram";
+
     try {
       const postizResult = await createPostizPost({
         type: scheduleType,
         date: body.scheduledAt,
         integrationId,
+        platformIdentifier,
         caption: fullCaption,
         media: postizMediaList,
         postType,
@@ -446,14 +452,30 @@ export async function POST(request: Request, context: Context) {
     fullCaption = `${caption}\n\n${formattedTags}`.trim();
   }
 
+  const targetAccount = database
+    .prepare("SELECT identifier FROM project_social_accounts WHERE project_id=? AND integration_id=?")
+    .get(projectId, integrationId) as { identifier?: string } | undefined;
+  const platformIdentifier = targetAccount?.identifier || "instagram";
+
   try {
     const postizResult = await createPostizPost({
       type: scheduleType,
       date: body.scheduledAt,
       integrationId,
+      platformIdentifier,
       caption: fullCaption,
       media: postizMedia ? [{ id: postizMedia.id, path: postizMedia.path }] : [],
       postType,
+      youtubeSettings: {
+        title: body.title || "Video Paylaşımı",
+        type: "public",
+        selfDeclaredMadeForKids: "no",
+      },
+      tiktokSettings: {
+        content_posting_method: "DIRECT_POST",
+        privacy_level: "PUBLIC_TO_EVERYONE",
+        video_made_with_ai: true,
+      },
     });
 
     const createdPostId = postizResult[0]?.postId || "";
