@@ -25,7 +25,7 @@ import {
   Download,
   Film,
 } from "lucide-react";
-import type { CanvaContentType } from "@/lib/server/hermes-canva-task";
+import { CANVA_CONTENT_TYPES, type CanvaContentType } from "@/lib/server/hermes-canva-task";
 import type { Project } from "@/features/projects/projects-context";
 
 type BrandKey = "logo" | "brandName" | "phone" | "email" | "address" | "website";
@@ -445,29 +445,59 @@ export function CanvaGenerationStudio({
             <div>
               <select
                 value={contentType}
-                onChange={(e) => setContentType(e.target.value as CanvaContentType)}
+                onChange={(e) => {
+                  const newType = e.target.value as CanvaContentType;
+                  setContentType(newType);
+                  const meta = CANVA_CONTENT_TYPES[newType];
+                  if (meta && meta.packageType === "carousel") {
+                    setSlideCount((prev) => Math.max(meta.minSlides, Math.min(meta.maxSlides, prev || meta.defaultSlides)));
+                  }
+                }}
               >
-                <option value="instagram_carousel">Instagram Carousel (1080×1350)</option>
-                <option value="instagram_post">Instagram Gönderisi (1080×1350)</option>
-                <option value="instagram_story">Instagram Story (1080×1920)</option>
-                <option value="square_post">Kare Gönderi (1080×1080)</option>
-                <option value="pinterest_pin">Pinterest Pin (1000×1500)</option>
+                <optgroup label="📸 Carousel (Çoklu Slayt)">
+                  <option value="instagram_carousel">Instagram Portre Carousel (1080×1350 • 4:5)</option>
+                  <option value="square_carousel">Kare Carousel (1080×1080 • 1:1)</option>
+                  <option value="story_carousel">Dikey / Story Carousel (1080×1920 • 9:16)</option>
+                  <option value="landscape_carousel">Yatay Sunum / LinkedIn (1920×1080 • 16:9)</option>
+                </optgroup>
+                <optgroup label="🎬 Video (Reels & Animasyon)">
+                  <option value="reels_video">Instagram Reels / TikTok Video (1080×1920 • 9:16)</option>
+                  <option value="square_video">Kare Akış Videosu (1080×1080 • 1:1)</option>
+                  <option value="portrait_video">Portre Akış Videosu (1080×1350 • 4:5)</option>
+                  <option value="landscape_video">Yatay Video / YouTube (1920×1080 • 16:9)</option>
+                </optgroup>
+                <optgroup label="🖼️ Tekil Görsel">
+                  <option value="instagram_post">Instagram Portre Gönderi (1080×1350 • 4:5)</option>
+                  <option value="square_post">Kare Gönderi (1080×1080 • 1:1)</option>
+                  <option value="instagram_story">Instagram Story (1080×1920 • 9:16)</option>
+                  <option value="pinterest_pin">Pinterest Pin (1000×1500 • 2:3)</option>
+                </optgroup>
               </select>
               <ChevronDown size={14} />
             </div>
           </div>
 
-          {contentType === "instagram_carousel" ? (
+          {(CANVA_CONTENT_TYPES[contentType]?.packageType === "carousel") ? (
             <div className="select-field">
-              <span>Sayfa Sayısı</span>
+              <span>
+                {CANVA_CONTENT_TYPES[contentType]?.category === "video" ? "Sahne / Sayfa Sayısı" : "Sayfa Sayısı"}
+              </span>
               <div>
                 <select
                   value={slideCount}
                   onChange={(e) => setSlideCount(Number(e.target.value))}
                 >
-                  {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                  {Array.from(
+                    {
+                      length:
+                        (CANVA_CONTENT_TYPES[contentType]?.maxSlides || 10) -
+                        (CANVA_CONTENT_TYPES[contentType]?.minSlides || 3) +
+                        1,
+                    },
+                    (_, i) => (CANVA_CONTENT_TYPES[contentType]?.minSlides || 3) + i
+                  ).map((n) => (
                     <option key={n} value={n}>
-                      {n} sayfa
+                      {n} {CANVA_CONTENT_TYPES[contentType]?.category === "video" ? "sahne" : "sayfa"}
                     </option>
                   ))}
                 </select>
@@ -531,9 +561,9 @@ export function CanvaGenerationStudio({
           )}
           {isProducing ? "Canva üretimi devam ediyor" : "Canva ile üret"}
           <span>
-            {contentType === "instagram_carousel"
-              ? `${slideCount} slayt carousel`
-              : "Tek görsel"}
+            {CANVA_CONTENT_TYPES[contentType]?.packageType === "carousel"
+              ? `${slideCount} ${CANVA_CONTENT_TYPES[contentType]?.category === "video" ? "sahne video" : "slayt carousel"}`
+              : "Tekil görsel"}
           </span>
         </button>
       </section>
@@ -832,6 +862,10 @@ function CanvaPackageCard({
   const isCarousel = pkg.packageType === "carousel";
   const thumbUrl = pkg.coverUrl ? `${pkg.coverUrl}?thumb=1` : "";
   const hasVideo = Boolean(pkg.videoUrl);
+  const cardAspectRatio =
+    pkg.items?.[0]?.width && pkg.items?.[0]?.height
+      ? `${pkg.items[0].width}/${pkg.items[0].height}`
+      : "4/5";
 
   return (
     <article
@@ -849,7 +883,7 @@ function CanvaPackageCard({
         style={{
           position: "relative",
           width: "100%",
-          aspectRatio: "4/5",
+          aspectRatio: cardAspectRatio,
           background: "#f3f4f6",
           cursor: "pointer",
         }}
@@ -1312,6 +1346,10 @@ function CanvaVideoCard({
   onPlay: () => void;
 }) {
   const thumbUrl = pkg.coverUrl ? `${pkg.coverUrl}?thumb=1` : "";
+  const videoAspectRatio =
+    pkg.items?.[0]?.width && pkg.items?.[0]?.height
+      ? `${pkg.items[0].width}/${pkg.items[0].height}`
+      : "4/5";
 
   return (
     <article
@@ -1331,7 +1369,7 @@ function CanvaVideoCard({
         style={{
           position: "relative",
           width: "100%",
-          paddingTop: "125%",
+          aspectRatio: videoAspectRatio,
           background: "#0f172a",
           cursor: "pointer",
           overflow: "hidden",

@@ -4,10 +4,20 @@ import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import sharp from "sharp";
 export type CanvaContentType =
-  | "instagram_post"
+  // Carousel (Çoklu Slayt)
   | "instagram_carousel"
-  | "instagram_story"
+  | "square_carousel"
+  | "story_carousel"
+  | "landscape_carousel"
+  // Video (Reels & Animasyonlu Video)
+  | "reels_video"
+  | "square_video"
+  | "portrait_video"
+  | "landscape_video"
+  // Tekil Görseller
+  | "instagram_post"
   | "square_post"
+  | "instagram_story"
   | "pinterest_pin";
 
 export interface CanvaManifestExport {
@@ -226,7 +236,9 @@ export function recordPackageCompletionTransaction(params: {
   const packageId = crypto.randomUUID();
   const sortedAssets = [...params.assets].sort((a, b) => a.position - b.position);
   const coverAssetId = sortedAssets[0]?.assetId || "";
-  const packageType = sortedAssets.length > 1 ? "carousel" : "single";
+  const isVideoCategory = params.manifest.contentType.includes("video");
+  const packageType = isVideoCategory ? "video" : (sortedAssets.length > 1 ? "carousel" : "single");
+  const title = isVideoCategory ? `Video Projesi (${sortedAssets.length} sahne)` : (sortedAssets.length > 1 ? `Carousel (${sortedAssets.length} sayfa)` : "Canva Tasarımı");
 
   const insertPackage = db.prepare(`
     INSERT INTO media_packages (
@@ -267,7 +279,7 @@ export function recordPackageCompletionTransaction(params: {
       params.projectId,
       params.jobId,
       packageType,
-      `${packageType === "carousel" ? "Carousel" : "Görsel"} (${params.manifest.pageCount} sayfa)`,
+      title,
       coverAssetId,
       sortedAssets.length,
       params.manifest.designId,

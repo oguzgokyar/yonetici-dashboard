@@ -1,67 +1,184 @@
 export const HERMES_CANVA_PIPELINE_VERSION = "2026-09-28-v1";
 
 export type CanvaContentType =
-  | "instagram_post"
+  // Carousel (Çoklu Slayt)
   | "instagram_carousel"
-  | "instagram_story"
+  | "square_carousel"
+  | "story_carousel"
+  | "landscape_carousel"
+  // Video (Reels & Animasyonlu Video)
+  | "reels_video"
+  | "square_video"
+  | "portrait_video"
+  | "landscape_video"
+  // Tekil Görseller
+  | "instagram_post"
   | "square_post"
+  | "instagram_story"
   | "pinterest_pin";
 
 export interface ContentTypeMeta {
   width: number;
   height: number;
   packageType: "single" | "carousel";
+  category: "carousel" | "video" | "single";
   minSlides: number;
   maxSlides: number;
   defaultSlides: number;
   label: string;
+  canvaFormat: string;
+  aspectRatio: string;
 }
 
 export const CANVA_CONTENT_TYPES: Record<CanvaContentType, ContentTypeMeta> = {
-  instagram_post: {
-    width: 1080,
-    height: 1350,
-    packageType: "single",
-    minSlides: 1,
-    maxSlides: 1,
-    defaultSlides: 1,
-    label: "Instagram Gönderisi (1080x1350)",
-  },
+  // CAROUSEL
   instagram_carousel: {
     width: 1080,
     height: 1350,
     packageType: "carousel",
+    category: "carousel",
     minSlides: 3,
     maxSlides: 10,
     defaultSlides: 6,
-    label: "Instagram Carousel (1080x1350)",
+    label: "Instagram Portre Carousel (1080×1350 • 4:5)",
+    canvaFormat: "Instagram Post (Portrait)",
+    aspectRatio: "4:5",
   },
-  instagram_story: {
+  square_carousel: {
+    width: 1080,
+    height: 1080,
+    packageType: "carousel",
+    category: "carousel",
+    minSlides: 3,
+    maxSlides: 10,
+    defaultSlides: 6,
+    label: "Kare Carousel (1080×1080 • 1:1)",
+    canvaFormat: "Instagram Post (Square)",
+    aspectRatio: "1:1",
+  },
+  story_carousel: {
     width: 1080,
     height: 1920,
+    packageType: "carousel",
+    category: "carousel",
+    minSlides: 3,
+    maxSlides: 10,
+    defaultSlides: 5,
+    label: "Dikey / Story Carousel (1080×1920 • 9:16)",
+    canvaFormat: "Instagram Story",
+    aspectRatio: "9:16",
+  },
+  landscape_carousel: {
+    width: 1920,
+    height: 1080,
+    packageType: "carousel",
+    category: "carousel",
+    minSlides: 3,
+    maxSlides: 10,
+    defaultSlides: 5,
+    label: "Yatay Sunum / LinkedIn (1920×1080 • 16:9)",
+    canvaFormat: "Presentation (16:9)",
+    aspectRatio: "16:9",
+  },
+
+  // VİDEO (Reels & Animasyon)
+  reels_video: {
+    width: 1080,
+    height: 1920,
+    packageType: "carousel",
+    category: "video",
+    minSlides: 3,
+    maxSlides: 10,
+    defaultSlides: 5,
+    label: "Instagram Reels / TikTok Video (1080×1920 • 9:16)",
+    canvaFormat: "Instagram Story",
+    aspectRatio: "9:16",
+  },
+  square_video: {
+    width: 1080,
+    height: 1080,
+    packageType: "carousel",
+    category: "video",
+    minSlides: 3,
+    maxSlides: 10,
+    defaultSlides: 5,
+    label: "Kare Akış Videosu (1080×1080 • 1:1)",
+    canvaFormat: "Instagram Post (Square)",
+    aspectRatio: "1:1",
+  },
+  portrait_video: {
+    width: 1080,
+    height: 1350,
+    packageType: "carousel",
+    category: "video",
+    minSlides: 3,
+    maxSlides: 10,
+    defaultSlides: 5,
+    label: "Portre Akış Videosu (1080×1350 • 4:5)",
+    canvaFormat: "Instagram Post (Portrait)",
+    aspectRatio: "4:5",
+  },
+  landscape_video: {
+    width: 1920,
+    height: 1080,
+    packageType: "carousel",
+    category: "video",
+    minSlides: 3,
+    maxSlides: 10,
+    defaultSlides: 5,
+    label: "Yatay Video / YouTube (1920×1080 • 16:9)",
+    canvaFormat: "Presentation (16:9)",
+    aspectRatio: "16:9",
+  },
+
+  // TEKİL GÖRSELLER
+  instagram_post: {
+    width: 1080,
+    height: 1350,
     packageType: "single",
+    category: "single",
     minSlides: 1,
     maxSlides: 1,
     defaultSlides: 1,
-    label: "Instagram Story (1080x1920)",
+    label: "Instagram Portre Gönderi (1080×1350 • 4:5)",
+    canvaFormat: "Instagram Post (Portrait)",
+    aspectRatio: "4:5",
   },
   square_post: {
     width: 1080,
     height: 1080,
     packageType: "single",
+    category: "single",
     minSlides: 1,
     maxSlides: 1,
     defaultSlides: 1,
-    label: "Kare Gönderi (1080x1080)",
+    label: "Kare Gönderi (1080×1080 • 1:1)",
+    canvaFormat: "Instagram Post (Square)",
+    aspectRatio: "1:1",
+  },
+  instagram_story: {
+    width: 1080,
+    height: 1920,
+    packageType: "single",
+    category: "single",
+    minSlides: 1,
+    maxSlides: 1,
+    defaultSlides: 1,
+    label: "Instagram Story (1080×1920 • 9:16)",
+    canvaFormat: "Instagram Story",
+    aspectRatio: "9:16",
   },
   pinterest_pin: {
     width: 1000,
     height: 1500,
     packageType: "single",
+    category: "single",
     minSlides: 1,
     maxSlides: 1,
     defaultSlides: 1,
-    label: "Pinterest Pin (1000x1500)",
+    label: "Pinterest Pin (1000×1500 • 2:3)",
+    canvaFormat: "Pinterest Pin",
+    aspectRatio: "2:3",
   },
 };
 
@@ -233,19 +350,15 @@ Bu bir Yönetici Dashboard Canva görsel üretim makine görevidir.
 8. Güvenli alanlar: 100px yatay, 140px dikey marjin. Max 2 font ailesi. Bounding box çakışması yok.
 
 CANVA TASARIM KURALLARI (canva-carousel-director v2):
-- Format: Doğrudan Instagram Post (Portrait) = ${meta.width}×${meta.height}px. ASLA sunum formatı seçme.
-- Layout — 60/40 Dikey Bölünme:
-    Üst %45 (y:140–600): Hero görsel / ikon / illüstrasyon alanı.
-    Alt %45 (y:650–1210): Tipografi alanı (başlık + 2-3 bullet).
-    Kutular kesişmemeli, min 24px dikey boşluk.
-- Tipografi: Başlık min 52pt kalın, gövde min 26pt temiz sans-serif, max 2 font ailesi.
-- Karakter limitleri: Kapak başlığı max 32 karakter, slayt başlığı max 24 karakter, açıklama max 80 karakter, bullet max 35 karakter.
+- Format: Doğrudan ${meta.canvaFormat} = ${meta.width}×${meta.height}px (${meta.aspectRatio}).
+- Boyut: ${meta.width}x${meta.height}px, ${payload.slideCount} sayfa.
+- Tipografi: Başlık min 48pt kalın, gövde min 24pt temiz sans-serif, max 2 font ailesi.
 - Style: "${payload.style || "Modern ve minimalist"}". Marka renkleri ve logoya uygun.
 - Marka bilgileri: ${JSON.stringify(payload.brandSnapshot || {})}
 
 ADIM ADIM YAPMAN GEREKENLER:
 1. İlerleme bildir: POST ${progressEndpoint} — { "phase":"generating", "percent":20, "completed":0, "total":${payload.slideCount}, "detail":"Canva tasarımı oluşturuluyor..." }
-2. mcp__canva__create_design çağır: brief="${payload.prompt}", format="Instagram Post (Portrait)", sayfa sayısı=${payload.slideCount}.
+2. mcp__canva__create_design çağır: brief="${payload.prompt}", format="${meta.canvaFormat}", sayfa sayısı=${payload.slideCount}.
 3. Asenkronsa mcp__canva__get_create_design_async_job ile tamamlanmasını bekle.
 4. get_design ile design_id ve edit_url al; get_design_pages ile sayfa sayısını ve boyutları doğrula.
 5. İlerleme bildir: POST ${progressEndpoint} — { "phase":"exporting", "percent":70, "completed":${Math.floor(payload.slideCount / 2)}, "total":${payload.slideCount}, "detail":"Sayfalar dışa aktarılıyor..." }

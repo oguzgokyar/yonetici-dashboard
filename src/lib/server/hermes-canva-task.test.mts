@@ -35,6 +35,17 @@ test("resolveContentTypeMeta returns valid metadata for supported content types"
   assert.equal(pinMeta.width, 1000);
   assert.equal(pinMeta.height, 1500);
 
+  const reelsMeta = resolveContentTypeMeta("reels_video");
+  assert.equal(reelsMeta.width, 1080);
+  assert.equal(reelsMeta.height, 1920);
+  assert.equal(reelsMeta.category, "video");
+  assert.equal(reelsMeta.packageType, "carousel");
+
+  const squareCarouselMeta = resolveContentTypeMeta("square_carousel");
+  assert.equal(squareCarouselMeta.width, 1080);
+  assert.equal(squareCarouselMeta.height, 1080);
+  assert.equal(squareCarouselMeta.category, "carousel");
+
   assert.throws(() => resolveContentTypeMeta("unknown_type"), /Geçersiz içerik türü/);
 });
 
