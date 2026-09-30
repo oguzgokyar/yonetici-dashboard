@@ -228,19 +228,27 @@ Return the exact download URL of the exported MP4 file.`;
 
   const videoUrl = `/api/assets/${finalVideoId}`;
 
-  // 6. Update database
-  database
-    .prepare(
-      "UPDATE media_packages SET video_asset_id=?, video_url=?, video_duration=?, video_status='ready', updated_at=? WHERE id=?"
-    )
-    .run(finalVideoId, videoUrl, actualDuration, new Date().toISOString(), packageId);
+    // 6. Update database
+    database
+      .prepare(
+        "UPDATE media_packages SET video_asset_id=?, video_url=?, video_duration=?, video_status='ready', updated_at=? WHERE id=?"
+      )
+      .run(finalVideoId, videoUrl, actualDuration, new Date().toISOString(), packageId);
 
-  return {
-    ok: true,
-    packageId,
-    videoAssetId: finalVideoId,
-    videoUrl,
-    duration: actualDuration,
-    message: "Canva videosu başarıyla oluşturuldu.",
-  };
+    return {
+      ok: true,
+      packageId,
+      videoAssetId: finalVideoId,
+      videoUrl,
+      duration: actualDuration,
+      message: "Canva videosu başarıyla oluşturuldu.",
+    };
+  } catch (err) {
+    try {
+      database
+        .prepare("UPDATE media_packages SET video_status='failed', updated_at=? WHERE id=?")
+        .run(new Date().toISOString(), packageId);
+    } catch {}
+    throw err;
+  }
 }
