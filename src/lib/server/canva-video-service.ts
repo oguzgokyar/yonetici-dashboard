@@ -77,156 +77,161 @@ Wait for export completion using mcp__canva__get_export_job or check returned do
 Return the exact download URL of the exported MP4 file.`;
   }
 
-  // 1. Dispatch export to Hermes Agent
-  const runResponse = await fetch(`${baseUrl}/v1/runs`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-    },
-    body: JSON.stringify({
-      model: "hermes-agent",
-      input: prompt,
-    }),
-    signal: AbortSignal.timeout(15000),
-  });
-
-  if (!runResponse.ok && runResponse.status !== 202) {
-    throw new Error(`Hermes video export başlatılamadı (HTTP ${runResponse.status})`);
-  }
-
-  const runData = (await runResponse.json().catch(() => ({}))) as { run_id?: string; id?: string };
-  const runId = runData.run_id || runData.id;
-  if (!runId) {
-    throw new Error("Hermes görev kimliği (run_id) döndürmedi.");
-  }
-
-  // 2. Poll Hermes run for completed MP4 URL (up to 120s)
-  let downloadUrl = "";
-  const pollDeadline = Date.now() + 120000;
-  while (Date.now() < pollDeadline) {
-    await new Promise((r) => setTimeout(r, 4000));
-    const statusRes = await fetch(`${baseUrl}/v1/runs/${runId}`, {
+  try {
+    // 1. Dispatch export to Hermes Agent
+    const runResponse = await fetch(`${baseUrl}/v1/runs`, {
+      method: "POST",
       headers: {
+        "Content-Type": "application/json",
         Accept: "application/json",
         ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       },
-      signal: AbortSignal.timeout(8000),
-    }).catch(() => null);
+      body: JSON.stringify({
+        model: "hermes-agent",
+        input: prompt,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
 
-    if (!statusRes || !statusRes.ok) continue;
-
-    const runStatus = (await statusRes.json().catch(() => ({}))) as {
-      status?: string;
-      output?: string;
-      error?: string;
-    };
-
-    if (runStatus.status === "failed") {
-      throw new Error(runStatus.error || "Canva video export başarısız oldu.");
+    if (!runResponse.ok && runResponse.status !== 202) {
+      throw new Error(`Hermes video export başlatılamadı (HTTP ${runResponse.status})`);
     }
 
-    if (runStatus.status === "completed") {
-      if (runStatus.output) {
-        const urlMatch = runStatus.output.match(/https:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/i);
-        if (urlMatch) {
-          downloadUrl = urlMatch[0];
-          break;
+    const runData = (await runResponse.json().catch(() => ({}))) as { run_id?: string; id?: string };
+    const runId = runData.run_id || runData.id;
+    if (!runId) {
+      throw new Error("Hermes görev kimliği (run_id) döndürmedi.");
+    }
+
+    // 2. Poll Hermes run for completed MP4 URL (up to 120s)
+    let downloadUrl = "";
+    const pollDeadline = Date.now() + 120000;
+    while (Date.now() < pollDeadline) {
+      await new Promise((r) => setTimeout(r, 4000));
+      const statusRes = await fetch(`${baseUrl}/v1/runs/${runId}`, {
+        headers: {
+          Accept: "application/json",
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        },
+        signal: AbortSignal.timeout(8000),
+      }).catch(() => null);
+
+      if (!statusRes || !statusRes.ok) continue;
+
+      const runStatus = (await statusRes.json().catch(() => ({}))) as {
+        status?: string;
+        output?: string;
+        error?: string;
+      };
+
+      if (runStatus.status === "failed") {
+        throw new Error(runStatus.error || "Canva video export başarısız oldu.");
+      }
+
+      if (runStatus.status === "completed") {
+        if (runStatus.output) {
+          const urlMatch = runStatus.output.match(/https:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/i);
+          if (urlMatch) {
+            downloadUrl = urlMatch[0];
+            break;
+          }
         }
+        const rawErr = (runStatus.output || runStatus.error || "").trim();
+        if (rawErr.toLowerCase().includes("not allowed to access design")) {
+          throw new Error(
+            "Bu tasarım eski Canva hesabına ait olduğundan erişilemiyor. Lütfen yeni oluşturulan tasarımları kullanın."
+          );
+        }
+        throw new Error(rawErr || "Canva video çıktısı üretilemedi.");
       }
-      const rawErr = (runStatus.output || runStatus.error || "").trim();
-      if (rawErr.toLowerCase().includes("not allowed to access design")) {
-        throw new Error(
-          "Bu tasarım eski Canva hesabına ait olduğundan erişilemiyor. Lütfen yeni oluşturulan tasarımları kullanın."
-        );
-      }
-      throw new Error(rawErr || "Canva video çıktısı üretilemedi.");
     }
-  }
 
-  if (!downloadUrl) {
-    throw new Error("Canva MP4 render zaman aşımına uğradı veya indirme bağlantısı alınamadı.");
-  }
+    if (!downloadUrl) {
+      throw new Error("Canva MP4 render zaman aşımına uğradı veya indirme bağlantısı alınamadı.");
+    }
 
-  // 3. Download MP4 into assets
-  const assetsDir = path.join(process.cwd(), ".data", "assets");
-  fs.mkdirSync(assetsDir, { recursive: true });
+    // 3. Download MP4 into assets
+    const assetsDir = path.join(process.cwd(), ".data", "assets");
+    fs.mkdirSync(assetsDir, { recursive: true });
 
-  const rawVideoId = crypto.randomUUID();
-  const rawVideoPath = path.join(assetsDir, `raw_${rawVideoId}.mp4`);
-  const finalVideoId = crypto.randomUUID();
-  const finalVideoPath = path.join(assetsDir, `${finalVideoId}.mp4`);
-  const metaPath = path.join(assetsDir, `${finalVideoId}.json`);
+    const rawVideoId = crypto.randomUUID();
+    const rawVideoPath = path.join(assetsDir, `raw_${rawVideoId}.mp4`);
+    const finalVideoId = crypto.randomUUID();
+    const finalVideoPath = path.join(assetsDir, `${finalVideoId}.mp4`);
+    const metaPath = path.join(assetsDir, `${finalVideoId}.json`);
 
-  const videoResp = await fetch(downloadUrl, {
-    headers: { "User-Agent": "Mozilla/5.0" },
-    signal: AbortSignal.timeout(60000),
-  });
+    const dlRes = await fetch(downloadUrl, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(60000),
+    });
 
-  if (!videoResp.ok) {
-    throw new Error("Canva MP4 dosyası indirilemedi.");
-  }
+    if (!dlRes.ok) {
+      throw new Error(`Canva MP4 dosyası indirilemedi (HTTP ${dlRes.status})`);
+    }
 
-  const fileBuffer = Buffer.from(await videoResp.arrayBuffer());
-  fs.writeFileSync(rawVideoPath, fileBuffer);
+    const videoBuffer = Buffer.from(await dlRes.arrayBuffer());
+    fs.writeFileSync(rawVideoPath, videoBuffer);
 
-  // 4. Calibrate duration using FFmpeg PTS retiming
-  let actualDuration = Math.round(targetTotalDuration);
-  let videoWidth = 1080;
-  let videoHeight = 1920;
+    // 4. Retime video PTS via FFmpeg
+    let actualDuration = targetTotalDuration;
+    try {
+      const ffprobeOut = await execFileAsync("ffprobe", [
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        rawVideoPath,
+      ]);
+      const rawDur = parseFloat(ffprobeOut.stdout.trim());
+      if (rawDur > 0 && Math.abs(rawDur - targetTotalDuration) > 1.0) {
+        const speedFactor = targetTotalDuration / rawDur;
+        await execFileAsync("ffmpeg", [
+          "-y",
+          "-i",
+          rawVideoPath,
+          "-filter:v",
+          `setpts=${speedFactor.toFixed(4)}*PTS`,
+          "-an",
+          "-c:v",
+          "libx264",
+          "-pix_fmt",
+          "yuv420p",
+          "-movflags",
+          "+faststart",
+          finalVideoPath,
+        ]);
+        try {
+          fs.unlinkSync(rawVideoPath);
+        } catch {}
+      } else {
+        fs.renameSync(rawVideoPath, finalVideoPath);
+        actualDuration = rawDur > 0 ? Math.round(rawDur) : targetTotalDuration;
+      }
+    } catch {
+      if (fs.existsSync(rawVideoPath) && !fs.existsSync(finalVideoPath)) {
+        fs.renameSync(rawVideoPath, finalVideoPath);
+      }
+    }
 
-  try {
-    const { stdout: probeOut } = await execFileAsync("ffprobe", [
-      "-v", "error",
-      "-show_entries", "stream=width,height,duration",
-      "-of", "json",
-      rawVideoPath,
-    ]);
-    const probeData = JSON.parse(probeOut || "{}") as {
-      streams?: Array<{ width?: number; height?: number; duration?: string }>;
-    };
-    const stream = probeData.streams?.[0];
-    const rawDur = parseFloat(stream?.duration || "0") || 30.0;
-    videoWidth = stream?.width || 1080;
-    videoHeight = stream?.height || 1920;
+    const { width: videoWidth, height: videoHeight } = await getMediaDimensions(finalVideoPath);
 
-    const speedFactor = targetTotalDuration / rawDur;
+    // 5. Write metadata JSON
+    fs.writeFileSync(
+      metaPath,
+      JSON.stringify({
+        mimeType: "video/mp4",
+        extension: "mp4",
+        width: videoWidth,
+        height: videoHeight,
+        duration: actualDuration,
+        source: "canva_video_export",
+        createdAt: new Date().toISOString(),
+      })
+    );
 
-    await execFileAsync("ffmpeg", [
-      "-y",
-      "-i", rawVideoPath,
-      "-filter:v", `setpts=${speedFactor.toFixed(4)}*PTS`,
-      "-c:v", "libx264",
-      "-preset", "veryfast",
-      "-crf", "20",
-      "-pix_fmt", "yuv420p",
-      "-an",
-      finalVideoPath,
-    ]);
-
-    actualDuration = Math.round(targetTotalDuration);
-  } catch {
-    fs.copyFileSync(rawVideoPath, finalVideoPath);
-  } finally {
-    try { fs.unlinkSync(rawVideoPath); } catch {}
-  }
-
-  // 5. Write metadata JSON
-  fs.writeFileSync(
-    metaPath,
-    JSON.stringify({
-      mimeType: "video/mp4",
-      extension: "mp4",
-      width: videoWidth,
-      height: videoHeight,
-      duration: actualDuration,
-      source: "canva_video_export",
-      createdAt: new Date().toISOString(),
-    })
-  );
-
-  const videoUrl = `/api/assets/${finalVideoId}`;
+    const videoUrl = `/api/assets/${finalVideoId}`;
 
     // 6. Update database
     database
@@ -251,4 +256,23 @@ Return the exact download URL of the exported MP4 file.`;
     } catch {}
     throw err;
   }
+}
+
+async function getMediaDimensions(filePath: string): Promise<{ width: number; height: number }> {
+  try {
+    const ffprobeOut = await execFileAsync("ffprobe", [
+      "-v",
+      "error",
+      "-select_streams",
+      "v:0",
+      "-show_entries",
+      "stream=width,height",
+      "-of",
+      "csv=s=x:p=0",
+      filePath,
+    ]);
+    const [w, h] = ffprobeOut.stdout.trim().split("x").map(Number);
+    if (w && h) return { width: w, height: h };
+  } catch {}
+  return { width: 1080, height: 1920 };
 }
