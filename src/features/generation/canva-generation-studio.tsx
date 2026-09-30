@@ -24,6 +24,7 @@ import {
   Play,
   Download,
   Film,
+  RefreshCw,
 } from "lucide-react";
 import { CANVA_CONTENT_TYPES, type CanvaContentType } from "@/lib/server/hermes-canva-task";
 import type { Project } from "@/features/projects/projects-context";
@@ -121,6 +122,7 @@ export function CanvaGenerationStudio({
   const [videoConvertError, setVideoConvertError] = useState<string | null>(null);
 
   // Gallery / Lightbox state for Carousel packages
+  const [syncingPkgId, setSyncingPkgId] = useState<string | null>(null);
   const [activePackage, setActivePackage] = useState<CanvaPackage | null>(null);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
 
@@ -271,6 +273,32 @@ export function CanvaGenerationStudio({
       setMessage(err instanceof Error ? err.message : "Paket silinemedi.");
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  async function handleSyncPackage(packageId: string) {
+    setSyncingPkgId(packageId);
+    setMessage("");
+    try {
+      const res = await fetch(
+        `/api/projects/${encodeURIComponent(projectId)}/canva/packages/${encodeURIComponent(
+          packageId
+        )}/sync`,
+        { method: "POST" }
+      );
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        message?: string;
+      };
+      if (!res.ok || !data.ok) {
+        throw new Error(data.message || "Canva'dan güncellenemedi.");
+      }
+      setMessage(data.message || "Canva'dan başarıyla güncellendi.");
+      await loadPackages();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Canva'dan güncellenemedi.");
+    } finally {
+      setSyncingPkgId(null);
     }
   }
 
@@ -678,12 +706,14 @@ export function CanvaGenerationStudio({
                   projectId={projectId}
                   deleting={deletingId === pkg.id}
                   convertingVideo={convertingVideoPkgId === pkg.id}
+                  syncing={syncingPkgId === pkg.id}
                   onOpenGallery={() => openGallery(pkg)}
                   onOpenVideoModal={() => {
                     setVideoConvertError(null);
                     setVideoModalPkg(pkg);
                   }}
                   onWatchVideo={() => setActiveVideoPlayerPkg(pkg)}
+                  onSync={() => void handleSyncPackage(pkg.id)}
                   onDelete={() => void handleDeletePackage(pkg.id)}
                 />
               ))}
@@ -725,7 +755,9 @@ export function CanvaGenerationStudio({
                     key={pkg.id}
                     pkg={pkg}
                     projectId={projectId}
+                    syncing={syncingPkgId === pkg.id}
                     onPlay={() => setActiveVideoPlayerPkg(pkg)}
+                    onSync={() => void handleSyncPackage(pkg.id)}
                   />
                 ))}
             </div>
@@ -900,18 +932,22 @@ function CanvaPackageCard({
   projectId,
   deleting,
   convertingVideo,
+  syncing,
   onOpenGallery,
   onOpenVideoModal,
   onWatchVideo,
+  onSync,
   onDelete,
 }: {
   pkg: CanvaPackage;
   projectId: string;
   deleting: boolean;
-  convertingVideo?: boolean;
+  convertingVideo: boolean;
+  syncing?: boolean;
   onOpenGallery: () => void;
   onOpenVideoModal?: () => void;
   onWatchVideo?: () => void;
+  onSync?: () => void;
   onDelete: () => void;
 }) {
   const isCarousel = pkg.packageType === "carousel";
@@ -1094,6 +1130,29 @@ function CanvaPackageCard({
             >
               <ExternalLink size={14} />
             </a>
+          )}
+
+          {/* Canva'dan Yeniden İndir / Eşitle Butonu */}
+          {pkg.canvaDesignId && onSync && (
+            <button
+              type="button"
+              onClick={onSync}
+              disabled={syncing}
+              title="Canva'da yaptığınız son değişiklikleri yeniden indirip güncelleyin"
+              style={{
+                display: "grid",
+                placeItems: "center",
+                width: "28px",
+                height: "28px",
+                borderRadius: "6px",
+                border: "1px solid #e2e8f0",
+                color: "#0284c7",
+                background: "#f0f9ff",
+                cursor: "pointer",
+              }}
+            >
+              {syncing ? <LoaderCircle className="spin" size={13} /> : <RefreshCw size={13} />}
+            </button>
           )}
 
           <Link
@@ -1394,11 +1453,15 @@ function CanvaGalleryModal({
 function CanvaVideoCard({
   pkg,
   projectId,
+  syncing,
   onPlay,
+  onSync,
 }: {
   pkg: CanvaPackage;
   projectId: string;
+  syncing?: boolean;
   onPlay: () => void;
+  onSync?: () => void;
 }) {
   const thumbUrl = pkg.coverUrl ? `${pkg.coverUrl}?thumb=1` : "";
   const videoAspectRatio =
@@ -1589,6 +1652,29 @@ function CanvaVideoCard({
         </span>
 
         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          {/* Canva'dan Yeniden İndir / Eşitle Butonu */}
+          {pkg.canvaDesignId && onSync && (
+            <button
+              type="button"
+              onClick={onSync}
+              disabled={syncing}
+              title="Canva'da yapılan son düzeltmeleri (metin, animasyon) yeniden indir ve güncelle"
+              style={{
+                display: "grid",
+                placeItems: "center",
+                width: "28px",
+                height: "28px",
+                borderRadius: "6px",
+                border: "1px solid #e2e8f0",
+                color: "#0284c7",
+                background: "#f0f9ff",
+                cursor: "pointer",
+              }}
+            >
+              {syncing ? <LoaderCircle className="spin" size={13} /> : <RefreshCw size={13} />}
+            </button>
+          )}
+
           {/* İndir Butonu */}
           {pkg.videoUrl && (
             <a
