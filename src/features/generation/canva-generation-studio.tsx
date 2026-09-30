@@ -65,6 +65,7 @@ export interface CanvaPackage {
   videoAssetId?: string | null;
   videoUrl?: string | null;
   videoDuration?: number | null;
+  videoStatus?: "idle" | "rendering" | "ready" | "failed" | string | null;
   createdAt: string;
   updatedAt?: string;
   items: CanvaPackageItem[];
@@ -77,6 +78,12 @@ export interface CanvaJob {
   error?: string | null;
   createdAt: string;
   completedAt?: string | null;
+  request?: {
+    contentType?: CanvaContentType;
+    slideCount?: number;
+    prompt?: string;
+    style?: string;
+  };
   progress: {
     phase?: string;
     percent?: number;
@@ -129,13 +136,39 @@ export function CanvaGenerationStudio({
 
   const available = useMemo(() => project.brand || {}, [project]);
 
+  // Form persistence in localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`canva_form_${projectId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.prompt) setPrompt(parsed.prompt);
+        if (parsed.contentType) setContentType(parsed.contentType);
+        if (parsed.slideCount) setSlideCount(parsed.slideCount);
+        if (parsed.style) setStyle(parsed.style);
+      }
+    } catch {}
+  }, [projectId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        `canva_form_${projectId}`,
+        JSON.stringify({ prompt, contentType, slideCount, style })
+      );
+    } catch {}
+  }, [projectId, prompt, contentType, slideCount, style]);
+
   const activeJob = jobs.find((j) =>
     ["queued", "dispatching", "running", "exporting", "uploading"].includes(j.status)
   );
+  // Also track any package that is currently rendering video in background
+  const activeRenderingPackage = packages.find((p) => p.videoStatus === "rendering" || p.id === syncingPkgId);
+
   const latestFailedJob = jobs.find(
     (j) => j.status === "failed" && j.id !== dismissedFailedJobId
   );
-  const isProducing = producing || Boolean(activeJob);
+  const isProducing = producing || Boolean(activeJob) || Boolean(activeRenderingPackage);
 
   const loadJobs = useCallback(async () => {
     try {
@@ -183,7 +216,7 @@ export function CanvaGenerationStudio({
 
   // Polling when a job is in-flight or when packages have pending videos
   useEffect(() => {
-    const hasPendingVideo = packages.some((p) => p.packageType === "video" && !p.videoUrl);
+    const hasPendingVideo = packages.some((p) => p.videoStatus === "rendering" || (p.packageType === "video" && !p.videoUrl));
     if (!isProducing && !hasPendingVideo) return;
     const timer = window.setInterval(async () => {
       await loadJobs();
@@ -681,14 +714,52 @@ export function CanvaGenerationStudio({
         )}
 
         {/* Aktif Üretim Stepper */}
-        {isProducing && activeJob && (
+        {activeJob ? (
           <CanvaProductionStepper
             job={activeJob}
-            requestedSlides={slideCount}
+            requestedSlides={activeJob.request?.slideCount || slideCount}
             cancelling={cancellingJobId === activeJob.id}
             onCancel={() => void handleCancelJob(activeJob.id)}
           />
-        )}
+        ) : activeRenderingPackage ? (
+          <div
+            style={{
+              padding: "16px 20px",
+              borderRadius: "14px",
+              background: "linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)",
+              color: "white",
+              marginBottom: "18px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              boxShadow: "0 4px 14px rgba(49, 46, 129, 0.25)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+              <RefreshCw className="spin" size={26} color="#a5b4fc" />
+              <div>
+                <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "1px", color: "#a5b4fc" }}>
+                  CANVA SİHİRLİ ANİMASYONLU VİDEO RENDER EDİLİYOR
+                </div>
+                <div style={{ fontSize: "13px", fontWeight: 600, color: "#f8fafc", marginTop: "2px" }}>
+                  &quot;{activeRenderingPackage.title}&quot; bulutta işleniyor, MP4 hazırlanıyor...
+                </div>
+              </div>
+            </div>
+            <span
+              style={{
+                fontSize: "11px",
+                padding: "4px 10px",
+                borderRadius: "20px",
+                background: "rgba(255, 255, 255, 0.15)",
+                color: "#e0e7ff",
+                fontWeight: 600,
+              }}
+            >
+              Arka Planda Devam Ediyor
+            </span>
+          </div>
+        ) : null}
 
         {/* Sekme 1: Tasarımlar & Paketler */}
         {archiveTab === "packages" && (
@@ -978,19 +1049,21 @@ function CanvaPackageCard({
       ? `${pkg.items[0].width}/${pkg.items[0].height}`
       : "4/5";
 
+  const isCardSyncing = syncing || pkg.videoStatus === "rendering";
+
   return (
     <article
-      className={`generated-card ${syncing ? "syncing-card-pulse" : ""}`}
+      className={`generated-card ${isCardSyncing ? "syncing-card-pulse" : ""}`}
       style={{
         display: "flex",
         flexDirection: "column",
-        border: syncing ? "2px solid #3b82f6" : "1px solid #e5e7eb",
+        border: isCardSyncing ? "2px solid #3b82f6" : "1px solid #e5e7eb",
         borderRadius: "14px",
         overflow: "hidden",
         background: "white",
         position: "relative",
-        boxShadow: syncing ? "0 0 16px rgba(59, 130, 246, 0.45)" : undefined,
-        animation: syncing ? "pulseGlow 1.4s ease-in-out infinite" : undefined,
+        boxShadow: isCardSyncing ? "0 0 16px rgba(59, 130, 246, 0.45)" : undefined,
+        animation: isCardSyncing ? "pulseGlow 1.4s ease-in-out infinite" : undefined,
       }}
     >
       <div
@@ -999,9 +1072,9 @@ function CanvaPackageCard({
           width: "100%",
           aspectRatio: cardAspectRatio,
           background: "#f3f4f6",
-          cursor: syncing ? "wait" : "pointer",
+          cursor: isCardSyncing ? "wait" : "pointer",
         }}
-        onClick={syncing ? undefined : onOpenGallery}
+        onClick={isCardSyncing ? undefined : onOpenGallery}
       >
         {thumbUrl ? (
           <Image
@@ -1010,7 +1083,7 @@ function CanvaPackageCard({
             fill
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             unoptimized
-            style={{ objectFit: "cover", opacity: syncing ? 0.4 : 1 }}
+            style={{ objectFit: "cover", opacity: isCardSyncing ? 0.4 : 1 }}
           />
         ) : (
           <div
@@ -1027,7 +1100,7 @@ function CanvaPackageCard({
         )}
 
         {/* Syncing Overlay Feedback */}
-        {syncing && (
+        {isCardSyncing && (
           <div
             style={{
               position: "absolute",
@@ -1528,19 +1601,21 @@ function CanvaVideoCard({
       ? `${pkg.items[0].width}/${pkg.items[0].height}`
       : "4/5";
 
+  const isCardSyncing = syncing || pkg.videoStatus === "rendering";
+
   return (
     <article
-      className={`generated-card ${syncing ? "syncing-card-pulse" : ""}`}
+      className={`generated-card ${isCardSyncing ? "syncing-card-pulse" : ""}`}
       style={{
         display: "flex",
         flexDirection: "column",
-        border: syncing ? "2px solid #3b82f6" : "1px solid #e0e7ff",
+        border: isCardSyncing ? "2px solid #3b82f6" : "1px solid #e0e7ff",
         borderRadius: "14px",
         overflow: "hidden",
         background: "white",
-        boxShadow: syncing ? "0 0 16px rgba(59, 130, 246, 0.45)" : "0 2px 8px rgba(79, 70, 229, 0.06)",
+        boxShadow: isCardSyncing ? "0 0 16px rgba(59, 130, 246, 0.45)" : "0 2px 8px rgba(79, 70, 229, 0.06)",
         position: "relative",
-        animation: syncing ? "pulseGlow 1.4s ease-in-out infinite" : undefined,
+        animation: isCardSyncing ? "pulseGlow 1.4s ease-in-out infinite" : undefined,
       }}
     >
       <div
@@ -1550,10 +1625,10 @@ function CanvaVideoCard({
           width: "100%",
           aspectRatio: videoAspectRatio,
           background: "#0f172a",
-          cursor: syncing ? "wait" : "pointer",
+          cursor: isCardSyncing ? "wait" : "pointer",
           overflow: "hidden",
         }}
-        onClick={syncing ? undefined : onPlay}
+        onClick={isCardSyncing ? undefined : onPlay}
       >
         {thumbUrl ? (
           <Image
@@ -1562,7 +1637,7 @@ function CanvaVideoCard({
             fill
             sizes="(max-width: 768px) 100vw, 320px"
             unoptimized
-            style={{ objectFit: "cover", opacity: syncing ? 0.35 : 0.8 }}
+            style={{ objectFit: "cover", opacity: isCardSyncing ? 0.35 : 0.8 }}
           />
         ) : (
           <div
@@ -1579,7 +1654,7 @@ function CanvaVideoCard({
         )}
 
         {/* Syncing Overlay Feedback */}
-        {syncing && (
+        {isCardSyncing && (
           <div
             style={{
               position: "absolute",

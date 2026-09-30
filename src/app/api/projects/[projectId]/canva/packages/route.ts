@@ -20,6 +20,7 @@ type PackageRow = {
   video_asset_id?: string | null;
   video_url?: string | null;
   video_duration?: number | null;
+  video_status?: string | null;
   created_at: string;
   updated_at: string;
   items_json?: string;
@@ -90,7 +91,9 @@ export async function GET(_request: Request, context: Context) {
       videoAssetId: row.video_asset_id || null,
       videoUrl: row.video_url || null,
       videoDuration: row.video_duration || null,
+      videoStatus: row.video_status || (row.video_url ? "ready" : "idle"),
       createdAt: row.created_at,
+      updatedAt: row.updated_at,
       items,
     };
   });

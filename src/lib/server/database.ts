@@ -422,6 +422,9 @@ export function getDatabase() {
     if (!pkgCols.some((c) => c.name === "video_duration")) {
       try { database.exec("ALTER TABLE media_packages ADD COLUMN video_duration INTEGER;"); } catch {}
     }
+    if (!pkgCols.some((c) => c.name === "video_status")) {
+      try { database.exec("ALTER TABLE media_packages ADD COLUMN video_status TEXT NOT NULL DEFAULT 'idle';"); } catch {}
+    }
   }
 
   const globalAccountCount = database

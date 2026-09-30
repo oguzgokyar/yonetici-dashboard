@@ -56,6 +56,11 @@ export async function exportPackageVideoHelper(
   const durationPerSlide = Math.min(10, Math.max(1.5, Number(params.durationPerSlide) || 3.5));
   const targetTotalDuration = slideCount * durationPerSlide;
 
+  // Set video_status = 'rendering' at start
+  database
+    .prepare("UPDATE media_packages SET video_status='rendering', updated_at=? WHERE id=?")
+    .run(new Date().toISOString(), packageId);
+
   const canvaConfig = getCanvaConfig();
   const apiKey = canvaConfig.apiKey;
   const baseUrl = canvaConfig.baseUrl.replace(/\/+$/, "");
@@ -226,7 +231,7 @@ Return the exact download URL of the exported MP4 file.`;
   // 6. Update database
   database
     .prepare(
-      "UPDATE media_packages SET video_asset_id=?, video_url=?, video_duration=?, updated_at=? WHERE id=?"
+      "UPDATE media_packages SET video_asset_id=?, video_url=?, video_duration=?, video_status='ready', updated_at=? WHERE id=?"
     )
     .run(finalVideoId, videoUrl, actualDuration, new Date().toISOString(), packageId);
 
