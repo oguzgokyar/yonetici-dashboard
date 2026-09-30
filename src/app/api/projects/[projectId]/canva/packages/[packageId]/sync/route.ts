@@ -48,6 +48,11 @@ export async function POST(_request: Request, context: Context) {
   const baseUrl = canvaConfig.baseUrl.replace(/\/+$/, "");
   const assetsDir = path.join(process.cwd(), ".data", "assets");
 
+  // IMMEDIATELY mark package as syncing / video as rendering in database before long network operations
+  database
+    .prepare("UPDATE media_packages SET video_status='rendering', updated_at=? WHERE id=?")
+    .run(new Date().toISOString(), packageId);
+
   try {
     // 1. Fetch updated pages & thumbnails from Canva via Hermes
     const pagesPrompt = `Call mcp__canva__get_design_pages directly on design_id='${designId}'. Return the raw JSON result.`;
@@ -204,6 +209,13 @@ export async function POST(_request: Request, context: Context) {
       }
     }
 
+    // If not a video package, reset status to idle
+    if (!pkg.video_asset_id && pkg.package_type !== "video") {
+      database
+        .prepare("UPDATE media_packages SET video_status='idle' WHERE id=?")
+        .run(packageId);
+    }
+
     return Response.json({
       ok: true,
       message: videoUpdated
@@ -213,6 +225,9 @@ export async function POST(_request: Request, context: Context) {
       videoUpdated,
     });
   } catch (err: unknown) {
+    database
+      .prepare("UPDATE media_packages SET video_status='idle' WHERE id=?")
+      .run(packageId);
     const errorMsg = err instanceof Error ? err.message : String(err);
     return Response.json({ ok: false, message: errorMsg }, { status: 500 });
   }

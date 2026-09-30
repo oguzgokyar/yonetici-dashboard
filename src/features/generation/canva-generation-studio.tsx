@@ -187,8 +187,8 @@ export function CanvaGenerationStudio({
     }
   }, [projectId]);
 
-  const loadPackages = useCallback(async () => {
-    setLoadingPackages(true);
+  const loadPackages = useCallback(async (isBackground = false) => {
+    if (!isBackground) setLoadingPackages(true);
     try {
       const res = await fetch(
         `/api/projects/${encodeURIComponent(projectId)}/canva/packages`,
@@ -202,16 +202,16 @@ export function CanvaGenerationStudio({
         setPackages(data.packages);
       }
     } catch {
-      setMessage("Canva paketleri alınamadı.");
+      if (!isBackground) setMessage("Canva paketleri alınamadı.");
     } finally {
-      setLoadingPackages(false);
+      if (!isBackground) setLoadingPackages(false);
     }
   }, [projectId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadJobs();
-    void loadPackages();
+    void loadPackages(false);
   }, [loadJobs, loadPackages]);
 
   // Polling when a job is in-flight or when packages have pending videos
@@ -220,8 +220,8 @@ export function CanvaGenerationStudio({
     if (!isProducing && !hasPendingVideo) return;
     const timer = window.setInterval(async () => {
       await loadJobs();
-      await loadPackages();
-    }, 3000);
+      await loadPackages(true);
+    }, 2500);
     return () => window.clearInterval(timer);
   }, [isProducing, packages, loadJobs, loadPackages]);
 
