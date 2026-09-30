@@ -315,6 +315,7 @@ export function validateManifestAgainstJob(
 
 export function buildHermesCanvaTaskPrompt(payload: CanvaTaskPayload): string {
   const meta = resolveContentTypeMeta(payload.contentType);
+  const isVideoFormat = meta.category === "video";
   const callbackUrl = payload.callbackBaseUrl.replace(/\/+$/, "");
 
   const progressEndpoint = `${callbackUrl}/api/internal/hermes-canva/jobs/${payload.jobId}/progress`;
@@ -327,6 +328,7 @@ export function buildHermesCanvaTaskPrompt(payload: CanvaTaskPayload): string {
       projectId: payload.projectId,
       prompt: payload.prompt,
       contentType: payload.contentType,
+      isAutoVideo: isVideoFormat,
       dimensions: `${meta.width}x${meta.height}`,
       slideCount: payload.slideCount,
       style: payload.style || "Modern ve minimalist",
@@ -337,7 +339,7 @@ export function buildHermesCanvaTaskPrompt(payload: CanvaTaskPayload): string {
   );
 
   return `[HERMES_CANVA_MACHINE_TASK v${HERMES_CANVA_PIPELINE_VERSION}]
-Bu bir Yönetici Dashboard Canva görsel üretim makine görevidir.
+Bu bir Yönetici Dashboard Canva görsel/video üretim makine görevidir.
 
 ÖNEMLİ KURALLAR:
 1. Kullanıcıyla sohbet ETME, clarification sorusu SORMA. Görevi doğrudan yerine getir.
@@ -345,10 +347,10 @@ Bu bir Yönetici Dashboard Canva görsel üretim makine görevidir.
 3. Codex CLI subprocess ÇALIŞTIRMA — terminal aracını kullanma. Sen zaten Canva MCP (canva-mcp) araçlarına sahipsin.
 4. Canva MCP araçlarını DOĞRUDAN bu ajan dönüşünden çağır (mcp__canva__create_design vb.).
 5. Doğrudan ${meta.width}x${meta.height} boyutunda üret. Asla 16:9 sunum oluşturup resize yapma.
-6. Sayfa sayısı birebir ${payload.slideCount} olmalıdır.
+6. Sayfa/sahne sayısı birebir ${payload.slideCount} olmalıdır.
 7. Kilitli içerik: Metinleri harfiyen koru, paraphrase yapma, bullet point atlama.
 8. Güvenli alanlar: 100px yatay, 140px dikey marjin. Max 2 font ailesi. Bounding box çakışması yok.
-
+${isVideoFormat ? "9. VİDEO İÇERİK KURALI: Bu bir video formatıdır. Tasarım oluştuktan sonra otomatik olarak 'Sihirli Animasyon' (Magic Animate) işlenecek ve MP4 video olarak arşive kaydedilecektir.\n" : ""}
 CANVA TASARIM KURALLARI (canva-carousel-director v2):
 - Format: Doğrudan ${meta.canvaFormat} = ${meta.width}×${meta.height}px (${meta.aspectRatio}).
 - Boyut: ${meta.width}x${meta.height}px, ${payload.slideCount} sayfa.
