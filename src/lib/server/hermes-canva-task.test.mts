@@ -67,7 +67,7 @@ test("validateCanvaJobInput validates prompt, content type and slide count", () 
         contentType: "instagram_carousel",
         slideCount: 2,
       }),
-    /Carousel için sayfa sayısı 3 ile 10 arasında olmalıdır/
+    /için sayfa sayısı 3 ile 10 arasında olmalıdır/
   );
 
   assert.throws(
@@ -77,7 +77,7 @@ test("validateCanvaJobInput validates prompt, content type and slide count", () 
         contentType: "instagram_carousel",
         slideCount: 11,
       }),
-    /Carousel için sayfa sayısı 3 ile 10 arasında olmalıdır/
+    /için sayfa sayısı 3 ile 10 arasında olmalıdır/
   );
 
   // Valid carousel input

@@ -240,7 +240,7 @@ export function validateCanvaJobInput(rawInput: unknown): ValidatedCanvaJob {
     const rawSlides = Number(input.slideCount);
     if (!Number.isInteger(rawSlides) || rawSlides < meta.minSlides || rawSlides > meta.maxSlides) {
       throw new Error(
-        `Carousel için sayfa sayısı ${meta.minSlides} ile ${meta.maxSlides} arasında olmalıdır.`
+        `${meta.label} için sayfa sayısı ${meta.minSlides} ile ${meta.maxSlides} arasında olmalıdır.`
       );
     }
     slideCount = rawSlides;

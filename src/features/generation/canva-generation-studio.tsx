@@ -209,7 +209,8 @@ export function CanvaGenerationStudio({
           body: JSON.stringify({
             prompt: prompt.trim(),
             contentType,
-            slideCount: contentType === "instagram_carousel" ? slideCount : 1,
+            slideCount:
+              CANVA_CONTENT_TYPES[contentType]?.packageType === "carousel" ? slideCount : 1,
             style,
             selectedBrandFields: selectedFields,
             idempotencyKey: crypto.randomUUID(),
