@@ -54,7 +54,7 @@ export interface CanvaPackage {
   projectId: string;
   generationJobId: string;
   source: string;
-  packageType: "single" | "carousel";
+  packageType: "single" | "carousel" | "video";
   title: string;
   coverAssetId: string;
   coverUrl: string;
@@ -178,15 +178,16 @@ export function CanvaGenerationStudio({
     void loadPackages();
   }, [loadJobs, loadPackages]);
 
-  // Polling when a job is in-flight
+  // Polling when a job is in-flight or when packages have pending videos
   useEffect(() => {
-    if (!isProducing) return;
+    const hasPendingVideo = packages.some((p) => p.packageType === "video" && !p.videoUrl);
+    if (!isProducing && !hasPendingVideo) return;
     const timer = window.setInterval(async () => {
       await loadJobs();
       await loadPackages();
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [isProducing, loadJobs, loadPackages]);
+  }, [isProducing, packages, loadJobs, loadPackages]);
 
   function toggleField(key: BrandKey) {
     if (!available[key]) return;

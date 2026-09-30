@@ -8,6 +8,7 @@ import {
 } from "@/lib/server/canva-package-service";
 import { getDatabase } from "@/lib/server/database";
 import { validateManifestAgainstJob } from "@/lib/server/hermes-canva-task";
+import { exportPackageVideoHelper } from "@/lib/server/canva-video-service";
 
 export const runtime = "nodejs";
 
@@ -124,6 +125,23 @@ export async function POST(request: Request, context: Context) {
       manifest,
       assets: savedAssets,
     });
+
+    // If contentType is a video format, automatically trigger Canva cloud video export in background
+    if (manifest.contentType.includes("video")) {
+      setTimeout(() => {
+        void exportPackageVideoHelper({
+          database,
+          packageId,
+          projectId: job.project_id,
+          designId: manifest.designId,
+          slideCount: manifest.pageCount,
+          durationPerSlide: 3.5,
+          useMagicAnimate: true,
+        }).catch((err) => {
+          console.error(`[Auto Video Export] Failed for package ${packageId}:`, err);
+        });
+      }, 500);
+    }
 
     return Response.json({ ok: true, packageId });
   } catch (err) {
