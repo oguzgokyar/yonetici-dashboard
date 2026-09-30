@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  Check,
   CheckCircle2,
   CircleAlert,
+  Copy,
   ExternalLink,
   Instagram,
   LoaderCircle,
@@ -91,6 +93,25 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  async function copyToClipboard(text: string, key: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey((curr) => (curr === key ? null : curr)), 2000);
+    } catch {
+      // Fallback
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey((curr) => (curr === key ? null : curr)), 2000);
+    }
+  }
 
   async function loadAccounts() {
     setLoading(true);
@@ -454,50 +475,172 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
       {/* 5. YouTube ve TikTok Bağlama Kılavuzu */}
       {!hasYoutube || !hasTiktok ? (
         <section className="panel" style={{ marginTop: "18px" }}>
-          <div className="panel-header">
+          <div className="panel-header" style={{ flexWrap: "wrap", gap: "8px" }}>
             <div>
               <h3>YouTube & TikTok Bağlama Kılavuzu</h3>
-              <p>Bu platformları aktifleştirmek için gereken adımlar</p>
+              <p>Bu platformları aktifleştirmek için Postiz üzerinde yetkilendirme adımları</p>
             </div>
             <span className="badge-pill" style={{ background: "#fff8e6", color: "#b57c00" }}>API Anahtarı Bekleniyor</span>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", padding: "4px 0" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))",
+              gap: "16px",
+              padding: "4px 0",
+            }}
+          >
             {/* YouTube */}
             {!hasYoutube && (
               <div
                 style={{
-                  padding: "20px",
+                  padding: "18px",
                   borderRadius: "12px",
                   border: "1px solid #ffd0d0",
                   background: "#fff8f8",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
-                  <div style={{ padding: "8px", borderRadius: "10px", background: "#fff0f0", color: "#ff0000" }}>
-                    <Youtube size={20} />
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+                    <div style={{ padding: "8px", borderRadius: "10px", background: "#fff0f0", color: "#ff0000" }}>
+                      <Youtube size={20} />
+                    </div>
+                    <div>
+                      <strong style={{ fontSize: "14px", color: "#1f2937" }}>YouTube Entegrasyonu</strong>
+                      <div style={{ fontSize: "11px", color: "#6b7280" }}>Shorts & Standart Video Paylaşımı</div>
+                    </div>
                   </div>
-                  <div>
-                    <strong style={{ fontSize: "14px" }}>YouTube</strong>
-                    <div style={{ fontSize: "11px", color: "#888" }}>Shorts & Uzun Video</div>
+
+                  <div style={{ fontSize: "12px", color: "#4b5563", lineHeight: 1.6, marginBottom: "12px" }}>
+                    Google Cloud Console üzerinden <strong>YouTube Data API v3</strong> yetkisiyle OAuth2 Web İstemcisi oluşturun.
+                  </div>
+
+                  <div style={{ marginBottom: "10px" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
+                      Yetkili Yönlendirme URI (Redirect URI):
+                    </span>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        background: "#ffffff",
+                        border: "1px solid #fca5a5",
+                        borderRadius: "8px",
+                        padding: "6px 8px",
+                      }}
+                    >
+                      <code
+                        style={{
+                          fontSize: "11px",
+                          color: "#b91c1c",
+                          wordBreak: "break-all",
+                          flex: 1,
+                          userSelect: "all",
+                        }}
+                      >
+                        https://sm.atolyehanem.com/api/v1/integrations/social/youtube/callback
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          copyToClipboard(
+                            "https://sm.atolyehanem.com/api/v1/integrations/social/youtube/callback",
+                            "yt-uri"
+                          )
+                        }
+                        title="Kopyala"
+                        style={{
+                          background: copiedKey === "yt-uri" ? "#dcfce7" : "#fee2e2",
+                          border: "none",
+                          borderRadius: "6px",
+                          padding: "6px",
+                          cursor: "pointer",
+                          color: copiedKey === "yt-uri" ? "#15803d" : "#b91c1c",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {copiedKey === "yt-uri" ? <Check size={14} /> : <Copy size={14} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: "12px" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
+                      Gerekli İzin Kapsamları (Scopes):
+                    </span>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        background: "#ffffff",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: "8px",
+                        padding: "6px 8px",
+                      }}
+                    >
+                      <code
+                        style={{
+                          fontSize: "10px",
+                          color: "#4b5563",
+                          wordBreak: "break-all",
+                          flex: 1,
+                          userSelect: "all",
+                        }}
+                      >
+                        https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          copyToClipboard(
+                            "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
+                            "yt-scopes"
+                          )
+                        }
+                        title="Kapsamları Kopyala"
+                        style={{
+                          background: copiedKey === "yt-scopes" ? "#dcfce7" : "#f3f4f6",
+                          border: "none",
+                          borderRadius: "6px",
+                          padding: "6px",
+                          cursor: "pointer",
+                          color: copiedKey === "yt-scopes" ? "#15803d" : "#4b5563",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {copiedKey === "yt-scopes" ? <Check size={14} /> : <Copy size={14} />}
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <ol style={{ margin: 0, paddingLeft: "16px", fontSize: "12px", lineHeight: 1.8, color: "#555" }}>
-                  <li>Google Cloud Console&apos;da proje oluşturun</li>
-                  <li><strong>YouTube Data API v3</strong> etkinleştirin</li>
-                  <li>OAuth 2.0 Client ID alın (Web Application)</li>
-                  <li>Redirect URI ekleyin: <code style={{ fontSize: "10px" }}>sm.atolyehanem.com/api/v1/integrations/social/youtube/callback</code></li>
-                  <li>Bize <strong>CLIENT_ID</strong> ve <strong>CLIENT_SECRET</strong> gönderin</li>
-                </ol>
+
                 <a
                   href="https://console.cloud.google.com/apis/dashboard"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="button secondary"
-                  style={{ marginTop: "12px", width: "100%", justifyContent: "center", fontSize: "11px", height: "34px" }}
+                  style={{
+                    width: "100%",
+                    justifyContent: "center",
+                    fontSize: "11px",
+                    height: "36px",
+                    background: "#ffffff",
+                  }}
                 >
-                  <ExternalLink size={12} />
-                  Google Cloud Console ↗
+                  <ExternalLink size={13} />
+                  Google Cloud Console&apos;da Oluştur ↗
                 </a>
               </div>
             )}
@@ -506,37 +649,149 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
             {!hasTiktok && (
               <div
                 style={{
-                  padding: "20px",
+                  padding: "18px",
                   borderRadius: "12px",
-                  border: "1px solid #d0d0d0",
-                  background: "#f8f8f8",
+                  border: "1px solid #e5e7eb",
+                  background: "#f9fafb",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
-                  <div style={{ padding: "8px", borderRadius: "10px", background: "#f0f0f0", color: "#010101" }}>
-                    <Music2 size={20} />
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+                    <div style={{ padding: "8px", borderRadius: "10px", background: "#f3f4f6", color: "#111827" }}>
+                      <Music2 size={20} />
+                    </div>
+                    <div>
+                      <strong style={{ fontSize: "14px", color: "#111827" }}>TikTok Entegrasyonu</strong>
+                      <div style={{ fontSize: "11px", color: "#6b7280" }}>Video & Doğrudan Yayın Paylaşımı</div>
+                    </div>
                   </div>
-                  <div>
-                    <strong style={{ fontSize: "14px" }}>TikTok</strong>
-                    <div style={{ fontSize: "11px", color: "#888" }}>Video & Doğrudan Yayın</div>
+
+                  <div style={{ fontSize: "12px", color: "#4b5563", lineHeight: 1.6, marginBottom: "12px" }}>
+                    TikTok for Developers portalında bir Developer App oluşturup <strong>Content Posting API</strong> ve <strong>Direct Post</strong> izinlerini etkinleştirin.
+                  </div>
+
+                  <div style={{ marginBottom: "10px" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
+                      Yetkili Yönlendirme URI (Redirect URI):
+                    </span>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        background: "#ffffff",
+                        border: "1px solid #d1d5db",
+                        borderRadius: "8px",
+                        padding: "6px 8px",
+                      }}
+                    >
+                      <code
+                        style={{
+                          fontSize: "11px",
+                          color: "#111827",
+                          wordBreak: "break-all",
+                          flex: 1,
+                          userSelect: "all",
+                        }}
+                      >
+                        https://sm.atolyehanem.com/api/v1/integrations/social/tiktok/callback
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          copyToClipboard(
+                            "https://sm.atolyehanem.com/api/v1/integrations/social/tiktok/callback",
+                            "tt-uri"
+                          )
+                        }
+                        title="Kopyala"
+                        style={{
+                          background: copiedKey === "tt-uri" ? "#dcfce7" : "#f3f4f6",
+                          border: "none",
+                          borderRadius: "6px",
+                          padding: "6px",
+                          cursor: "pointer",
+                          color: copiedKey === "tt-uri" ? "#15803d" : "#111827",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {copiedKey === "tt-uri" ? <Check size={14} /> : <Copy size={14} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: "12px" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
+                      Gerekli İzin Kapsamları (Scopes):
+                    </span>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        background: "#ffffff",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: "8px",
+                        padding: "6px 8px",
+                      }}
+                    >
+                      <code
+                        style={{
+                          fontSize: "10px",
+                          color: "#4b5563",
+                          wordBreak: "break-all",
+                          flex: 1,
+                          userSelect: "all",
+                        }}
+                      >
+                        video.publish video.upload user.info.basic
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          copyToClipboard("video.publish video.upload user.info.basic", "tt-scopes")
+                        }
+                        title="Kapsamları Kopyala"
+                        style={{
+                          background: copiedKey === "tt-scopes" ? "#dcfce7" : "#f3f4f6",
+                          border: "none",
+                          borderRadius: "6px",
+                          padding: "6px",
+                          cursor: "pointer",
+                          color: copiedKey === "tt-scopes" ? "#15803d" : "#4b5563",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {copiedKey === "tt-scopes" ? <Check size={14} /> : <Copy size={14} />}
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <ol style={{ margin: 0, paddingLeft: "16px", fontSize: "12px", lineHeight: 1.8, color: "#555" }}>
-                  <li>developers.tiktok.com&apos;da Developer App oluşturun</li>
-                  <li><strong>Content Posting API</strong> ve <strong>Direct Post</strong> izinlerini ekleyin</li>
-                  <li>Redirect URI ekleyin: <code style={{ fontSize: "10px" }}>sm.atolyehanem.com/api/v1/integrations/social/tiktok/callback</code></li>
-                  <li>Uygulama onayını bekleyin (1-3 iş günü)</li>
-                  <li>Bize <strong>Client Key</strong> ve <strong>Client Secret</strong> gönderin</li>
-                </ol>
+
                 <a
                   href="https://developers.tiktok.com"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="button secondary"
-                  style={{ marginTop: "12px", width: "100%", justifyContent: "center", fontSize: "11px", height: "34px" }}
+                  style={{
+                    width: "100%",
+                    justifyContent: "center",
+                    fontSize: "11px",
+                    height: "36px",
+                    background: "#ffffff",
+                  }}
                 >
-                  <ExternalLink size={12} />
-                  TikTok Developers ↗
+                  <ExternalLink size={13} />
+                  TikTok Developers Portalı ↗
                 </a>
               </div>
             )}
