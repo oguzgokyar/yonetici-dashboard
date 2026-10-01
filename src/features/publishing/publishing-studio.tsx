@@ -34,6 +34,7 @@ import {
   TikTokIcon,
   FacebookIcon,
 } from "./platform-previews";
+import { PublishingHealthBadge } from "./publishing-health-badge";
 
 type ConnectedAccount = {
   id: string;
@@ -714,7 +715,8 @@ export function PublishingStudio({
             İçeriklerinizi kanallara özel canlı önizleyerek hazırlayın, planlayın ve aktif hesaplarınıza tek tıkla dağıtın.
           </p>
         </div>
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <PublishingHealthBadge />
           <button
             type="button"
             onClick={() => {

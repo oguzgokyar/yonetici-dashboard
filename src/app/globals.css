@@ -1490,3 +1490,169 @@ button { cursor:pointer; }
   flex-direction: column;
   gap: 12px;
 }
+
+/* ==========================================================================
+   Publishing Infrastructure Health Badge & Popover
+   ========================================================================== */
+
+.publishing-health-container {
+  position: relative;
+  display: inline-block;
+}
+
+.health-badge-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font: 700 11px "Manrope";
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.16s ease;
+  white-space: nowrap;
+}
+.health-badge-btn.healthy {
+  background: #ecfdf5;
+  color: #065f46;
+  border-color: #a7f3d0;
+}
+.health-badge-btn.healthy:hover {
+  background: #d1fae5;
+}
+.health-badge-btn.warning {
+  background: #fffbeb;
+  color: #92400e;
+  border-color: #fde68a;
+}
+.health-badge-btn.warning:hover {
+  background: #fef3c7;
+}
+.health-badge-btn.error {
+  background: #fef2f2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+.health-badge-btn.error:hover {
+  background: #fee2e2;
+}
+
+.health-pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  position: relative;
+}
+.health-pulse-dot.healthy {
+  background: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
+}
+.health-pulse-dot.warning {
+  background: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
+}
+.health-pulse-dot.error {
+  background: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.3);
+}
+
+.health-chevron {
+  transition: transform 0.16s ease;
+}
+.health-chevron.rotated {
+  transform: rotate(180deg);
+}
+
+.health-details-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  background: white;
+  border: 1px solid #e7e8ee;
+  border-radius: 14px;
+  box-shadow: 0 12px 36px rgba(20, 21, 35, 0.12);
+  z-index: 50;
+  overflow: hidden;
+  animation: popoverFadeIn 0.14s ease-out;
+}
+@keyframes popoverFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.health-popover-header {
+  padding: 12px 14px;
+  background: #fafafc;
+  border-bottom: 1px solid #f0f0f4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.health-popover-header strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+}
+.health-popover-header small {
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.health-services-list {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  gap: 6px;
+}
+.health-service-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #fbfbfd;
+  border: 1px solid #f2f2f7;
+}
+.health-service-icon {
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+.health-service-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.health-service-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.health-service-title span {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+}
+.health-service-title small {
+  font-size: 9px;
+  color: var(--muted);
+  font-family: monospace;
+}
+.health-service-msg {
+  font-size: 10px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.35;
+}
+
+.health-popover-footer {
+  padding: 8px 12px;
+  background: #f8f8fc;
+  border-top: 1px solid #f0f0f4;
+  font-size: 9px;
+  color: var(--muted);
+  text-align: center;
+}
