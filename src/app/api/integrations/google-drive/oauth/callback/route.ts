@@ -103,6 +103,24 @@ export async function GET(request: Request) {
       token_type: tokenResult.token_type || "Bearer",
       expiry_date: tokenResult.expires_in ? Date.now() + tokenResult.expires_in * 1000 : undefined,
     };
+
+    // Also sync token to scraper's google_token.json so both tools share the authenticated Drive!
+    try {
+      const fs = await import("node:fs");
+      const scraperTokenPath = "/opt/data/google_token.json";
+      const scraperTokenData = {
+        ...tokenResult,
+        client_id: clientId,
+        client_secret: clientSecret,
+        type: "authorized_user",
+        email: normalizedEmail,
+        display_name: profile.displayName
+      };
+      fs.writeFileSync(scraperTokenPath, JSON.stringify(scraperTokenData, null, 2), "utf-8");
+    } catch (e) {
+      console.error("[OAuth Callback Sync to Scraper Error]", e);
+    }
+
     const encryptedToken = encryptSecret(JSON.stringify(tokenData));
     const scopes = (tokenResult.scope || "").split(/\s+/).filter(Boolean);
     const label = existing?.label || profile.displayName || normalizedEmail || "Google Drive";

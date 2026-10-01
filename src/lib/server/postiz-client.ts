@@ -211,11 +211,15 @@ export type YouTubePostSettings = {
 };
 
 export type TikTokPostSettings = {
-  content_posting_method: "DIRECT_POST" | "UPLOAD";
-  privacy_level: "PUBLIC_TO_EVERYONE" | "MUTUAL_FOLLOW_FRIENDS" | "FOLLOWER_OF_CREATOR" | "SELF_ONLY";
+  title?: string;
+  content_posting_method?: "DIRECT_POST" | "UPLOAD";
+  privacy_level?: "PUBLIC_TO_EVERYONE" | "MUTUAL_FOLLOW_FRIENDS" | "FOLLOWER_OF_CREATOR" | "SELF_ONLY";
   comment?: boolean;
   duet?: boolean;
   stitch?: boolean;
+  autoAddMusic?: "yes" | "no";
+  brand_content_toggle?: boolean;
+  brand_organic_toggle?: boolean;
   video_made_with_ai?: boolean;
 };
 
@@ -265,13 +269,19 @@ function buildPlatformSettings(params: CreatePostizPostParams): Record<string, u
   }
 
   if (platform === "tiktok") {
+    const title = params.tiktokSettings?.title
+      || (params.caption ? params.caption.slice(0, 85).trim() : undefined);
+
     return {
-      content_posting_method: params.tiktokSettings?.content_posting_method || "DIRECT_POST",
-      privacy_level: params.tiktokSettings?.privacy_level || "PUBLIC_TO_EVERYONE",
+      ...(title ? { title: title.slice(0, 90) } : {}),
+      content_posting_method: params.tiktokSettings?.content_posting_method || "UPLOAD",
+      privacy_level: params.tiktokSettings?.privacy_level || "SELF_ONLY",
       comment: params.tiktokSettings?.comment ?? true,
       duet: params.tiktokSettings?.duet ?? true,
       stitch: params.tiktokSettings?.stitch ?? true,
-      // Always mark AI-generated content for TikTok compliance
+      autoAddMusic: params.tiktokSettings?.autoAddMusic || "no",
+      brand_content_toggle: params.tiktokSettings?.brand_content_toggle ?? false,
+      brand_organic_toggle: params.tiktokSettings?.brand_organic_toggle ?? false,
       video_made_with_ai: params.tiktokSettings?.video_made_with_ai ?? true,
     };
   }

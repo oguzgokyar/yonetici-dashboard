@@ -543,13 +543,13 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
                           userSelect: "all",
                         }}
                       >
-                        https://sm.atolyehanem.com/api/v1/integrations/social/youtube/callback
+                        https://sm.atolyehanem.com/integrations/social/youtube
                       </code>
                       <button
                         type="button"
                         onClick={() =>
                           copyToClipboard(
-                            "https://sm.atolyehanem.com/api/v1/integrations/social/youtube/callback",
+                            "https://sm.atolyehanem.com/integrations/social/youtube",
                             "yt-uri"
                           )
                         }
@@ -697,13 +697,13 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
                           userSelect: "all",
                         }}
                       >
-                        https://sm.atolyehanem.com/api/v1/integrations/social/tiktok/callback
+                        https://sm.atolyehanem.com/integrations/social/tiktok
                       </code>
                       <button
                         type="button"
                         onClick={() =>
                           copyToClipboard(
-                            "https://sm.atolyehanem.com/api/v1/integrations/social/tiktok/callback",
+                            "https://sm.atolyehanem.com/integrations/social/tiktok",
                             "tt-uri"
                           )
                         }

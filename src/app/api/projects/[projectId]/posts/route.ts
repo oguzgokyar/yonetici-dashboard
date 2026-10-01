@@ -472,8 +472,12 @@ export async function POST(request: Request, context: Context) {
         selfDeclaredMadeForKids: "no",
       },
       tiktokSettings: {
-        content_posting_method: "DIRECT_POST",
-        privacy_level: "PUBLIC_TO_EVERYONE",
+        title: (body.title || "Video Paylaşımı").slice(0, 90),
+        content_posting_method: "UPLOAD",
+        privacy_level: "SELF_ONLY",
+        autoAddMusic: "no",
+        brand_content_toggle: false,
+        brand_organic_toggle: false,
         video_made_with_ai: true,
       },
     });
