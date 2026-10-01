@@ -17,6 +17,22 @@ import {
   Youtube,
 } from "lucide-react";
 
+export function TikTokIcon({ size = 14, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <path d="M19.589 6.686a4.793 4.793 0 0 1-3.77-4.245V2h-3.445v13.672a2.896 2.896 0 0 1-5.201 1.743 2.895 2.895 0 0 1 2.31-4.643c.294 0 .579.043.848.123V9.387a6.37 6.37 0 0 0-.848-.057A6.34 6.34 0 0 0 3.14 15.67a6.34 6.34 0 0 0 6.343 6.343 6.34 6.34 0 0 0 6.343-6.343V9.213a8.163 8.163 0 0 0 4.763 1.517v-3.44a4.8 4.8 0 0 1-1-.604z" />
+    </svg>
+  );
+}
+
+export function FacebookIcon({ size = 14, color = "#1877f2" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+    </svg>
+  );
+}
+
 export type PreviewPlatform = "instagram" | "youtube" | "tiktok" | "facebook";
 
 export type PreviewProps = {
@@ -51,6 +67,7 @@ export function MultiPlatformPreview({
   const isVideo = contentType === "video" || mediaUrl?.endsWith(".mp4");
   const displayTitle = title.trim();
   const displayCaption = caption.trim();
+  const cleanHandle = (accountHandle || "hesap").replace(/^@+/, "");
   const formattedHashtags = hashtags
     .trim()
     .split(/[\s,]+/)
@@ -65,6 +82,11 @@ export function MultiPlatformPreview({
       return (
         <div className="preview-phone-frame">
           <div className="preview-screen yt-shorts-screen">
+            <div className="preview-active-platform-tag">
+              <Youtube size={12} color="#ff0000" />
+              <span>YouTube Shorts Önizlemesi</span>
+            </div>
+
             {/* Background / Video */}
             <div className="preview-media-container">
               {isVideo && mediaUrl ? (
@@ -86,23 +108,23 @@ export function MultiPlatformPreview({
             {/* Shorts Right Action Buttons */}
             <div className="shorts-actions-column">
               <div className="shorts-action-btn">
-                <ThumbsUp size={22} />
+                <ThumbsUp size={20} />
                 <span>1.4B</span>
               </div>
               <div className="shorts-action-btn">
-                <MessageCircle size={22} />
+                <MessageCircle size={20} />
                 <span>84</span>
               </div>
               <div className="shorts-action-btn">
-                <Share2 size={22} />
+                <Share2 size={20} />
                 <span>Paylaş</span>
               </div>
               <div className="shorts-action-btn">
-                <Repeat2 size={22} />
+                <Repeat2 size={20} />
                 <span>Remix</span>
               </div>
               <div className="shorts-audio-disk">
-                <Music size={14} />
+                <Music size={13} />
               </div>
             </div>
 
@@ -114,7 +136,7 @@ export function MultiPlatformPreview({
                 ) : (
                   <div className="shorts-avatar placeholder">{accountName.slice(0, 1)}</div>
                 )}
-                <span className="shorts-channel-name">@{accountHandle}</span>
+                <span className="shorts-channel-name">@{cleanHandle}</span>
                 <button type="button" className="shorts-sub-btn">Abone Ol</button>
               </div>
 
@@ -131,6 +153,11 @@ export function MultiPlatformPreview({
     // Standard YouTube Video Preview
     return (
       <div className="preview-card yt-preview-card">
+        <div className="preview-active-platform-tag static">
+          <Youtube size={12} color="#ff0000" />
+          <span>YouTube Standart Video Önizlemesi</span>
+        </div>
+
         <div className="yt-card-header">
           <div className="yt-logo-badge">
             <Youtube size={16} style={{ color: "#ff0000" }} />
@@ -174,6 +201,11 @@ export function MultiPlatformPreview({
     return (
       <div className="preview-phone-frame">
         <div className="preview-screen tiktok-screen">
+          <div className="preview-active-platform-tag">
+            <TikTokIcon size={12} color="#ffffff" />
+            <span>TikTok Sizin İçin Önizlemesi</span>
+          </div>
+
           <div className="preview-media-container">
             {isVideo && mediaUrl ? (
               <video src={mediaUrl} poster={thumbnailUrl} autoPlay loop muted playsInline />
@@ -192,39 +224,41 @@ export function MultiPlatformPreview({
               {accountPicture ? (
                 <img src={accountPicture} alt="" />
               ) : (
-                <div className="shorts-avatar placeholder">{accountName.slice(0, 1)}</div>
+                <div className="tiktok-profile-placeholder">
+                  {accountName ? accountName.slice(0, 1).toUpperCase() : "T"}
+                </div>
               )}
               <span className="tiktok-plus">+</span>
             </div>
             <div className="tiktok-action-btn">
-              <Heart size={24} fill="#ffffff" />
+              <Heart size={20} fill="#ffffff" />
               <span>4.2B</span>
             </div>
             <div className="tiktok-action-btn">
-              <MessageCircle size={24} fill="#ffffff" />
+              <MessageCircle size={20} fill="#ffffff" />
               <span>128</span>
             </div>
             <div className="tiktok-action-btn">
-              <Bookmark size={24} fill="#ffffff" />
+              <Bookmark size={20} fill="#ffffff" />
               <span>56</span>
             </div>
             <div className="tiktok-action-btn">
-              <Share2 size={24} fill="#ffffff" />
+              <Share2 size={20} fill="#ffffff" />
               <span>Paylaş</span>
             </div>
             <div className="tiktok-record-disk">
-              <Music size={14} />
+              <Music size={12} />
             </div>
           </div>
 
           <div className="tiktok-bottom-meta">
-            <strong>@{accountHandle}</strong>
+            <strong style={{ fontSize: "12px", color: "white" }}>@{cleanHandle}</strong>
             <p className="tiktok-caption">
               {displayCaption || displayTitle || "TikTok açıklaması"}
               {formattedHashtags && <span className="tiktok-tags"> {formattedHashtags}</span>}
             </p>
             <div className="tiktok-sound-track">
-              <Music size={12} />
+              <Music size={11} />
               <span>Orijinal Ses - {accountName}</span>
             </div>
           </div>
@@ -236,6 +270,11 @@ export function MultiPlatformPreview({
   if (platform === "facebook") {
     return (
       <div className="preview-card fb-preview-card">
+        <div className="preview-active-platform-tag static">
+          <FacebookIcon size={12} color="#1877f2" />
+          <span>Facebook Gönderi Önizlemesi</span>
+        </div>
+
         <div className="fb-post-header">
           <div className="fb-author-row">
             {accountPicture ? (
@@ -290,6 +329,11 @@ export function MultiPlatformPreview({
     return (
       <div className="preview-phone-frame">
         <div className="preview-screen ig-reels-screen">
+          <div className="preview-active-platform-tag">
+            <span style={{ color: "#e1306c" }}>●</span>
+            <span>Instagram Reels Önizlemesi</span>
+          </div>
+
           <div className="preview-media-container">
             {isVideo && mediaUrl ? (
               <video src={mediaUrl} poster={thumbnailUrl} autoPlay loop muted playsInline />
@@ -304,21 +348,21 @@ export function MultiPlatformPreview({
 
           <div className="ig-reels-actions">
             <div className="ig-reels-btn">
-              <Heart size={24} />
+              <Heart size={20} />
               <span>3.8B</span>
             </div>
             <div className="ig-reels-btn">
-              <MessageCircle size={24} />
+              <MessageCircle size={20} />
               <span>42</span>
             </div>
             <div className="ig-reels-btn">
-              <Send size={24} />
+              <Send size={20} />
             </div>
             <div className="ig-reels-btn">
-              <Bookmark size={24} />
+              <Bookmark size={20} />
             </div>
             <div className="ig-reels-btn">
-              <MoreHorizontal size={24} />
+              <MoreHorizontal size={20} />
             </div>
           </div>
 
@@ -329,7 +373,7 @@ export function MultiPlatformPreview({
               ) : (
                 <div className="ig-reels-avatar placeholder">{accountName.slice(0, 1)}</div>
               )}
-              <strong>{accountHandle}</strong>
+              <strong>@{cleanHandle}</strong>
               <button type="button" className="ig-follow-btn">Takip Et</button>
             </div>
 
@@ -346,6 +390,11 @@ export function MultiPlatformPreview({
   // Instagram Feed Post
   return (
     <div className="preview-card ig-preview-card">
+      <div className="preview-active-platform-tag static">
+        <span style={{ color: "#e1306c" }}>●</span>
+        <span>Instagram Feed Gönderi Önizlemesi</span>
+      </div>
+
       <div className="ig-header">
         <div className="ig-user-info">
           {accountPicture ? (
@@ -353,7 +402,7 @@ export function MultiPlatformPreview({
           ) : (
             <div className="ig-avatar placeholder">{accountName.slice(0, 1)}</div>
           )}
-          <span className="ig-username">{accountHandle}</span>
+          <span className="ig-username">@{cleanHandle}</span>
         </div>
         <MoreHorizontal size={18} />
       </div>
@@ -381,7 +430,7 @@ export function MultiPlatformPreview({
       <div className="ig-content-box">
         <span className="ig-likes">182 beğenme</span>
         <div className="ig-caption-text">
-          <strong>{accountHandle} </strong>
+          <strong>@{cleanHandle} </strong>
           <span>{displayCaption || displayTitle || "Gönderi açıklaması buraya gelecek..."}</span>
           {formattedHashtags && <div className="ig-tags">{formattedHashtags}</div>}
         </div>

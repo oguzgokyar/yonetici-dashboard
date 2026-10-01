@@ -31,6 +31,8 @@ import { useProjects } from "@/features/projects/projects-context";
 import {
   MultiPlatformPreview,
   PreviewPlatform,
+  TikTokIcon,
+  FacebookIcon,
 } from "./platform-previews";
 
 type ConnectedAccount = {
@@ -798,6 +800,11 @@ export function PublishingStudio({
               <div className="channel-multi-select-grid">
                 {accounts.map((acc) => {
                   const isSelected = selectedIntegrationIds.includes(acc.integrationId);
+                  const isYt = acc.identifier.includes("youtube");
+                  const isTt = acc.identifier.includes("tiktok");
+                  const isFb = acc.identifier.includes("facebook");
+                  const cleanHandle = (acc.profile || acc.name || "").replace(/^@+/, "");
+
                   return (
                     <button
                       key={acc.id}
@@ -809,17 +816,21 @@ export function PublishingStudio({
                         <img src={acc.picture} alt="" className="channel-chip-avatar" />
                       ) : (
                         <div className="channel-chip-placeholder">
-                          {acc.identifier.includes("youtube") ? (
+                          {isYt ? (
                             <Youtube size={12} color="#ff0000" />
+                          ) : isTt ? (
+                            <TikTokIcon size={12} color="#000000" />
+                          ) : isFb ? (
+                            <FacebookIcon size={12} />
                           ) : (
                             <Instagram size={12} color="#612bd3" />
                           )}
                         </div>
                       )}
-                      <span>@{acc.profile || acc.name}</span>
-                      <small style={{ color: "var(--muted)", textTransform: "uppercase", fontSize: "9px" }}>
-                        ({acc.identifier})
-                      </small>
+                      <span style={{ fontWeight: 700 }}>
+                        {isYt ? "YouTube" : isTt ? "TikTok" : isFb ? "Facebook" : "Instagram"}:
+                      </span>
+                      <span>@{cleanHandle}</span>
                     </button>
                   );
                 })}
@@ -973,6 +984,11 @@ export function PublishingStudio({
                   </button>
                   {selectedIntegrationIds.map((intId) => {
                     const acc = accounts.find((a) => a.integrationId === intId);
+                    const isYt = acc?.identifier?.includes("youtube");
+                    const isTt = acc?.identifier?.includes("tiktok");
+                    const isFb = acc?.identifier?.includes("facebook");
+                    const cleanHandle = (acc?.profile || acc?.name || "").replace(/^@+/, "");
+
                     return (
                       <button
                         key={intId}
@@ -983,7 +999,17 @@ export function PublishingStudio({
                         }}
                         className={`channel-sub-nav-btn ${activeFormTab === intId ? "active" : ""}`}
                       >
-                        @{acc?.profile || acc?.name}
+                        {isYt ? (
+                          <Youtube size={12} color="#ff0000" />
+                        ) : isTt ? (
+                          <TikTokIcon size={12} color="currentColor" />
+                        ) : isFb ? (
+                          <FacebookIcon size={12} />
+                        ) : (
+                          <Instagram size={12} color="#e1306c" />
+                        )}
+                        <span>{isYt ? "YouTube" : isTt ? "TikTok" : isFb ? "Facebook" : "Instagram"}</span>
+                        <small>(@{cleanHandle})</small>
                       </button>
                     );
                   })}
@@ -1266,25 +1292,81 @@ export function PublishingStudio({
           {/* Right Column: Live Multi-Platform Preview */}
           <div className="composer-preview-panel">
             <div className="preview-panel-header">
-              <span style={{ font: "700 12px 'Manrope'", color: "var(--text)" }}>
-                Canlı Platform Önizlemesi
-              </span>
+              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                <span style={{ font: "700 13px 'Manrope'", color: "var(--text)" }}>
+                  Canlı Platform Önizlemesi
+                </span>
+                <span style={{ fontSize: "11px", color: "var(--muted)", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span>Görünüm:</span>
+                  <span
+                    className="badge-pill info"
+                    style={{
+                      background:
+                        previewPlatform === "tiktok"
+                          ? "#00000010"
+                          : previewPlatform === "youtube"
+                          ? "#fee2e2"
+                          : "#eff6ff",
+                      color:
+                        previewPlatform === "tiktok"
+                          ? "#111"
+                          : previewPlatform === "youtube"
+                          ? "#dc2626"
+                          : "#2563eb",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {previewPlatform === "tiktok" ? (
+                      <>
+                        <TikTokIcon size={11} color="#000" /> TikTok (Sizin İçin)
+                      </>
+                    ) : previewPlatform === "youtube" ? (
+                      <>
+                        <Youtube size={11} color="#ff0000" /> YouTube ({globalPostType === "reel" ? "Shorts" : "Video"})
+                      </>
+                    ) : previewPlatform === "facebook" ? (
+                      <>
+                        <FacebookIcon size={11} /> Facebook Gönderisi
+                      </>
+                    ) : (
+                      <>
+                        <Instagram size={11} color="#e1306c" /> Instagram ({globalPostType === "reel" ? "Reels" : globalPostType === "story" ? "Hikâye" : "Feed"})
+                      </>
+                    )}
+                  </span>
+                </span>
+              </div>
 
               {/* Platform Switcher for Preview */}
               {selectedIntegrationIds.length > 1 && (
                 <div className="preview-platform-picker">
                   {selectedIntegrationIds.map((intId) => {
                     const acc = accounts.find((a) => a.integrationId === intId);
-                    const isYt = acc?.identifier === "youtube";
+                    const isYt = acc?.identifier?.includes("youtube");
+                    const isTt = acc?.identifier?.includes("tiktok");
+                    const isFb = acc?.identifier?.includes("facebook");
+                    const cleanHandle = (acc?.profile || acc?.name || "").replace(/^@+/, "");
+                    const isAct = previewIntegrationId === intId;
+
                     return (
                       <button
                         key={intId}
                         type="button"
                         onClick={() => setPreviewIntegrationId(intId)}
-                        className={`preview-platform-btn ${previewIntegrationId === intId ? "active" : ""}`}
+                        className={`preview-platform-btn ${isAct ? "active" : ""}`}
+                        title={`${acc?.name || "Kanal"} (@${cleanHandle})`}
                       >
-                        {isYt ? <Youtube size={12} color="#ff0000" /> : <Instagram size={12} color="#612bd3" />}
-                        @{acc?.profile || acc?.name}
+                        {isYt ? (
+                          <Youtube size={12} color="#ff0000" />
+                        ) : isTt ? (
+                          <TikTokIcon size={12} color={isAct ? "var(--primary)" : "#111"} />
+                        ) : isFb ? (
+                          <FacebookIcon size={12} />
+                        ) : (
+                          <Instagram size={12} color="#e1306c" />
+                        )}
+                        <span>{isYt ? "YouTube" : isTt ? "TikTok" : isFb ? "Facebook" : "Instagram"}</span>
+                        <small>@{cleanHandle}</small>
                       </button>
                     );
                   })}
@@ -1338,6 +1420,7 @@ export function PublishingStudio({
                 const isYt = acc.identifier.includes("youtube");
                 const isTt = acc.identifier.includes("tiktok");
                 const isFb = acc.identifier.includes("facebook");
+                const cleanHandle = (acc.profile || acc.name || "").replace(/^@+/, "");
 
                 const currentSubTab = channelSubTabs[acc.integrationId] || "scheduled";
 
@@ -1363,13 +1446,20 @@ export function PublishingStudio({
                           <div className="channel-chip-placeholder" style={{ width: "36px", height: "36px" }}>
                             {isYt ? (
                               <Youtube size={18} color="#ff0000" />
+                            ) : isTt ? (
+                              <TikTokIcon size={18} color="#000" />
+                            ) : isFb ? (
+                              <FacebookIcon size={18} />
                             ) : (
                               <Instagram size={18} color="#612bd3" />
                             )}
                           </div>
                         )}
                         <div className="channel-header-meta">
-                          <strong>@{acc.profile || acc.name}</strong>
+                          <strong>
+                            {isYt ? "YouTube: " : isTt ? "TikTok: " : isFb ? "Facebook: " : "Instagram: "}
+                            @{cleanHandle}
+                          </strong>
                           <small>
                             {isYt
                               ? "YouTube Kanalı"
@@ -1384,7 +1474,7 @@ export function PublishingStudio({
                       </div>
 
                       <span className="badge-pill info">
-                        {acc.identifier.toUpperCase()}
+                        {isYt ? "YOUTUBE" : isTt ? "TIKTOK" : isFb ? "FACEBOOK" : "INSTAGRAM"}
                       </span>
                     </div>
 
