@@ -43,7 +43,70 @@ export async function GET(request: Request) {
     ? db.prepare("SELECT * FROM google_oauth_sessions WHERE state = ?").get(state) as OAuthSession | undefined
     : undefined;
 
+  // If there is no Next.js session (e.g. came directly from Scraper tool), handle directly!
   if (!session) {
+    if (code) {
+      try {
+        const { clientId, clientSecret } = getGoogleOAuthClientConfig();
+        const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: clientId,
+            client_secret: clientSecret,
+            code,
+            redirect_uri: `${url.origin}/api/integrations/google-drive/oauth/callback`,
+            grant_type: "authorization_code",
+          }),
+        });
+        const tokenResult = await tokenResponse.json() as TokenResponse;
+        if (tokenResponse.ok && tokenResult.access_token) {
+          const profile = await getGoogleUserProfile(tokenResult.access_token);
+          const fs = await import("node:fs");
+          const scraperTokenPath = "/opt/data/google_token.json";
+          const scraperTokenData = {
+            ...tokenResult,
+            client_id: clientId,
+            client_secret: clientSecret,
+            type: "authorized_user",
+            email: profile.email,
+            display_name: profile.displayName
+          };
+          fs.writeFileSync(scraperTokenPath, JSON.stringify(scraperTokenData, null, 2), "utf-8");
+
+          // Also save to database
+          const normalizedEmail = profile.email.trim().toLocaleLowerCase("en-US");
+          const accountId = crypto.randomUUID();
+          const now = new Date().toISOString();
+          const encryptedToken = encryptSecret(JSON.stringify(scraperTokenData));
+          db.prepare(`
+            INSERT INTO drive_accounts (
+              id, label, email, display_name, photo_link, encrypted_token_json,
+              status, scopes_json, last_validated_at, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
+            ON CONFLICT(id) DO NOTHING
+          `).run(accountId, profile.displayName || normalizedEmail, normalizedEmail, profile.displayName, profile.photoLink || "", encryptedToken, JSON.stringify(tokenResult.scope?.split(" ") || []), now, now, now);
+
+          return new Response(`
+            <html>
+            <head><meta charset="utf-8"><title>Drive Bağlandı</title></head>
+            <body style="background:#0b0f19;color:#f8fafc;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+              <div style="background:#1e293b;padding:32px;border-radius:16px;text-align:center;max-width:420px;border:1px solid #334155;box-shadow:0 10px 25px rgba(0,0,0,0.5);">
+                <h2 style="color:#10b981;margin-top:0;">✓ Google Drive Başarıyla Bağlandı!</h2>
+                <p style="color:#94a3b8;font-size:14px;line-height:1.5;"><strong>${profile.displayName || profile.email}</strong> hesabı hem Yönetici hem de Kazıyıcı aracı için aktif edildi.</p>
+                <div style="margin-top:20px;display:flex;gap:10px;justify-content:center;">
+                  <a href="http://scraper.43.131.47.253.sslip.io/" style="background:#10b981;color:#fff;padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:13px;">Kazıyıcıya Dön</a>
+                  <a href="/projects" style="background:#334155;color:#f8fafc;padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:13px;">Yöneticiye Dön</a>
+                </div>
+              </div>
+            </body>
+            </html>
+          `, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+        }
+      } catch (err) {
+        console.error("[Direct OAuth Exchange Error]", err);
+      }
+    }
     return redirectResult(request.url, "/projects", "error", "Google bağlantı oturumu bulunamadı veya daha önce kullanıldı.");
   }
   db.prepare("DELETE FROM google_oauth_sessions WHERE state = ?").run(state);
