@@ -53,8 +53,20 @@ export function resolveGoogleOAuthRedirectUri(requestUrl?: string): string {
 }
 
 export function getGoogleOAuthClientConfig() {
-  const clientId = process.env.GOOGLE_DRIVE_OAUTH_CLIENT_ID?.trim();
-  const clientSecret = process.env.GOOGLE_DRIVE_OAUTH_CLIENT_SECRET?.trim();
+  let clientId = process.env.GOOGLE_DRIVE_OAUTH_CLIENT_ID?.trim();
+  let clientSecret = process.env.GOOGLE_DRIVE_OAUTH_CLIENT_SECRET?.trim();
+  if (!clientId || !clientSecret) {
+    try {
+      const fs = require("node:fs");
+      const clientSecretPath = "/opt/data/google_client_secret.json";
+      if (fs.existsSync(clientSecretPath)) {
+        const raw = JSON.parse(fs.readFileSync(clientSecretPath, "utf-8"));
+        const info = raw.installed || raw.web || raw;
+        clientId = clientId || (info.client_id ? String(info.client_id).trim() : undefined);
+        clientSecret = clientSecret || (info.client_secret ? String(info.client_secret).trim() : undefined);
+      }
+    } catch {}
+  }
   if (!clientId || !clientSecret) {
     throw new Error("Google OAuth istemcisi yapılandırılmadı. GOOGLE_DRIVE_OAUTH_CLIENT_ID ve GOOGLE_DRIVE_OAUTH_CLIENT_SECRET gerekli.");
   }

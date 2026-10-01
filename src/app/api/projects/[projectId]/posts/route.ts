@@ -7,11 +7,25 @@ import {
   createPostizPost,
   deletePostizPost,
   uploadMediaToPostiz,
+  YouTubePostSettings,
+  TikTokPostSettings,
 } from "@/lib/server/postiz-client";
 
 export const runtime = "nodejs";
 
 type Context = { params: Promise<{ projectId: string }> };
+
+export type TargetSetting = {
+  integrationId: string;
+  title?: string;
+  caption?: string;
+  hashtags?: string;
+  postType?: "post" | "reel" | "story";
+  scheduleType?: "now" | "schedule" | "draft";
+  scheduledAt?: string;
+  youtubeSettings?: YouTubePostSettings;
+  tiktokSettings?: TikTokPostSettings;
+};
 
 export async function GET(_request: Request, context: Context) {
   const { projectId } = await context.params;
@@ -72,18 +86,42 @@ export async function POST(request: Request, context: Context) {
     scheduledAt?: string;
     integrationId?: string;
     postType?: "post" | "reel" | "story";
+    targets?: TargetSetting[];
+    youtubeSettings?: YouTubePostSettings;
+    tiktokSettings?: TikTokPostSettings;
   };
 
-  const contentType = body.contentType || (body.mediaUrl?.endsWith(".mp4") ? "video" : "image");
-  const caption = body.caption?.trim() || "";
-  const hashtags = body.hashtags?.trim() || "";
-  const scheduleType = body.scheduleType || "now";
-  const postType = body.postType || (contentType === "video" ? "reel" : "post");
-  const integrationId = body.integrationId?.trim();
+  const defaultContentType = body.contentType || (body.mediaUrl?.endsWith(".mp4") ? "video" : "image");
+  const defaultCaption = body.caption?.trim() || "";
+  const defaultHashtags = body.hashtags?.trim() || "";
+  const defaultScheduleType = body.scheduleType || "now";
+  const defaultPostType = body.postType || (defaultContentType === "video" ? "reel" : "post");
 
-  if (!integrationId) {
+  const targets: TargetSetting[] =
+    Array.isArray(body.targets) && body.targets.length > 0
+      ? body.targets
+      : body.integrationId?.trim()
+      ? [
+          {
+            integrationId: body.integrationId.trim(),
+            title: body.title,
+            caption: defaultCaption,
+            hashtags: defaultHashtags,
+            scheduleType: defaultScheduleType,
+            scheduledAt: body.scheduledAt,
+            postType: defaultPostType,
+            youtubeSettings: body.youtubeSettings,
+            tiktokSettings: body.tiktokSettings,
+          },
+        ]
+      : [];
+
+  if (targets.length === 0) {
     return Response.json({ ok: false, message: "Hedef sosyal medya hesabı seçilmedi." }, { status: 400 });
   }
+
+  const database = getDatabase();
+  const createdPosts: Array<Record<string, unknown>> = [];
 
   // --- Canva / Multi-Media Package Publishing Branch ---
   const mediaPackageId = body.mediaPackageId?.trim();
@@ -103,17 +141,6 @@ export async function POST(request: Request, context: Context) {
       return Response.json({ ok: false, message: msg }, { status: 400 });
     }
 
-    if (packageItems.length > 1 && postType !== "post") {
-      return Response.json(
-        { ok: false, message: "Carousel paketleri yalnızca Instagram gönderisi olarak paylaşılabilir." },
-        { status: 400 },
-      );
-    }
-
-    const postId = crypto.randomUUID();
-    const now = new Date().toISOString();
-    const database = getDatabase();
-
     // Sequentially upload each item to Postiz
     const postizMediaList: Array<{ id: string; path: string }> = [];
     try {
@@ -123,149 +150,143 @@ export async function POST(request: Request, context: Context) {
       }
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
-      database
-        .prepare(`
-          INSERT INTO content_posts (
-            id, project_id, title, content_type, media_url, caption, hashtags,
-            status, schedule_type, scheduled_at, integration_id, post_type,
-            media_package_id, error_message, created_at, updated_at
-          ) VALUES (?, ?, ?, 'image', '', ?, ?, 'failed', ?, ?, ?, ?, ?, ?, ?, ?)
-        `)
-        .run(
-          postId,
-          projectId,
-          body.title || "Canva Paketi",
-          caption,
-          hashtags,
-          scheduleType,
-          body.scheduledAt || null,
-          integrationId,
-          postType,
-          mediaPackageId,
-          `Postiz Medya Yükleme Hatası: ${errMsg}`,
-          now,
-          now
-        );
       return Response.json(
         { ok: false, message: `Paket medyalarını Postiz'e yükleme başarısız: ${errMsg}` },
         { status: 500 }
       );
     }
 
-    let fullCaption = caption;
-    if (hashtags) {
-      const formattedTags = hashtags
-        .split(/[\s,]+/)
-        .map((t) => (t.startsWith("#") ? t : `#${t}`))
-        .join(" ");
-      fullCaption = `${caption}\n\n${formattedTags}`.trim();
-    }
+    for (const target of targets) {
+      const postId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const targetScheduleType = target.scheduleType || defaultScheduleType;
+      const targetScheduledAt = target.scheduledAt || body.scheduledAt;
+      const targetPostType = target.postType || defaultPostType;
+      const targetTitle = target.title || body.title || "Canva Paketi";
+      const targetCaption = target.caption !== undefined ? target.caption.trim() : defaultCaption;
+      const targetHashtags = target.hashtags !== undefined ? target.hashtags.trim() : defaultHashtags;
 
-    const targetAccount = database
-      .prepare("SELECT identifier FROM project_social_accounts WHERE project_id=? AND integration_id=?")
-      .get(projectId, integrationId) as { identifier?: string } | undefined;
-    const platformIdentifier = targetAccount?.identifier || "instagram";
+      let fullCaption = targetCaption;
+      if (targetHashtags) {
+        const formattedTags = targetHashtags
+          .split(/[\s,]+/)
+          .map((t) => (t.startsWith("#") ? t : `#${t}`))
+          .join(" ");
+        fullCaption = `${targetCaption}\n\n${formattedTags}`.trim();
+      }
 
-    try {
-      const postizResult = await createPostizPost({
-        type: scheduleType,
-        date: body.scheduledAt,
-        integrationId,
-        platformIdentifier,
-        caption: fullCaption,
-        media: postizMediaList,
-        postType,
-      });
+      const targetAccount = database
+        .prepare("SELECT identifier FROM project_social_accounts WHERE project_id=? AND integration_id=?")
+        .get(projectId, target.integrationId) as { identifier?: string } | undefined;
+      const platformIdentifier = targetAccount?.identifier || "instagram";
 
-      const createdPostId = postizResult[0]?.postId || "";
-      const finalStatus = scheduleType === "draft" ? "draft" : scheduleType === "now" ? "published" : "scheduled";
+      try {
+        const postizResult = await createPostizPost({
+          type: targetScheduleType,
+          date: targetScheduledAt,
+          integrationId: target.integrationId,
+          platformIdentifier,
+          caption: fullCaption,
+          media: postizMediaList,
+          postType: targetPostType,
+          youtubeSettings: target.youtubeSettings,
+          tiktokSettings: target.tiktokSettings,
+        });
 
-      database
-        .prepare(`
-          INSERT INTO content_posts (
-            id, project_id, title, content_type, media_url, caption, hashtags,
-            status, schedule_type, scheduled_at, integration_id, post_type,
-            postiz_post_id, postiz_media_id, media_package_id, media_json, created_at, updated_at
-          ) VALUES (?, ?, ?, 'image', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `)
-        .run(
-          postId,
-          projectId,
-          body.title || "Canva Paketi",
-          postizMediaList[0]?.path || "",
-          caption,
-          hashtags,
-          finalStatus,
-          scheduleType,
-          body.scheduledAt || null,
-          integrationId,
-          postType,
-          createdPostId,
-          postizMediaList[0]?.id || "",
-          mediaPackageId,
-          JSON.stringify(postizMediaList),
-          now,
-          now
-        );
+        const createdPostId = postizResult[0]?.postId || "";
+        const finalStatus =
+          targetScheduleType === "draft" ? "draft" : targetScheduleType === "now" ? "published" : "scheduled";
 
-      return Response.json({
-        ok: true,
-        message:
-          scheduleType === "now"
-            ? "Gönderi Postiz üzerinden derhal yayın kuyruğuna alındı!"
-            : scheduleType === "schedule"
-            ? "Gönderi başarıyla zamanlandı!"
-            : "Gönderi taslak olarak Postiz'e kaydedildi.",
-        post: {
+        database
+          .prepare(`
+            INSERT INTO content_posts (
+              id, project_id, title, content_type, media_url, caption, hashtags,
+              status, schedule_type, scheduled_at, integration_id, post_type,
+              postiz_post_id, postiz_media_id, media_package_id, media_json, created_at, updated_at
+            ) VALUES (?, ?, ?, 'image', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `)
+          .run(
+            postId,
+            projectId,
+            targetTitle,
+            postizMediaList[0]?.path || "",
+            targetCaption,
+            targetHashtags,
+            finalStatus,
+            targetScheduleType,
+            targetScheduledAt || null,
+            target.integrationId,
+            targetPostType,
+            createdPostId,
+            postizMediaList[0]?.id || "",
+            mediaPackageId,
+            JSON.stringify(postizMediaList),
+            now,
+            now
+          );
+
+        createdPosts.push({
           id: postId,
           postizPostId: createdPostId,
           status: finalStatus,
           mediaPath: postizMediaList[0]?.path || "",
-        },
-      });
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      database
-        .prepare(`
-          INSERT INTO content_posts (
-            id, project_id, title, content_type, media_url, caption, hashtags,
-            status, schedule_type, scheduled_at, integration_id, post_type,
-            postiz_media_id, media_package_id, media_json, error_message, created_at, updated_at
-          ) VALUES (?, ?, ?, 'image', ?, ?, ?, 'failed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `)
-        .run(
-          postId,
-          projectId,
-          body.title || "Canva Paketi",
-          postizMediaList[0]?.path || "",
-          caption,
-          hashtags,
-          scheduleType,
-          body.scheduledAt || null,
-          integrationId,
-          postType,
-          postizMediaList[0]?.id || null,
-          mediaPackageId,
-          JSON.stringify(postizMediaList),
-          `Postiz Gönderi Hatası: ${errMsg}`,
-          now,
-          now
-        );
-
-      return Response.json({ ok: false, message: `Gönderi oluşturulamadı: ${errMsg}` }, { status: 500 });
+          integrationId: target.integrationId,
+        });
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        database
+          .prepare(`
+            INSERT INTO content_posts (
+              id, project_id, title, content_type, media_url, caption, hashtags,
+              status, schedule_type, scheduled_at, integration_id, post_type,
+              postiz_media_id, media_package_id, media_json, error_message, created_at, updated_at
+            ) VALUES (?, ?, ?, 'image', ?, ?, ?, 'failed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `)
+          .run(
+            postId,
+            projectId,
+            targetTitle,
+            postizMediaList[0]?.path || "",
+            targetCaption,
+            targetHashtags,
+            targetScheduleType,
+            targetScheduledAt || null,
+            target.integrationId,
+            targetPostType,
+            postizMediaList[0]?.id || null,
+            mediaPackageId,
+            JSON.stringify(postizMediaList),
+            `Postiz Gönderi Hatası: ${errMsg}`,
+            now,
+            now
+          );
+      }
     }
+
+    return Response.json({
+      ok: true,
+      message:
+        createdPosts.length > 1
+          ? `${createdPosts.length} kanala başarıyla dağıtıldı!`
+          : defaultScheduleType === "now"
+          ? "Gönderi Postiz üzerinden derhal yayın kuyruğuna alındı!"
+          : defaultScheduleType === "schedule"
+          ? "Gönderi başarıyla zamanlandı!"
+          : "Gönderi taslak olarak kaydedildi.",
+      posts: createdPosts,
+      post: createdPosts[0],
+    });
   }
 
-  // 1. Resolve Media Buffer
+  // --- Single Media Item Publishing Branch ---
   let fileBuffer: Buffer | null = null;
-  let filename = `post-${Date.now()}.${contentType === "video" ? "mp4" : "png"}`;
-  let mimeType = contentType === "video" ? "video/mp4" : "image/png";
+  let filename = `post-${Date.now()}.${defaultContentType === "video" ? "mp4" : "png"}`;
+  let mimeType = defaultContentType === "video" ? "video/mp4" : "image/png";
 
   const dataDir = path.join(process.cwd(), ".data");
   const assetDir = path.join(dataDir, "assets");
   const videoDir = path.join(dataDir, "video-renders");
 
-  // Helper to extract UUID from a string
   const uuidRegex = /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i;
   let candidateId = body.assetId?.trim();
   if (!candidateId && body.mediaUrl) {
@@ -273,7 +294,6 @@ export async function POST(request: Request, context: Context) {
     if (match) candidateId = match[0];
   }
 
-  // A. Check in .data/assets (Images)
   if (candidateId) {
     const metaPath = path.join(assetDir, `${candidateId}.json`);
     if (fs.existsSync(metaPath)) {
@@ -291,7 +311,6 @@ export async function POST(request: Request, context: Context) {
       }
     }
 
-    // B. Check in .data/video-renders (Videos)
     if (!fileBuffer) {
       const vidPath = path.join(videoDir, `${candidateId}.mp4`);
       if (fs.existsSync(vidPath)) {
@@ -301,9 +320,8 @@ export async function POST(request: Request, context: Context) {
       }
     }
 
-    // C. Check in stock_videos / .data/stock-cache
     if (!fileBuffer) {
-      const stockRow = getDatabase()
+      const stockRow = database
         .prepare("SELECT * FROM stock_videos WHERE project_id = ? AND (id = ? OR drive_file_id = ?)")
         .get(projectId, candidateId, candidateId) as { drive_file_id: string; name: string; mime_type?: string } | undefined;
       if (stockRow) {
@@ -322,242 +340,236 @@ export async function POST(request: Request, context: Context) {
     }
   }
 
-  // D. Check mediaUrl formats (data URI, relative path, or external URL)
+  // Fallback: fetch remote mediaUrl
   if (!fileBuffer && body.mediaUrl) {
-    const mediaUrl = body.mediaUrl.trim();
-    if (mediaUrl.startsWith("data:")) {
-      const commaIndex = mediaUrl.indexOf(",");
-      if (commaIndex > -1) {
-        const meta = mediaUrl.slice(0, commaIndex);
-        const mimeMatch = meta.match(/data:([^;]+)/);
-        if (mimeMatch) mimeType = mimeMatch[1];
-        fileBuffer = Buffer.from(mediaUrl.slice(commaIndex + 1), "base64");
-        filename = `creative-${Date.now()}.${mimeType.includes("jpeg") ? "jpg" : "png"}`;
-      }
-    } else if (mediaUrl.includes("/stock-videos/")) {
-      const stockId = mediaUrl.split("/stock-videos/")[1]?.split("?")[0];
-      if (stockId) {
-        const stockRow = getDatabase()
-          .prepare("SELECT * FROM stock_videos WHERE project_id = ? AND (id = ? OR drive_file_id = ?)")
-          .get(projectId, stockId, stockId) as { drive_file_id: string; name: string; mime_type?: string } | undefined;
-        if (stockRow) {
-          try {
-            const { ensureCachedVideo } = await import("@/lib/server/google-drive");
-            const { localPath } = await ensureCachedVideo(stockRow.drive_file_id, projectId);
-            if (fs.existsSync(localPath)) {
-              fileBuffer = fs.readFileSync(localPath);
-              filename = `stock-${stockRow.name}`;
-              mimeType = stockRow.mime_type || "video/mp4";
-            }
-          } catch (e) {
-            console.error("Error reading stock video from url:", e);
-          }
+    try {
+      if (body.mediaUrl.startsWith("/")) {
+        const localPath = path.join(process.cwd(), "public", body.mediaUrl.replace(/^\//, ""));
+        if (fs.existsSync(localPath)) {
+          fileBuffer = fs.readFileSync(localPath);
+        }
+      } else if (body.mediaUrl.startsWith("http")) {
+        const res = await fetch(body.mediaUrl);
+        if (res.ok) {
+          fileBuffer = Buffer.from(await res.arrayBuffer());
+          const ct = res.headers.get("content-type");
+          if (ct) mimeType = ct;
         }
       }
-    } else if (mediaUrl.startsWith("/api/videos/")) {
-      const vidId = mediaUrl.replace("/api/videos/", "").replace(/\.mp4$/i, "");
-      const videoPath = path.join(videoDir, `${vidId}.mp4`);
-      if (fs.existsSync(videoPath)) {
-        fileBuffer = fs.readFileSync(videoPath);
-        filename = `video-${vidId}.mp4`;
-        mimeType = "video/mp4";
-      }
-    } else if (mediaUrl.startsWith("/api/assets/")) {
-      const assetId = mediaUrl.replace("/api/assets/", "");
-      const metaPath = path.join(assetDir, `${assetId}.json`);
-      if (fs.existsSync(metaPath)) {
-        try {
-          const meta = JSON.parse(fs.readFileSync(metaPath, "utf8")) as { mimeType?: string; extension?: string };
-          const ext = meta.extension || "png";
-          const imgPath = path.join(assetDir, `${assetId}.${ext}`);
-          if (fs.existsSync(imgPath)) {
-            fileBuffer = fs.readFileSync(imgPath);
-            filename = `creative-${assetId}.${ext}`;
-            mimeType = meta.mimeType || "image/png";
-          }
-        } catch {
-          // ignore
-        }
-      }
-    } else if (mediaUrl.startsWith("http://") || mediaUrl.startsWith("https://")) {
-      try {
-        const resp = await fetch(mediaUrl, { signal: AbortSignal.timeout(30_000) });
-        if (resp.ok) {
-          fileBuffer = Buffer.from(await resp.arrayBuffer());
-          const ct = resp.headers.get("content-type");
-          if (ct) mimeType = ct.split(";")[0];
-          filename = `download-${Date.now()}.${mimeType.includes("mp4") ? "mp4" : "jpg"}`;
-        }
-      } catch (err) {
-        console.error("Failed to fetch mediaUrl:", err);
-      }
+    } catch (err) {
+      console.error("Error downloading mediaUrl:", err);
     }
   }
 
-  // Update actual content type based on resolved mimeType
-  const resolvedContentType = mimeType.startsWith("video/") ? "video" : "image";
-
-  if (!fileBuffer || fileBuffer.length === 0) {
+  if (!fileBuffer) {
     return Response.json(
-      { ok: false, message: "Paylaşılacak medya dosyası bulunamadı veya okunamadı." },
+      { ok: false, message: "Medya dosyası okunamadı veya bulunamadı. Lütfen geçerli bir görsel/video seçin." },
       { status: 400 }
     );
   }
 
-  const postId = crypto.randomUUID();
-  const now = new Date().toISOString();
-  const database = getDatabase();
+  const resolvedContentType = mimeType.startsWith("video/") || filename.endsWith(".mp4") ? "video" : "image";
 
-  // 2. Upload media to Postiz
-  let postizMedia: { id: string; path: string } | null = null;
+  // Upload to Postiz once
+  let postizMedia: { id: string; path: string };
   try {
-    const uploaded = await uploadMediaToPostiz(fileBuffer, filename, mimeType);
-    postizMedia = { id: uploaded.id, path: uploaded.path };
-  } catch (error) {
-    const errMsg = error instanceof Error ? error.message : String(error);
-    database
-      .prepare(`
-        INSERT INTO content_posts (
-          id, project_id, title, content_type, media_url, caption, hashtags,
-          status, schedule_type, scheduled_at, integration_id, post_type,
-          error_message, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'failed', ?, ?, ?, ?, ?, ?, ?)
-      `)
-      .run(
-        postId,
-        projectId,
-        body.title || "İsimsiz Gönderi",
-        resolvedContentType,
-        body.mediaUrl || "",
-        caption,
-        hashtags,
-        scheduleType,
-        body.scheduledAt || null,
-        integrationId,
-        postType,
-        `Postiz Medya Yükleme Hatası: ${errMsg}`,
-        now,
-        now
-      );
+    postizMedia = await uploadMediaToPostiz(fileBuffer, filename, mimeType);
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
     return Response.json({ ok: false, message: `Medyayı Postiz'e yükleme başarısız: ${errMsg}` }, { status: 500 });
   }
 
-  // 3. Create post in Postiz
-  let fullCaption = caption;
-  if (hashtags) {
-    const formattedTags = hashtags
-      .split(/[\s,]+/)
-      .map((t) => (t.startsWith("#") ? t : `#${t}`))
-      .join(" ");
-    fullCaption = `${caption}\n\n${formattedTags}`.trim();
-  }
+  for (const target of targets) {
+    const postId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const targetScheduleType = target.scheduleType || defaultScheduleType;
+    const targetScheduledAt = target.scheduledAt || body.scheduledAt;
+    const targetPostType = target.postType || defaultPostType;
+    const targetTitle = target.title || body.title || "İsimsiz Gönderi";
+    const targetCaption = target.caption !== undefined ? target.caption.trim() : defaultCaption;
+    const targetHashtags = target.hashtags !== undefined ? target.hashtags.trim() : defaultHashtags;
 
-  const targetAccount = database
-    .prepare("SELECT identifier FROM project_social_accounts WHERE project_id=? AND integration_id=?")
-    .get(projectId, integrationId) as { identifier?: string } | undefined;
-  const platformIdentifier = targetAccount?.identifier || "instagram";
+    let fullCaption = targetCaption;
+    if (targetHashtags) {
+      const formattedTags = targetHashtags
+        .split(/[\s,]+/)
+        .map((t) => (t.startsWith("#") ? t : `#${t}`))
+        .join(" ");
+      fullCaption = `${targetCaption}\n\n${formattedTags}`.trim();
+    }
 
-  try {
-    const postizResult = await createPostizPost({
-      type: scheduleType,
-      date: body.scheduledAt,
-      integrationId,
-      platformIdentifier,
-      caption: fullCaption,
-      media: postizMedia ? [{ id: postizMedia.id, path: postizMedia.path }] : [],
-      postType,
-      youtubeSettings: {
-        title: body.title || "Video Paylaşımı",
-        type: "public",
-        selfDeclaredMadeForKids: "no",
-      },
-      tiktokSettings: {
-        title: (body.title || "Video Paylaşımı").slice(0, 90),
-        content_posting_method: "UPLOAD",
-        privacy_level: "SELF_ONLY",
-        autoAddMusic: "no",
-        brand_content_toggle: false,
-        brand_organic_toggle: false,
-        video_made_with_ai: true,
-      },
-    });
+    const targetAccount = database
+      .prepare("SELECT identifier FROM project_social_accounts WHERE project_id=? AND integration_id=?")
+      .get(projectId, target.integrationId) as { identifier?: string } | undefined;
+    const platformIdentifier = targetAccount?.identifier || "instagram";
 
-    const createdPostId = postizResult[0]?.postId || "";
-    const finalStatus = scheduleType === "draft" ? "draft" : scheduleType === "now" ? "published" : "scheduled";
+    try {
+      const postizResult = await createPostizPost({
+        type: targetScheduleType,
+        date: targetScheduledAt,
+        integrationId: target.integrationId,
+        platformIdentifier,
+        caption: fullCaption,
+        media: postizMedia ? [{ id: postizMedia.id, path: postizMedia.path }] : [],
+        postType: targetPostType,
+        youtubeSettings: target.youtubeSettings || {
+          title: targetTitle || "Video Paylaşımı",
+          type: "public",
+          selfDeclaredMadeForKids: "no",
+        },
+        tiktokSettings: target.tiktokSettings || {
+          title: (targetTitle || "Video Paylaşımı").slice(0, 90),
+          content_posting_method: "UPLOAD",
+          privacy_level: "SELF_ONLY",
+          autoAddMusic: "no",
+          brand_content_toggle: false,
+          brand_organic_toggle: false,
+          video_made_with_ai: true,
+        },
+      });
 
-    database
-      .prepare(`
-        INSERT INTO content_posts (
-          id, project_id, title, content_type, media_url, caption, hashtags,
-          status, schedule_type, scheduled_at, integration_id, post_type,
-          postiz_post_id, postiz_media_id, media_json, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `)
-      .run(
-        postId,
-        projectId,
-        body.title || "İsimsiz Gönderi",
-        resolvedContentType,
-        postizMedia.path,
-        caption,
-        hashtags,
-        finalStatus,
-        scheduleType,
-        body.scheduledAt || null,
-        integrationId,
-        postType,
-        createdPostId,
-        postizMedia.id,
-        JSON.stringify(postizMedia ? [{ id: postizMedia.id, path: postizMedia.path }] : []),
-        now,
-        now
-      );
+      const createdPostId = postizResult[0]?.postId || "";
+      const finalStatus =
+        targetScheduleType === "draft" ? "draft" : targetScheduleType === "now" ? "published" : "scheduled";
 
-    return Response.json({
-      ok: true,
-      message:
-        scheduleType === "now"
-          ? "Gönderi Postiz üzerinden derhal yayın kuyruğuna alındı!"
-          : scheduleType === "schedule"
-          ? "Gönderi başarıyla zamanlandı!"
-          : "Gönderi taslak olarak Postiz'e kaydedildi.",
-      post: {
+      database
+        .prepare(`
+          INSERT INTO content_posts (
+            id, project_id, title, content_type, media_url, caption, hashtags,
+            status, schedule_type, scheduled_at, integration_id, post_type,
+            postiz_post_id, postiz_media_id, media_json, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .run(
+          postId,
+          projectId,
+          targetTitle,
+          resolvedContentType,
+          postizMedia.path,
+          targetCaption,
+          targetHashtags,
+          finalStatus,
+          targetScheduleType,
+          targetScheduledAt || null,
+          target.integrationId,
+          targetPostType,
+          createdPostId,
+          postizMedia.id,
+          JSON.stringify(postizMedia ? [{ id: postizMedia.id, path: postizMedia.path }] : []),
+          now,
+          now
+        );
+
+      createdPosts.push({
         id: postId,
         postizPostId: createdPostId,
         status: finalStatus,
         mediaPath: postizMedia.path,
-      },
-    });
-  } catch (error) {
-    const errMsg = error instanceof Error ? error.message : String(error);
-    database
-      .prepare(`
-        INSERT INTO content_posts (
-          id, project_id, title, content_type, media_url, caption, hashtags,
-          status, schedule_type, scheduled_at, integration_id, post_type,
-          postiz_media_id, error_message, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'failed', ?, ?, ?, ?, ?, ?, ?, ?)
-      `)
-      .run(
-        postId,
-        projectId,
-        body.title || "İsimsiz Gönderi",
-        resolvedContentType,
-        postizMedia.path,
-        caption,
-        hashtags,
-        scheduleType,
-        body.scheduledAt || null,
-        integrationId,
-        postType,
-        postizMedia.id,
-        `Postiz Gönderi Hatası: ${errMsg}`,
-        now,
-        now
-      );
-
-    return Response.json({ ok: false, message: `Gönderi oluşturulamadı: ${errMsg}` }, { status: 500 });
+        integrationId: target.integrationId,
+      });
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      database
+        .prepare(`
+          INSERT INTO content_posts (
+            id, project_id, title, content_type, media_url, caption, hashtags,
+            status, schedule_type, scheduled_at, integration_id, post_type,
+            postiz_media_id, error_message, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'failed', ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .run(
+          postId,
+          projectId,
+          targetTitle,
+          resolvedContentType,
+          postizMedia.path,
+          targetCaption,
+          targetHashtags,
+          targetScheduleType,
+          targetScheduledAt || null,
+          target.integrationId,
+          targetPostType,
+          postizMedia.id,
+          `Postiz Gönderi Hatası: ${errMsg}`,
+          now,
+          now
+        );
+    }
   }
+
+  return Response.json({
+    ok: true,
+    message:
+      createdPosts.length > 1
+        ? `${createdPosts.length} kanala başarıyla dağıtıldı!`
+        : defaultScheduleType === "now"
+        ? "Gönderi Postiz üzerinden derhal yayın kuyruğuna alındı!"
+        : defaultScheduleType === "schedule"
+        ? "Gönderi başarıyla zamanlandı!"
+        : "Gönderi taslak olarak kaydedildi.",
+    posts: createdPosts,
+    post: createdPosts[0],
+  });
+}
+
+export async function PATCH(request: Request, context: Context) {
+  const { projectId } = await context.params;
+  const body = (await request.json().catch(() => ({}))) as {
+    id?: string;
+    title?: string;
+    caption?: string;
+    hashtags?: string;
+    status?: "draft" | "scheduled" | "published" | "failed";
+    scheduleType?: "now" | "schedule" | "draft";
+    scheduledAt?: string;
+    postType?: "post" | "reel" | "story";
+  };
+
+  if (!body.id) {
+    return Response.json({ ok: false, message: "Güncellenecek gönderi id'si eksik." }, { status: 400 });
+  }
+
+  const database = getDatabase();
+  const existing = database
+    .prepare("SELECT * FROM content_posts WHERE id = ? AND project_id = ?")
+    .get(body.id, projectId) as Record<string, unknown> | undefined;
+
+  if (!existing) {
+    return Response.json({ ok: false, message: "Gönderi bulunamadı." }, { status: 404 });
+  }
+
+  const title = body.title !== undefined ? body.title : (existing.title as string);
+  const caption = body.caption !== undefined ? body.caption : (existing.caption as string);
+  const hashtags = body.hashtags !== undefined ? body.hashtags : (existing.hashtags as string);
+  const status = body.status !== undefined ? body.status : (existing.status as string);
+  const scheduleType = body.scheduleType !== undefined ? body.scheduleType : (existing.schedule_type as string);
+  const scheduledAt = body.scheduledAt !== undefined ? body.scheduledAt : (existing.scheduled_at as string | null);
+  const postType = body.postType !== undefined ? body.postType : (existing.post_type as string);
+  const now = new Date().toISOString();
+
+  database
+    .prepare(`
+      UPDATE content_posts
+      SET title = ?, caption = ?, hashtags = ?, status = ?, schedule_type = ?, scheduled_at = ?, post_type = ?, updated_at = ?
+      WHERE id = ? AND project_id = ?
+    `)
+    .run(title, caption, hashtags, status, scheduleType, scheduledAt, postType, now, body.id, projectId);
+
+  return Response.json({
+    ok: true,
+    message: "Gönderi başarıyla güncellendi.",
+    post: {
+      id: body.id,
+      title,
+      caption,
+      hashtags,
+      status,
+      scheduleType,
+      scheduledAt,
+      postType,
+      updatedAt: now,
+    },
+  });
 }
 
 export async function DELETE(request: Request, context: Context) {
@@ -578,7 +590,6 @@ export async function DELETE(request: Request, context: Context) {
     return Response.json({ ok: false, message: "Gönderi bulunamadı." }, { status: 404 });
   }
 
-  // If there's a Postiz post, attempt to delete it from Postiz as well
   if (existing.postiz_post_id) {
     await deletePostizPost(existing.postiz_post_id).catch(() => undefined);
   }

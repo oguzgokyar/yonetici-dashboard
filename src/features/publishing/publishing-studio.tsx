@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  Calendar,
   CalendarClock,
   CheckCircle2,
   CircleAlert,
@@ -13,15 +12,14 @@ import {
   Image as ImageIcon,
   Instagram,
   LoaderCircle,
-  Megaphone,
-  Music2,
-  Plus,
+  Pencil,
+  Pause,
+  Play,
   RefreshCw,
   Send,
   Share2,
   Sparkles,
   Trash2,
-  Video,
   X,
   Youtube,
 } from "lucide-react";
@@ -30,12 +28,16 @@ import {
   mergeHashtagText,
 } from "@/lib/stock-publishing-metadata";
 import { useProjects } from "@/features/projects/projects-context";
+import {
+  MultiPlatformPreview,
+  PreviewPlatform,
+} from "./platform-previews";
 
 type ConnectedAccount = {
   id: string;
   integrationId: string;
   name: string;
-  identifier: string;
+  identifier: string; // "instagram", "youtube", "tiktok", "facebook" etc.
   profile: string;
   picture: string;
 };
@@ -64,10 +66,10 @@ type RecentAsset = {
   type: "image" | "video";
   category: "image" | "video" | "stock" | "stock_render" | "canva_package";
   url: string;
+  thumbnailUrl?: string;
   packageId?: string;
   packageType?: "single" | "carousel";
   itemCount?: number;
-  thumbnailUrl?: string;
   prompt?: string;
   idea?: {
     id?: string;
@@ -79,6 +81,13 @@ type RecentAsset = {
   createdAt?: string;
 };
 
+type ChannelCustomData = {
+  title: string;
+  caption: string;
+  hashtags: string;
+  postType: "post" | "reel" | "story";
+};
+
 export function PublishingStudio({
   projectId,
   initialAssetId,
@@ -88,39 +97,65 @@ export function PublishingStudio({
 }) {
   const { getProject } = useProjects();
   const currentProject = getProject(projectId);
+
+  // Main Page Navigation
+  const [mainTab, setMainTab] = useState<"composer" | "schedule">(
+    initialAssetId ? "composer" : "schedule"
+  );
+
   const [posts, setPosts] = useState<PostRecord[]>([]);
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | "scheduled" | "published" | "draft">("all");
-  const [modalOpen, setModalOpen] = useState(false);
 
-  // Form State
-  const [title, setTitle] = useState("");
-  const [caption, setCaption] = useState("");
-  const [hashtags, setHashtags] = useState("");
-  const [selectedIntegration, setSelectedIntegration] = useState("");
-  const [postType, setPostType] = useState<"post" | "reel" | "story">("post");
+  // Status Alerts
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // -------------------------------------------------------------
+  // COMPOSER STATE
+  // -------------------------------------------------------------
+  const [selectedIntegrationIds, setSelectedIntegrationIds] = useState<string[]>([]);
+  const [activeFormTab, setActiveFormTab] = useState<string>(""); // specific integrationId or "all"
+  const [channelData, setChannelData] = useState<Record<string, ChannelCustomData>>({});
+
+  // Common/Global Form Values
+  const [globalTitle, setGlobalTitle] = useState("");
+  const [globalCaption, setGlobalCaption] = useState("");
+  const [globalHashtags, setGlobalHashtags] = useState("");
+  const [globalPostType, setGlobalPostType] = useState<"post" | "reel" | "story">("post");
+
   const [scheduleType, setScheduleType] = useState<"now" | "schedule" | "draft">("now");
   const [scheduledAt, setScheduledAt] = useState("");
+
+  // Media Selection
   const [selectedMedia, setSelectedMedia] = useState<RecentAsset | null>(null);
   const [customMediaUrl, setCustomMediaUrl] = useState("");
   const [mediaSourceTab, setMediaSourceTab] = useState<"recent" | "custom">("recent");
+  const [mediaCategoryFilter, setMediaCategoryFilter] = useState<
+    "all" | "image" | "canva_package" | "video" | "stock"
+  >("all");
+  const [recentAssets, setRecentAssets] = useState<RecentAsset[]>([]);
+  const [loadingAssets, setLoadingAssets] = useState(false);
 
-  // AI Copy Generator State
+  // AI Copy Generation
   const [aiStyle, setAiStyle] = useState<"sales" | "story" | "educational" | "punchy">("sales");
   const [generatingCopy, setGeneratingCopy] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
-  // Recent generated assets
-  const [recentAssets, setRecentAssets] = useState<RecentAsset[]>([]);
-  const [loadingAssets, setLoadingAssets] = useState(false);
-  const [modalMediaTab, setModalMediaTab] = useState<"image" | "canva_package" | "video" | "stock" | "stock_render">("image");
+  // Live Preview Target
+  const [previewIntegrationId, setPreviewIntegrationId] = useState<string>("");
 
-  // Status
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  // -------------------------------------------------------------
+  // SCHEDULE / BOARD STATE
+  // -------------------------------------------------------------
+  const [channelSubTabs, setChannelSubTabs] = useState<Record<string, "scheduled" | "published" | "draft">>({});
+  const [editingPost, setEditingPost] = useState<PostRecord | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
+  // -------------------------------------------------------------
+  // LOAD DATA
+  // -------------------------------------------------------------
   async function loadData() {
     setLoading(true);
     setError(null);
@@ -136,9 +171,13 @@ export function PublishingStudio({
       }
       if (accRes.ok) {
         const aJson = await accRes.json();
-        setAccounts(aJson.connected || []);
-        if (aJson.connected?.length > 0 && !selectedIntegration) {
-          setSelectedIntegration(aJson.connected[0].integrationId);
+        const connectedList: ConnectedAccount[] = aJson.connected || [];
+        setAccounts(connectedList);
+
+        if (connectedList.length > 0 && selectedIntegrationIds.length === 0) {
+          setSelectedIntegrationIds([connectedList[0].integrationId]);
+          setActiveFormTab(connectedList[0].integrationId);
+          setPreviewIntegrationId(connectedList[0].integrationId);
         }
       }
     } catch (err) {
@@ -148,19 +187,197 @@ export function PublishingStudio({
     }
   }
 
+  async function loadRecentAssets(targetId?: string) {
+    setLoadingAssets(true);
+    try {
+      const [imgRes, vidRes, stockRes, canvaRes] = await Promise.all([
+        fetch(`/api/ai/images?projectId=${projectId}`).catch(() => null),
+        fetch(`/api/videos?projectId=${projectId}`).catch(() => null),
+        fetch(`/api/projects/${projectId}/stock-videos`).catch(() => null),
+        fetch(`/api/projects/${projectId}/canva/packages`).catch(() => null),
+      ]);
+
+      const items: RecentAsset[] = [];
+
+      if (imgRes && imgRes.ok) {
+        const imgData = await imgRes.json();
+        (imgData.assets || []).forEach(
+          (a: {
+            id: string;
+            url: string;
+            prompt?: string;
+            idea?: { id?: string; title?: string; concept?: string };
+            sourceTopic?: string;
+            createdAt?: string;
+          }) => {
+            const thumbUrl = a.url.startsWith("/api/assets/") ? `${a.url}?thumb=1` : a.url;
+            items.push({
+              id: a.id,
+              type: "image",
+              category: "image",
+              url: a.url,
+              thumbnailUrl: thumbUrl,
+              prompt: a.prompt,
+              idea: a.idea,
+              sourceTopic: a.sourceTopic,
+              createdAt: a.createdAt,
+            });
+          }
+        );
+      }
+
+      if (vidRes && vidRes.ok) {
+        const vidData = await vidRes.json();
+        (vidData.videos || []).forEach(
+          (v: {
+            id: string;
+            url: string;
+            title?: string;
+            isStockRender?: boolean;
+            prompt?: string;
+            sourceAssetId?: string;
+            idea?: { id?: string; title?: string; concept?: string };
+            sourceTopic?: string;
+            metadata?: Record<string, unknown>;
+            createdAt?: string;
+          }) => {
+            const isStockRender = Boolean(v.isStockRender);
+            const thumbUrl = v.sourceAssetId
+              ? `/api/assets/${v.sourceAssetId}?thumb=1`
+              : `${v.url}?thumb=1`;
+            items.push({
+              id: v.id,
+              type: "video",
+              category: isStockRender ? "stock_render" : "video",
+              url: v.url || `/api/videos/${v.id}`,
+              thumbnailUrl: thumbUrl,
+              prompt: v.title || v.prompt || (isStockRender ? "Stok Üretim Video" : undefined),
+              idea: v.idea,
+              sourceTopic: v.title || v.sourceTopic,
+              metadata: v.metadata,
+              createdAt: v.createdAt,
+            });
+          }
+        );
+      }
+
+      if (stockRes && stockRes.ok) {
+        const stockData = await stockRes.json();
+        (stockData.videos || []).forEach(
+          (s: {
+            id: string;
+            name: string;
+            thumbnailUrl?: string;
+            streamUrl: string;
+            metadata?: Record<string, unknown>;
+            createdAt?: string;
+          }) => {
+            const thumbUrl =
+              s.thumbnailUrl ||
+              (s.streamUrl.startsWith("/api/assets/") ? `${s.streamUrl}?thumb=1` : s.streamUrl);
+            items.push({
+              id: s.id,
+              type: "video",
+              category: "stock",
+              url: s.streamUrl,
+              thumbnailUrl: thumbUrl,
+              prompt: `Stok Video: ${s.name}`,
+              sourceTopic: s.name.replace(/\.[^/.]+$/, ""),
+              metadata: s.metadata,
+              createdAt: s.createdAt,
+            });
+          }
+        );
+      }
+
+      if (canvaRes && canvaRes.ok) {
+        const canvaData = await canvaRes.json();
+        (canvaData.packages || []).forEach(
+          (p: {
+            id: string;
+            title?: string;
+            prompt?: string;
+            packageType: "single" | "carousel";
+            coverUrl: string;
+            itemCount: number;
+            videoAssetId?: string | null;
+            videoUrl?: string | null;
+            createdAt?: string;
+          }) => {
+            const packagePrompt =
+              p.prompt ||
+              p.title ||
+              (p.packageType === "carousel"
+                ? `Canva Carousel (${p.itemCount} sayfa)`
+                : "Canva Tasarımı");
+            const thumbUrl = p.coverUrl.startsWith("/api/assets/")
+              ? `${p.coverUrl}?thumb=1`
+              : p.coverUrl;
+
+            items.push({
+              id: p.id,
+              type: "image",
+              category: "canva_package",
+              url: p.coverUrl,
+              thumbnailUrl: thumbUrl,
+              prompt: packagePrompt,
+              sourceTopic: p.prompt || p.title,
+              packageId: p.id,
+              packageType: p.packageType,
+              itemCount: p.itemCount,
+              createdAt: p.createdAt,
+            });
+
+            if (p.videoUrl) {
+              items.push({
+                id: p.videoAssetId || `canva_video_${p.id}`,
+                type: "video",
+                category: "video",
+                url: p.videoUrl,
+                thumbnailUrl: thumbUrl,
+                prompt: packagePrompt,
+                sourceTopic: p.prompt || p.title,
+                packageId: p.id,
+                createdAt: p.createdAt,
+              });
+            }
+          }
+        );
+      }
+
+      setRecentAssets(items);
+
+      const target = targetId ? items.find((i) => i.id === targetId) : null;
+      if (target) {
+        applyAssetSelection(target);
+      } else if (items.length > 0 && !selectedMedia) {
+        applyAssetSelection(items[0]);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingAssets(false);
+    }
+  }
+
   function applyAssetSelection(asset: RecentAsset) {
     setSelectedMedia(asset);
-    if (asset.category === "canva_package" && asset.packageType === "carousel") setPostType("post");
-    else if (asset.type === "video") setPostType("reel");
+    if (asset.category === "canva_package" && asset.packageType === "carousel") {
+      setGlobalPostType("post");
+    } else if (asset.type === "video") {
+      setGlobalPostType("reel");
+    }
     setCopyFeedback(null);
 
     const isStockOrStockRender = asset.category === "stock" || asset.category === "stock_render";
     const brandName = currentProject?.brand.brandName || currentProject?.name;
 
-    const fallbackTitle = asset.idea?.title || asset.sourceTopic || (asset.prompt ? asset.prompt.split("\n")[0].trim() : "");
+    const fallbackTitle =
+      asset.idea?.title ||
+      asset.sourceTopic ||
+      (asset.prompt ? asset.prompt.split("\n")[0].trim() : "");
     const fallbackDesc = asset.idea?.concept || asset.sourceTopic || fallbackTitle;
 
-    // Extract publishing metadata (including hashtags from metadata, embedded text, or derived fallback)
     const extracted = extractStockPublishingMetadata(asset.metadata, {
       title: fallbackTitle,
       topic: fallbackDesc,
@@ -170,48 +387,29 @@ export function PublishingStudio({
     const rawTitle = extracted.title || fallbackTitle;
     const rawDesc = extracted.description || fallbackDesc;
 
-    // Populate draft title and caption immediately
-    setTitle(rawTitle.slice(0, 50));
-    setCaption(rawDesc || rawTitle);
+    setGlobalTitle(rawTitle.slice(0, 50));
+    setGlobalCaption(rawDesc || rawTitle);
 
-    // Populate hashtags immediately so they appear as soon as the modal opens
     if (extracted.hashtags) {
-      setHashtags(extracted.hashtags);
+      setGlobalHashtags(extracted.hashtags);
     }
 
-    // Trigger AI copy revision automatically for stock videos or when metadata is available
     if (isStockOrStockRender || (asset.metadata && Object.keys(asset.metadata).length > 0)) {
       void generateAiCopy(asset);
-      return;
-    }
-
-    // If an idea was chosen during generation, use it
-    if (asset.idea?.title || asset.idea?.concept) {
-      setTitle(asset.idea.title || "");
-      setCaption(asset.idea.concept || "");
-    } else if (asset.sourceTopic) {
-      setTitle(asset.sourceTopic.slice(0, 50));
-      setCaption(asset.sourceTopic);
-    } else {
-      const clean = (asset.prompt || "")
-        .split("\nİçerik tipi:")[0]
-        .split("\nPlatform:")[0]
-        .trim();
-      setTitle(clean.slice(0, 50));
-      setCaption(clean);
     }
   }
 
-  async function generateAiCopy(overrideAsset?: RecentAsset | React.MouseEvent) {
-    const targetAsset = (overrideAsset && "category" in overrideAsset) ? overrideAsset : selectedMedia;
+  async function generateAiCopy(overrideAsset?: RecentAsset) {
+    const targetAsset = overrideAsset || selectedMedia;
     setGeneratingCopy(true);
     setCopyFeedback(null);
     setError(null);
     try {
       const meta = targetAsset?.metadata;
       const brandName = currentProject?.brand.brandName || currentProject?.name;
-      const fallbackTitle = targetAsset?.idea?.title || targetAsset?.sourceTopic || title;
-      const fallbackDesc = targetAsset?.idea?.concept || targetAsset?.sourceTopic || caption || title;
+      const fallbackTitle = targetAsset?.idea?.title || targetAsset?.sourceTopic || globalTitle;
+      const fallbackDesc =
+        targetAsset?.idea?.concept || targetAsset?.sourceTopic || globalCaption || globalTitle;
 
       const extracted = extractStockPublishingMetadata(meta, {
         title: fallbackTitle,
@@ -228,17 +426,18 @@ export function PublishingStudio({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId,
-          postType,
+          postType: globalPostType,
           style: aiStyle,
           idea: targetAsset?.idea,
-          sourceTopic: rawTitle || rawDesc || caption || title,
-          stockVideoMeta: (rawTitle || rawDesc || rawKeywords.length > 0)
-            ? {
-                rawTitle,
-                rawDescription: rawDesc,
-                keywords: Array.isArray(rawKeywords) ? rawKeywords : [],
-              }
-            : undefined,
+          sourceTopic: rawTitle || rawDesc || globalCaption || globalTitle,
+          stockVideoMeta:
+            rawTitle || rawDesc || rawKeywords.length > 0
+              ? {
+                  rawTitle,
+                  rawDescription: rawDesc,
+                  keywords: Array.isArray(rawKeywords) ? rawKeywords : [],
+                }
+              : undefined,
         }),
       });
 
@@ -247,12 +446,14 @@ export function PublishingStudio({
         throw new Error(result.message || "Metin üretilemedi.");
       }
 
-      if (result.copy.title) setTitle(result.copy.title.slice(0, 50));
-      if (result.copy.caption) setCaption(result.copy.caption);
+      if (result.copy.title) setGlobalTitle(result.copy.title.slice(0, 50));
+      if (result.copy.caption) setGlobalCaption(result.copy.caption);
       if (result.copy.hashtags) {
-        setHashtags((current) => mergeHashtagText(current || extracted.hashtags, result.copy.hashtags));
+        setGlobalHashtags((current) =>
+          mergeHashtagText(current || extracted.hashtags, result.copy.hashtags)
+        );
       }
-      setCopyFeedback("Sosyal medya metni ve etiketler AI ile Türkçe sosyal medya diline göre revize edildi.");
+      setCopyFeedback("Metin ve etiketler AI ile Türkçe sosyal medya diline göre revize edildi.");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -260,181 +461,72 @@ export function PublishingStudio({
     }
   }
 
-  async function loadRecentAssets(targetId?: string) {
-    setLoadingAssets(true);
-    try {
-      const [imgRes, vidRes, stockRes, canvaRes] = await Promise.all([
-        fetch(`/api/ai/images?projectId=${projectId}`).catch(() => null),
-        fetch(`/api/videos?projectId=${projectId}`).catch(() => null),
-        fetch(`/api/projects/${projectId}/stock-videos`).catch(() => null),
-        fetch(`/api/projects/${projectId}/canva/packages`).catch(() => null),
-      ]);
-
-      const items: RecentAsset[] = [];
-      if (imgRes && imgRes.ok) {
-        const imgData = await imgRes.json();
-        (imgData.assets || []).forEach(
-          (a: {
-            id: string;
-            url: string;
-            prompt?: string;
-            idea?: { id?: string; title?: string; concept?: string };
-            sourceTopic?: string;
-            createdAt?: string;
-          }) => {
-            items.push({
-              id: a.id,
-              type: "image",
-              category: "image",
-              url: a.url,
-              prompt: a.prompt,
-              idea: a.idea,
-              sourceTopic: a.sourceTopic,
-              createdAt: a.createdAt,
-            });
-          }
-        );
-      }
-      if (vidRes && vidRes.ok) {
-        const vidData = await vidRes.json();
-        (vidData.videos || []).forEach(
-          (v: {
-            id: string;
-            url: string;
-            title?: string;
-            isStockRender?: boolean;
-            prompt?: string;
-            idea?: { id?: string; title?: string; concept?: string };
-            sourceTopic?: string;
-            metadata?: Record<string, unknown>;
-            createdAt?: string;
-          }) => {
-            const isStockRender = Boolean(v.isStockRender);
-            items.push({
-              id: v.id,
-              type: "video",
-              category: isStockRender ? "stock_render" : "video",
-              url: v.url || `/api/videos/${v.id}`,
-              prompt: v.title || v.prompt || (isStockRender ? "Stok Üretim Video" : undefined),
-              idea: v.idea,
-              sourceTopic: v.title || v.sourceTopic,
-              metadata: v.metadata,
-              createdAt: v.createdAt,
-            });
-          }
-        );
-      }
-      if (stockRes && stockRes.ok) {
-        const stockData = await stockRes.json();
-        (stockData.videos || []).forEach(
-          (s: {
-            id: string;
-            name: string;
-            thumbnailUrl?: string;
-            streamUrl: string;
-            metadata?: Record<string, unknown>;
-            createdAt?: string;
-          }) => {
-            items.push({
-              id: s.id,
-              type: "video",
-              category: "stock",
-              url: s.streamUrl,
-              thumbnailUrl: s.thumbnailUrl,
-              prompt: `Stok Video: ${s.name}`,
-              sourceTopic: s.name.replace(/\.[^/.]+$/, ""),
-              metadata: s.metadata,
-              createdAt: s.createdAt,
-            });
-          }
-        );
-      }
-      if (canvaRes && canvaRes.ok) {
-        const canvaData = await canvaRes.json();
-        (canvaData.packages || []).forEach(
-          (p: {
-            id: string;
-            title?: string;
-            prompt?: string;
-            packageType: "single" | "carousel";
-            coverUrl: string;
-            itemCount: number;
-            videoAssetId?: string | null;
-            videoUrl?: string | null;
-            createdAt?: string;
-          }) => {
-            const packagePrompt = p.prompt || p.title || (p.packageType === "carousel" ? `Canva Carousel (${p.itemCount} sayfa)` : "Canva Tasarımı");
-            items.push({
-              id: p.id,
-              type: "image",
-              category: "canva_package",
-              url: p.coverUrl,
-              thumbnailUrl: p.coverUrl,
-              prompt: packagePrompt,
-              sourceTopic: p.prompt || p.title,
-              packageId: p.id,
-              packageType: p.packageType,
-              itemCount: p.itemCount,
-              createdAt: p.createdAt,
-            });
-
-            // If package has exported video, also expose it as a video asset for Reels
-            if (p.videoUrl) {
-              items.push({
-                id: p.videoAssetId || `canva_video_${p.id}`,
-                type: "video",
-                category: "video",
-                url: p.videoUrl,
-                thumbnailUrl: p.coverUrl,
-                prompt: packagePrompt,
-                sourceTopic: p.prompt || p.title,
-                packageId: p.id,
-                createdAt: p.createdAt,
-              });
-            }
-          }
-        );
-      }
-      setRecentAssets(items);
-
-      const target = targetId ? items.find((i) => i.id === targetId) : null;
-      if (target) {
-        setModalMediaTab(target.category);
-        applyAssetSelection(target);
-      } else if (items.length > 0 && !selectedMedia) {
-        applyAssetSelection(items[0]);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLoadingAssets(false);
-    }
-  }
-
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
-    if (initialAssetId) {
-      setModalOpen(true);
-      loadRecentAssets(initialAssetId);
-      const d = new Date(Date.now() + 24 * 3600 * 1000);
-      setScheduledAt(d.toISOString().slice(0, 16));
-    }
-  }, [projectId, initialAssetId]);
-
-  function openCreateModal() {
-    setModalOpen(true);
-    setError(null);
-    setSuccess(null);
-    loadRecentAssets();
+    loadRecentAssets(initialAssetId);
     const d = new Date(Date.now() + 24 * 3600 * 1000);
     setScheduledAt(d.toISOString().slice(0, 16));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, initialAssetId]);
+
+  // Channel Selection Toggle
+  function toggleIntegrationSelection(intId: string) {
+    setSelectedIntegrationIds((prev) => {
+      const next = prev.includes(intId) ? prev.filter((id) => id !== intId) : [...prev, intId];
+      if (next.length > 0 && (!activeFormTab || !next.includes(activeFormTab))) {
+        setActiveFormTab(next[0]);
+      }
+      if (next.length > 0 && (!previewIntegrationId || !next.includes(previewIntegrationId))) {
+        setPreviewIntegrationId(next[0]);
+      }
+      return next;
+    });
   }
 
+  function getChannelValue(intId: string, field: "title" | "caption" | "hashtags" | "postType") {
+    const custom = channelData[intId];
+    if (custom && custom[field] !== undefined) return custom[field];
+    if (field === "title") return globalTitle;
+    if (field === "caption") return globalCaption;
+    if (field === "hashtags") return globalHashtags;
+    if (field === "postType") return globalPostType;
+    return "";
+  }
+
+  function setChannelValue(intId: string, field: "title" | "caption" | "hashtags" | "postType", val: string) {
+    setChannelData((prev) => ({
+      ...prev,
+      [intId]: {
+        title: prev[intId]?.title ?? globalTitle,
+        caption: prev[intId]?.caption ?? globalCaption,
+        hashtags: prev[intId]?.hashtags ?? globalHashtags,
+        postType: prev[intId]?.postType ?? globalPostType,
+        [field]: val,
+      },
+    }));
+  }
+
+  function applyGlobalToAll() {
+    const updated: Record<string, ChannelCustomData> = {};
+    for (const intId of selectedIntegrationIds) {
+      updated[intId] = {
+        title: globalTitle,
+        caption: globalCaption,
+        hashtags: globalHashtags,
+        postType: globalPostType,
+      };
+    }
+    setChannelData(updated);
+    setSuccess("Genel metin ve ayarlar tüm seçili kanallara uygulandı.");
+    setTimeout(() => setSuccess(null), 3000);
+  }
+
+  // Submit Publishing / Schedule
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedIntegration) {
-      setError("Lütfen bir sosyal medya hesabı seçin.");
+    if (selectedIntegrationIds.length === 0) {
+      setError("Lütfen en az bir hedef sosyal medya hesabı seçin.");
       return;
     }
 
@@ -448,35 +540,75 @@ export function PublishingStudio({
     setError(null);
     setSuccess(null);
 
-    const isVideo = mediaSourceTab === "recent" ? selectedMedia?.type === "video" : mediaUrl.endsWith(".mp4");
-    const formattedDate = scheduleType === "schedule" && scheduledAt ? new Date(scheduledAt).toISOString() : undefined;
+    const isVideo =
+      mediaSourceTab === "recent"
+        ? selectedMedia?.type === "video"
+        : mediaUrl.endsWith(".mp4");
+    const formattedDate =
+      scheduleType === "schedule" && scheduledAt ? new Date(scheduledAt).toISOString() : undefined;
+    const isPackage =
+      mediaSourceTab === "recent" && selectedMedia?.category === "canva_package";
+
+    const targets = selectedIntegrationIds.map((intId) => {
+      const acc = accounts.find((a) => a.integrationId === intId);
+      const isYt = acc?.identifier === "youtube";
+      const isTt = acc?.identifier === "tiktok";
+
+      const title = getChannelValue(intId, "title");
+      const caption = getChannelValue(intId, "caption");
+      const hashtags = getChannelValue(intId, "hashtags");
+      const postType = getChannelValue(intId, "postType") as "post" | "reel" | "story";
+
+      return {
+        integrationId: intId,
+        title: title || (isPackage ? selectedMedia?.prompt : isVideo ? "Video Paylaşımı" : "Görsel Paylaşımı"),
+        caption,
+        hashtags,
+        postType,
+        scheduleType,
+        scheduledAt: formattedDate,
+        youtubeSettings: isYt
+          ? {
+              title: (title || "Video Paylaşımı").slice(0, 100),
+              type: "public" as const,
+              selfDeclaredMadeForKids: "no" as const,
+            }
+          : undefined,
+        tiktokSettings: isTt
+          ? {
+              title: (title || "Video Paylaşımı").slice(0, 90),
+              content_posting_method: "UPLOAD" as const,
+              privacy_level: "SELF_ONLY" as const,
+              video_made_with_ai: true,
+            }
+          : undefined,
+      };
+    });
 
     try {
-      const isPackage = mediaSourceTab === "recent" && selectedMedia?.category === "canva_package";
       const response = await fetch(`/api/projects/${projectId}/posts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: title || (isPackage ? selectedMedia?.prompt : isVideo ? "Video Paylaşımı" : "Görsel Paylaşımı"),
+          title: globalTitle,
           contentType: isVideo ? "video" : "image",
           mediaUrl,
           assetId: mediaSourceTab === "recent" && !isPackage ? selectedMedia?.id : undefined,
           mediaPackageId: isPackage ? selectedMedia?.packageId : undefined,
-          caption,
-          hashtags,
+          caption: globalCaption,
+          hashtags: globalHashtags,
           scheduleType,
           scheduledAt: formattedDate,
-          integrationId: selectedIntegration,
-          postType,
+          targets,
         }),
       });
 
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || "Gönderi oluşturulamadı.");
 
-      setSuccess(result.message || "Gönderi başarıyla oluşturuldu.");
-      setModalOpen(false);
+      setSuccess(result.message || "Gönderiler başarıyla oluşturuldu.");
       await loadData();
+      setMainTab("schedule");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -484,27 +616,87 @@ export function PublishingStudio({
     }
   }
 
-  async function deletePost(id: string) {
-    if (!confirm("Bu gönderiyi ve varsa Postiz kaydını silmek istediğinize emin misiniz?")) return;
+  // Toggle Pause/Resume (Beklet / Zamanla)
+  async function togglePostPause(post: PostRecord) {
+    const nextStatus = post.status === "scheduled" ? "draft" : "scheduled";
+    const nextScheduleType = nextStatus === "scheduled" ? "schedule" : "draft";
     try {
-      const response = await fetch(`/api/projects/${projectId}/posts?id=${id}`, {
-        method: "DELETE",
+      const response = await fetch(`/api/projects/${projectId}/posts`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: post.id,
+          status: nextStatus,
+          scheduleType: nextScheduleType,
+        }),
       });
-      if (!response.ok) throw new Error("Silme işlemi başarısız.");
+      if (!response.ok) throw new Error("Durum güncellenemedi.");
       await loadData();
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
     }
   }
 
-  const filteredPosts = posts.filter((p) => {
-    if (filter === "all") return true;
-    return p.status === filter;
+  // Delete Post
+  async function deletePost(id: string) {
+    if (!confirm("Bu gönderiyi silmek istediğinize emin misiniz?")) return;
+    try {
+      const response = await fetch(`/api/projects/${projectId}/posts?id=${id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error("Silme işlemi başarısız.");
+      if (editingPost?.id === id) setEditingPost(null);
+      await loadData();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  // Save Edit from Modal
+  async function handleSaveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingPost) return;
+    setSavingEdit(true);
+    try {
+      const response = await fetch(`/api/projects/${projectId}/posts`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingPost.id,
+          title: editingPost.title,
+          caption: editingPost.caption,
+          hashtags: editingPost.hashtags,
+          status: editingPost.status,
+          scheduledAt: editingPost.scheduledAt,
+          postType: editingPost.postType,
+        }),
+      });
+      if (!response.ok) throw new Error("Güncelleme başarısız.");
+      setEditingPost(null);
+      await loadData();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  // Filtered Assets for Picker
+  const filteredAssets = recentAssets.filter((a) => {
+    if (mediaCategoryFilter === "all") return true;
+    if (mediaCategoryFilter === "image") return a.category === "image";
+    if (mediaCategoryFilter === "canva_package") return a.category === "canva_package";
+    if (mediaCategoryFilter === "video") return a.category === "video" || a.category === "stock_render";
+    if (mediaCategoryFilter === "stock") return a.category === "stock";
+    return true;
   });
 
-  const countPublished = posts.filter((p) => p.status === "published").length;
-  const countScheduled = posts.filter((p) => p.status === "scheduled").length;
-  const countDraft = posts.filter((p) => p.status === "draft").length;
+  const previewAccount = accounts.find((a) => a.integrationId === previewIntegrationId) || accounts[0];
+  const previewPlatform: PreviewPlatform =
+    (previewAccount?.identifier?.includes("youtube") && "youtube") ||
+    (previewAccount?.identifier?.includes("tiktok") && "tiktok") ||
+    (previewAccount?.identifier?.includes("facebook") && "facebook") ||
+    "instagram";
 
   if (loading) {
     return <div className="overview-loading" style={{ minHeight: "380px" }} />;
@@ -512,16 +704,21 @@ export function PublishingStudio({
 
   return (
     <>
-      {/* 1. Page Intro */}
+      {/* 1. Page Header */}
       <section className="page-intro">
         <div>
-          <h2>Paylaşım Planı &amp; Dağıtım</h2>
-          <p>Üretilen kreatifleri zamanlayın, Instagram ve diğer kanallara Postiz üzerinden otomatik dağıtın.</p>
+          <h2>Paylaşım Planlama &amp; Çoklu Dağıtım</h2>
+          <p>
+            İçeriklerinizi kanallara özel canlı önizleyerek hazırlayın, planlayın ve aktif hesaplarınıza tek tıkla dağıtın.
+          </p>
         </div>
         <div style={{ display: "flex", gap: "8px" }}>
           <button
             type="button"
-            onClick={loadData}
+            onClick={() => {
+              loadData();
+              loadRecentAssets();
+            }}
             className="button secondary"
             disabled={loading}
             title="Yenile"
@@ -529,19 +726,10 @@ export function PublishingStudio({
             <RefreshCw size={15} className={loading ? "spin" : ""} />
             Yenile
           </button>
-          <button
-            type="button"
-            onClick={openCreateModal}
-            disabled={accounts.length === 0}
-            className="button primary"
-          >
-            <Plus size={15} />
-            Yeni İçerik Planla
-          </button>
         </div>
       </section>
 
-      {/* Account Warning if None Connected */}
+      {/* Account Warning */}
       {accounts.length === 0 && (
         <section className="setup-banner" style={{ margin: "16px 0" }}>
           <div className="setup-icon" style={{ background: "#fff2e8", color: "#d67c34" }}>
@@ -549,7 +737,7 @@ export function PublishingStudio({
           </div>
           <div>
             <strong>Bağlı Sosyal Medya Hesabı Bulunamadı</strong>
-            <p>İçerik planlayabilmek için bu projeye en az bir Postiz Instagram hesabı bağlamalısınız.</p>
+            <p>İçerik planlayabilmek ve kanalları yönetmek için bu projeye en az bir sosyal medya hesabı bağlamalısınız.</p>
           </div>
           <Link href={`/projects/${projectId}/accounts`} className="button secondary">
             <Share2 size={15} />
@@ -558,652 +746,1036 @@ export function PublishingStudio({
         </section>
       )}
 
-      {/* Feedback Alerts */}
+      {/* Alerts */}
       {success && (
         <div className="connection-result success" style={{ margin: "12px 0" }}>
           <CheckCircle2 size={16} />
-          <span><strong>Başarılı</strong><small>{success}</small></span>
+          <span><strong>Başarılı:</strong> <small>{success}</small></span>
         </div>
       )}
       {error && (
         <div className="connection-result error" style={{ margin: "12px 0" }}>
           <CircleAlert size={16} />
-          <span><strong>Hata</strong><small>{error}</small></span>
+          <span><strong>Hata:</strong> <small>{error}</small></span>
         </div>
       )}
 
-      {/* 2. Metrics Bar */}
-      <section className="metric-grid">
-        <div className="metric-card">
-          <div className="metric-icon violet"><Megaphone size={19} /></div>
-          <div>
-            <span>Toplam Gönderi</span>
-            <strong>{posts.length}</strong>
-            <small>Kayıtlı İçerik</small>
-          </div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-icon blue"><Clock size={19} /></div>
-          <div>
-            <span>Zamanlananlar</span>
-            <strong>{countScheduled}</strong>
-            <small>Kuyrukta Bekleyen</small>
-          </div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-icon green"><CheckCircle2 size={19} /></div>
-          <div>
-            <span>Yayınlananlar</span>
-            <strong>{countPublished}</strong>
-            <small>Canlı Paylaşım</small>
-          </div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-icon orange"><CalendarClock size={19} /></div>
-          <div>
-            <span>Taslaklar</span>
-            <strong>{countDraft}</strong>
-            <small>Hazırlık Aşamasında</small>
-          </div>
-        </div>
-      </section>
-
-      {/* 3. Toolbar & Filter */}
-      <div className="publishing-toolbar">
-        <div className="segmented-filter">
-          <button
-            type="button"
-            className={filter === "all" ? "active" : ""}
-            onClick={() => setFilter("all")}
-          >
-            Tümü ({posts.length})
-          </button>
-          <button
-            type="button"
-            className={filter === "scheduled" ? "active" : ""}
-            onClick={() => setFilter("scheduled")}
-          >
-            Zamanlanan ({countScheduled})
-          </button>
-          <button
-            type="button"
-            className={filter === "published" ? "active" : ""}
-            onClick={() => setFilter("published")}
-          >
-            Yayınlanan ({countPublished})
-          </button>
-          <button
-            type="button"
-            className={filter === "draft" ? "active" : ""}
-            onClick={() => setFilter("draft")}
-          >
-            Taslak ({countDraft})
-          </button>
-        </div>
-
-        {accounts.length > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span style={{ fontSize: "11px", color: "var(--muted)" }}>Aktif Kanal:</span>
-            <span className="badge-pill info">
-              <Instagram size={11} /> @{accounts[0]?.profile || accounts[0]?.name}
-            </span>
-          </div>
-        )}
+      {/* Main Tabs Navigation */}
+      <div className="publishing-main-nav">
+        <button
+          type="button"
+          className={`publishing-tab-btn ${mainTab === "composer" ? "active" : ""}`}
+          onClick={() => setMainTab("composer")}
+        >
+          <Send size={15} />
+          İçerik Yayınla
+        </button>
+        <button
+          type="button"
+          className={`publishing-tab-btn ${mainTab === "schedule" ? "active" : ""}`}
+          onClick={() => setMainTab("schedule")}
+        >
+          <CalendarClock size={15} />
+          Paylaşım Planı ({posts.length})
+        </button>
       </div>
 
-      {/* 4. Posts Grid */}
-      {filteredPosts.length > 0 ? (
-        <div className="publishing-grid">
-          {filteredPosts.map((post) => {
-            const acc = accounts.find((a) => a.integrationId === post.integrationId);
-            return (
-              <article key={post.id} className="publishing-card">
-                {/* Media Preview Header */}
-                <div className="publishing-media">
-                  {post.contentType === "video" ? (
-                    <video
-                      src={post.mediaUrl}
-                      muted
-                      loop
-                      playsInline
-                      onMouseOver={(e) => (e.target as HTMLVideoElement).play().catch(() => undefined)}
-                      onMouseOut={(e) => (e.target as HTMLVideoElement).pause()}
-                    />
-                  ) : (
-                    <img
-                      src={post.mediaUrl.startsWith("/api/assets/") ? `${post.mediaUrl}?thumb=1` : post.mediaUrl}
-                      alt={post.title}
-                      loading="lazy"
-                    />
-                  )}
-
-                  <div className="publishing-badge-top-left">
-                    <span className="badge-pill neutral" style={{ background: "#000000a6", color: "white" }}>
-                      {post.contentType === "video" ? <Film size={10} /> : <ImageIcon size={10} />}
-                      {post.postType === "reel" ? "Reels" : post.postType === "story" ? "Hikâye" : "Gönderi"}
-                    </span>
-                  </div>
-
-                  <div className="publishing-badge-top-right">
-                    <span
-                      className={`badge-pill ${
-                        post.status === "published"
-                          ? "success"
-                          : post.status === "scheduled"
-                          ? "info"
-                          : post.status === "draft"
-                          ? "neutral"
-                          : "error"
-                      }`}
-                      style={{ backdropFilter: "blur(4px)" }}
+      {/* ------------------------------------------------------------- */}
+      {/* TAB 1: İÇERİK YAYINLA (COMPOSER + PREVIEW)                     */}
+      {/* ------------------------------------------------------------- */}
+      {mainTab === "composer" && (
+        <div className="composer-layout">
+          {/* Left Column: Form & Media Selection */}
+          <form onSubmit={handleSubmit} className="composer-form-panel">
+            {/* 1. Platform Multi-Selection */}
+            <div className="composer-section">
+              <div className="composer-section-title">
+                <span>1. Hedef Platformları Seçin</span>
+                <small style={{ color: "var(--muted)", fontSize: "11px" }}>
+                  {selectedIntegrationIds.length} kanal seçildi
+                </small>
+              </div>
+              <div className="channel-multi-select-grid">
+                {accounts.map((acc) => {
+                  const isSelected = selectedIntegrationIds.includes(acc.integrationId);
+                  return (
+                    <button
+                      key={acc.id}
+                      type="button"
+                      onClick={() => toggleIntegrationSelection(acc.integrationId)}
+                      className={`channel-chip-btn ${isSelected ? "selected" : ""}`}
                     >
-                      {post.status === "published"
-                        ? "Yayınlandı"
-                        : post.status === "scheduled"
-                        ? "Zamanlandı"
-                        : post.status === "draft"
-                        ? "Taslak"
-                        : "Hata"}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Body */}
-                <div className="publishing-body">
-                  <div className="publishing-account-row">
-                    {acc?.picture ? (
-                      <img src={acc.picture} alt="" />
-                    ) : (
-                      <Instagram size={14} style={{ color: "#612bd3" }} />
-                    )}
-                    <span style={{ fontWeight: 600 }}>
-                      {acc?.profile ? `@${acc.profile}` : acc?.name || "Sosyal Hesap"}
-                    </span>
-                  </div>
-
-                  <h4 className="publishing-title">{post.title || "İsimsiz Gönderi"}</h4>
-                  <p className="publishing-caption">
-                    {post.caption || "Açıklama girilmedi."}
-                  </p>
-                  {post.hashtags && (
-                    <p className="publishing-tags">{post.hashtags}</p>
-                  )}
-
-                  {/* Footer */}
-                  <div className="publishing-footer">
-                    <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                      <Calendar size={12} />
-                      {post.scheduledAt
-                        ? new Date(post.scheduledAt).toLocaleDateString("tr-TR", {
-                            day: "numeric",
-                            month: "short",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })
-                        : new Date(post.createdAt).toLocaleDateString("tr-TR", {
-                            day: "numeric",
-                            month: "short",
-                          })}
-                    </span>
-
-                    <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
-                      {post.releaseUrl && (
-                        <a
-                          href={post.releaseUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="icon-button"
-                          style={{ width: "28px", height: "28px", color: "var(--primary)" }}
-                          title="Canlı Gönderiyi Aç"
-                        >
-                          <ExternalLink size={14} />
-                        </a>
+                      {acc.picture ? (
+                        <img src={acc.picture} alt="" className="channel-chip-avatar" />
+                      ) : (
+                        <div className="channel-chip-placeholder">
+                          {acc.identifier.includes("youtube") ? (
+                            <Youtube size={12} color="#ff0000" />
+                          ) : (
+                            <Instagram size={12} color="#612bd3" />
+                          )}
+                        </div>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => deletePost(post.id)}
-                        className="icon-button"
-                        style={{ width: "28px", height: "28px", color: "#d83d45" }}
-                        title="Sil"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+                      <span>@{acc.profile || acc.name}</span>
+                      <small style={{ color: "var(--muted)", textTransform: "uppercase", fontSize: "9px" }}>
+                        ({acc.identifier})
+                      </small>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 2. Media Selector */}
+            <div className="composer-section">
+              <div className="composer-section-title">
+                <span>2. Medya / Kreatif Seçimi</span>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setMediaSourceTab("recent")}
+                    className={`button compact ${mediaSourceTab === "recent" ? "primary" : "ghost"}`}
+                    style={{ fontSize: "10px", height: "26px", padding: "0 8px" }}
+                  >
+                    Üretilenler
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMediaSourceTab("custom")}
+                    className={`button compact ${mediaSourceTab === "custom" ? "primary" : "ghost"}`}
+                    style={{ fontSize: "10px", height: "26px", padding: "0 8px" }}
+                  >
+                    Özel URL
+                  </button>
+                </div>
+              </div>
+
+              {mediaSourceTab === "recent" ? (
+                <div className="composer-media-selector">
+                  <div className="composer-media-tabs">
+                    <button
+                      type="button"
+                      className={`composer-media-tab-btn ${mediaCategoryFilter === "all" ? "active" : ""}`}
+                      onClick={() => setMediaCategoryFilter("all")}
+                    >
+                      Tümü ({recentAssets.length})
+                    </button>
+                    <button
+                      type="button"
+                      className={`composer-media-tab-btn ${mediaCategoryFilter === "image" ? "active" : ""}`}
+                      onClick={() => setMediaCategoryFilter("image")}
+                    >
+                      Görseller
+                    </button>
+                    <button
+                      type="button"
+                      className={`composer-media-tab-btn ${mediaCategoryFilter === "canva_package" ? "active" : ""}`}
+                      onClick={() => setMediaCategoryFilter("canva_package")}
+                    >
+                      Canva Paketleri
+                    </button>
+                    <button
+                      type="button"
+                      className={`composer-media-tab-btn ${mediaCategoryFilter === "video" ? "active" : ""}`}
+                      onClick={() => setMediaCategoryFilter("video")}
+                    >
+                      Videolar
+                    </button>
+                    <button
+                      type="button"
+                      className={`composer-media-tab-btn ${mediaCategoryFilter === "stock" ? "active" : ""}`}
+                      onClick={() => setMediaCategoryFilter("stock")}
+                    >
+                      Stok
+                    </button>
+                  </div>
+
+                  <div className="composer-media-grid">
+                    {loadingAssets ? (
+                      <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "20px", color: "var(--muted)", fontSize: "11px" }}>
+                        Kreatifler yükleniyor...
+                      </div>
+                    ) : filteredAssets.length > 0 ? (
+                      filteredAssets.map((asset) => {
+                        const isSelected = selectedMedia?.id === asset.id;
+                        return (
+                          <button
+                            key={asset.id}
+                            type="button"
+                            onClick={() => applyAssetSelection(asset)}
+                            className={`composer-media-item ${isSelected ? "selected" : ""}`}
+                            title={asset.prompt || asset.sourceTopic || ""}
+                          >
+                            <img
+                              src={asset.thumbnailUrl || asset.url}
+                              alt=""
+                              loading="lazy"
+                              decoding="async"
+                            />
+                            <span>
+                              {asset.category === "canva_package"
+                                ? `Canva (${asset.itemCount || 1})`
+                                : asset.type === "video"
+                                ? "Video"
+                                : "Görsel"}
+                            </span>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "20px", color: "var(--muted)", fontSize: "11px" }}>
+                        Bu kategoride henüz kreatif üretilmemiş.
+                      </div>
+                    )}
                   </div>
                 </div>
-              </article>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="panel-empty" style={{ minHeight: "240px", marginTop: "18px" }}>
-          <div><CalendarClock size={24} /></div>
-          <strong>Bu filtrede gösterilecek içerik yok</strong>
-          <p>&quot;Yeni İçerik Planla&quot; butonuna tıklayarak üretilmiş kreatiflerinizi sosyal medyada yayınlayabilir veya takvime ekleyebilirsiniz.</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <input
+                    type="url"
+                    value={customMediaUrl}
+                    onChange={(e) => setCustomMediaUrl(e.target.value)}
+                    placeholder="https://... veya /kreatif.png"
+                    className="custom-input"
+                  />
+                  <small style={{ color: "var(--muted)", fontSize: "10px" }}>
+                    Doğrudan erişilebilir bir görsel veya MP4 video bağlantısı girin.
+                  </small>
+                </div>
+              )}
+            </div>
+
+            {/* 3. Channel Tabs for Custom Content */}
+            <div className="composer-section">
+              <div className="composer-section-title">
+                <span>3. İçerik ve Kanal Bilgileri</span>
+                <button
+                  type="button"
+                  onClick={applyGlobalToAll}
+                  className="button ghost compact"
+                  style={{ fontSize: "10px", height: "24px" }}
+                  title="Formdaki genel bilgileri tüm seçili kanallara kopyalar"
+                >
+                  <Sparkles size={11} />
+                  Tüm Kanallara Uygula
+                </button>
+              </div>
+
+              {/* Sub-nav for channels */}
+              {selectedIntegrationIds.length > 1 && (
+                <div className="channel-sub-nav">
+                  <button
+                    type="button"
+                    onClick={() => setActiveFormTab("all")}
+                    className={`channel-sub-nav-btn ${activeFormTab === "all" ? "active" : ""}`}
+                  >
+                    Genel Şablon
+                  </button>
+                  {selectedIntegrationIds.map((intId) => {
+                    const acc = accounts.find((a) => a.integrationId === intId);
+                    return (
+                      <button
+                        key={intId}
+                        type="button"
+                        onClick={() => {
+                          setActiveFormTab(intId);
+                          setPreviewIntegrationId(intId);
+                        }}
+                        className={`channel-sub-nav-btn ${activeFormTab === intId ? "active" : ""}`}
+                      >
+                        @{acc?.profile || acc?.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Form Fields */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                {/* Title */}
+                <div>
+                  <label className="input-label" style={{ fontSize: "11px", fontWeight: 700 }}>
+                    Başlık / Konsept
+                  </label>
+                  <input
+                    type="text"
+                    value={
+                      activeFormTab && activeFormTab !== "all"
+                        ? getChannelValue(activeFormTab, "title")
+                        : globalTitle
+                    }
+                    onChange={(e) => {
+                      if (activeFormTab && activeFormTab !== "all") {
+                        setChannelValue(activeFormTab, "title", e.target.value);
+                      } else {
+                        setGlobalTitle(e.target.value);
+                      }
+                    }}
+                    placeholder="Gönderi başlığı veya kısa konu..."
+                    maxLength={100}
+                    className="custom-input"
+                  />
+                </div>
+
+                {/* AI Copy Generator Bar */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "8px 12px",
+                    background: "#f7f5ff",
+                    borderRadius: "10px",
+                    border: "1px solid #e7e2ff",
+                    gap: "8px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <Sparkles size={14} style={{ color: "var(--primary)" }} />
+                    <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--primary)" }}>
+                      AI Metin Asistanı
+                    </span>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <select
+                      value={aiStyle}
+                      onChange={(e) => setAiStyle(e.target.value as "sales" | "story" | "educational" | "punchy")}
+                      className="custom-select"
+                      style={{ height: "28px", fontSize: "10px", padding: "0 8px" }}
+                    >
+                      <option value="sales">Satış &amp; Dönüşüm Odaklı</option>
+                      <option value="story">Hikâye &amp; Samimi</option>
+                      <option value="educational">Eğitici &amp; Değer Odaklı</option>
+                      <option value="punchy">Vurucu &amp; Kısa</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => generateAiCopy()}
+                      disabled={generatingCopy}
+                      className="button primary compact"
+                      style={{ height: "28px", fontSize: "10px" }}
+                    >
+                      {generatingCopy ? <LoaderCircle size={12} className="spin" /> : <Sparkles size={12} />}
+                      Metin Üret
+                    </button>
+                  </div>
+                </div>
+
+                {copyFeedback && (
+                  <div style={{ fontSize: "11px", color: "var(--primary)", background: "#f5f3ff", padding: "6px 10px", borderRadius: "8px" }}>
+                    {copyFeedback}
+                  </div>
+                )}
+
+                {/* Caption */}
+                <div>
+                  <label className="input-label" style={{ fontSize: "11px", fontWeight: 700 }}>
+                    Açıklama / Metin
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={
+                      activeFormTab && activeFormTab !== "all"
+                        ? getChannelValue(activeFormTab, "caption")
+                        : globalCaption
+                    }
+                    onChange={(e) => {
+                      if (activeFormTab && activeFormTab !== "all") {
+                        setChannelValue(activeFormTab, "caption", e.target.value);
+                      } else {
+                        setGlobalCaption(e.target.value);
+                      }
+                    }}
+                    placeholder="Sosyal medyada paylaşılacak açıklama metni..."
+                    className="custom-textarea"
+                  />
+                </div>
+
+                {/* Hashtags */}
+                <div>
+                  <label className="input-label" style={{ fontSize: "11px", fontWeight: 700 }}>
+                    Hashtagler
+                  </label>
+                  <input
+                    type="text"
+                    value={
+                      activeFormTab && activeFormTab !== "all"
+                        ? getChannelValue(activeFormTab, "hashtags")
+                        : globalHashtags
+                    }
+                    onChange={(e) => {
+                      if (activeFormTab && activeFormTab !== "all") {
+                        setChannelValue(activeFormTab, "hashtags", e.target.value);
+                      } else {
+                        setGlobalHashtags(e.target.value);
+                      }
+                    }}
+                    placeholder="#reklam #trend #tasarım"
+                    className="custom-input"
+                  />
+                </div>
+
+                {/* Post Type Selector */}
+                <div>
+                  <label className="input-label" style={{ fontSize: "11px", fontWeight: 700 }}>
+                    Gönderi Formatı
+                  </label>
+                  <div className="segmented-filter" style={{ width: "100%" }}>
+                    <button
+                      type="button"
+                      className={
+                        (activeFormTab && activeFormTab !== "all"
+                          ? getChannelValue(activeFormTab, "postType")
+                          : globalPostType) === "post"
+                          ? "active"
+                          : ""
+                      }
+                      onClick={() => {
+                        if (activeFormTab && activeFormTab !== "all") {
+                          setChannelValue(activeFormTab, "postType", "post");
+                        } else {
+                          setGlobalPostType("post");
+                        }
+                      }}
+                      style={{ flex: 1 }}
+                    >
+                      <ImageIcon size={12} /> Gönderi (Feed)
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        (activeFormTab && activeFormTab !== "all"
+                          ? getChannelValue(activeFormTab, "postType")
+                          : globalPostType) === "reel"
+                          ? "active"
+                          : ""
+                      }
+                      onClick={() => {
+                        if (activeFormTab && activeFormTab !== "all") {
+                          setChannelValue(activeFormTab, "postType", "reel");
+                        } else {
+                          setGlobalPostType("reel");
+                        }
+                      }}
+                      style={{ flex: 1 }}
+                    >
+                      <Film size={12} /> Reels / Shorts
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        (activeFormTab && activeFormTab !== "all"
+                          ? getChannelValue(activeFormTab, "postType")
+                          : globalPostType) === "story"
+                          ? "active"
+                          : ""
+                      }
+                      onClick={() => {
+                        if (activeFormTab && activeFormTab !== "all") {
+                          setChannelValue(activeFormTab, "postType", "story");
+                        } else {
+                          setGlobalPostType("story");
+                        }
+                      }}
+                      style={{ flex: 1 }}
+                    >
+                      <Clock size={12} /> Hikâye
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Scheduling & Submit */}
+            <div className="composer-section" style={{ borderTop: "1px solid #f0f0f4", paddingTop: "16px" }}>
+              <div className="composer-section-title">
+                <span>4. Yayın Zamanlaması</span>
+              </div>
+
+              <div className="segmented-filter" style={{ width: "100%", marginBottom: "12px" }}>
+                <button
+                  type="button"
+                  className={scheduleType === "now" ? "active" : ""}
+                  onClick={() => setScheduleType("now")}
+                  style={{ flex: 1 }}
+                >
+                  Hemen Yayınla
+                </button>
+                <button
+                  type="button"
+                  className={scheduleType === "schedule" ? "active" : ""}
+                  onClick={() => setScheduleType("schedule")}
+                  style={{ flex: 1 }}
+                >
+                  Zamanla
+                </button>
+                <button
+                  type="button"
+                  className={scheduleType === "draft" ? "active" : ""}
+                  onClick={() => setScheduleType("draft")}
+                  style={{ flex: 1 }}
+                >
+                  Taslak Olarak Beklet
+                </button>
+              </div>
+
+              {scheduleType === "schedule" && (
+                <div style={{ marginBottom: "12px" }}>
+                  <label className="input-label" style={{ fontSize: "11px", fontWeight: 700 }}>
+                    Tarih &amp; Saat
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={scheduledAt}
+                    onChange={(e) => setScheduledAt(e.target.value)}
+                    className="custom-input"
+                    required
+                  />
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={submitting || selectedIntegrationIds.length === 0}
+                className="button primary"
+                style={{ width: "100%", height: "42px", fontSize: "13px" }}
+              >
+                {submitting ? (
+                  <>
+                    <LoaderCircle size={16} className="spin" />
+                    Dağıtılıyor...
+                  </>
+                ) : (
+                  <>
+                    <Send size={16} />
+                    {selectedIntegrationIds.length > 1
+                      ? `${selectedIntegrationIds.length} Kanala Dağıtımı Başlat`
+                      : scheduleType === "now"
+                      ? "Şimdi Yayınla"
+                      : scheduleType === "schedule"
+                      ? "Paylaşımı Zamanla"
+                      : "Taslak Olarak Kaydet"}
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+
+          {/* Right Column: Live Multi-Platform Preview */}
+          <div className="composer-preview-panel">
+            <div className="preview-panel-header">
+              <span style={{ font: "700 12px 'Manrope'", color: "var(--text)" }}>
+                Canlı Platform Önizlemesi
+              </span>
+
+              {/* Platform Switcher for Preview */}
+              {selectedIntegrationIds.length > 1 && (
+                <div className="preview-platform-picker">
+                  {selectedIntegrationIds.map((intId) => {
+                    const acc = accounts.find((a) => a.integrationId === intId);
+                    const isYt = acc?.identifier === "youtube";
+                    return (
+                      <button
+                        key={intId}
+                        type="button"
+                        onClick={() => setPreviewIntegrationId(intId)}
+                        className={`preview-platform-btn ${previewIntegrationId === intId ? "active" : ""}`}
+                      >
+                        {isYt ? <Youtube size={12} color="#ff0000" /> : <Instagram size={12} color="#612bd3" />}
+                        @{acc?.profile || acc?.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <MultiPlatformPreview
+              platform={previewPlatform}
+              mediaUrl={mediaSourceTab === "recent" ? selectedMedia?.url : customMediaUrl}
+              thumbnailUrl={selectedMedia?.thumbnailUrl}
+              contentType={
+                mediaSourceTab === "recent"
+                  ? selectedMedia?.type
+                  : customMediaUrl.endsWith(".mp4")
+                  ? "video"
+                  : "image"
+              }
+              postType={
+                (previewIntegrationId
+                  ? (getChannelValue(previewIntegrationId, "postType") as "post" | "reel" | "story")
+                  : globalPostType) || "post"
+              }
+              title={
+                previewIntegrationId ? getChannelValue(previewIntegrationId, "title") : globalTitle
+              }
+              caption={
+                previewIntegrationId ? getChannelValue(previewIntegrationId, "caption") : globalCaption
+              }
+              hashtags={
+                previewIntegrationId ? getChannelValue(previewIntegrationId, "hashtags") : globalHashtags
+              }
+              accountName={previewAccount?.name}
+              accountHandle={previewAccount?.profile || previewAccount?.name}
+              accountPicture={previewAccount?.picture}
+              packageItemCount={selectedMedia?.itemCount}
+            />
+          </div>
         </div>
       )}
 
-      {/* 5. Create / Schedule Modal */}
-      {modalOpen && (
+      {/* ------------------------------------------------------------- */}
+      {/* TAB 2: PAYLAŞIM PLANI (KANAL BAZLI GRID & LİSTE)              */}
+      {/* ------------------------------------------------------------- */}
+      {mainTab === "schedule" && (
+        <div>
+          {accounts.length > 0 ? (
+            <div className="channels-grid">
+              {accounts.map((acc) => {
+                const accPosts = posts.filter((p) => p.integrationId === acc.integrationId);
+                const isYt = acc.identifier.includes("youtube");
+                const isTt = acc.identifier.includes("tiktok");
+                const isFb = acc.identifier.includes("facebook");
+
+                const currentSubTab = channelSubTabs[acc.integrationId] || "scheduled";
+
+                const scheduledItems = accPosts.filter((p) => p.status === "scheduled");
+                const publishedItems = accPosts.filter((p) => p.status === "published");
+                const draftItems = accPosts.filter((p) => p.status === "draft" || p.status === "failed");
+
+                const visibleItems =
+                  currentSubTab === "scheduled"
+                    ? scheduledItems
+                    : currentSubTab === "published"
+                    ? publishedItems
+                    : draftItems;
+
+                return (
+                  <div key={acc.id} className="channel-column-card">
+                    {/* Header */}
+                    <div className="channel-card-header">
+                      <div className="channel-header-identity">
+                        {acc.picture ? (
+                          <img src={acc.picture} alt="" className="channel-header-avatar" />
+                        ) : (
+                          <div className="channel-chip-placeholder" style={{ width: "36px", height: "36px" }}>
+                            {isYt ? (
+                              <Youtube size={18} color="#ff0000" />
+                            ) : (
+                              <Instagram size={18} color="#612bd3" />
+                            )}
+                          </div>
+                        )}
+                        <div className="channel-header-meta">
+                          <strong>@{acc.profile || acc.name}</strong>
+                          <small>
+                            {isYt
+                              ? "YouTube Kanalı"
+                              : isTt
+                              ? "TikTok Hesabı"
+                              : isFb
+                              ? "Facebook Sayfası"
+                              : "Instagram Hesabı"}{" "}
+                            · {accPosts.length} gönderi
+                          </small>
+                        </div>
+                      </div>
+
+                      <span className="badge-pill info">
+                        {acc.identifier.toUpperCase()}
+                      </span>
+                    </div>
+
+                    {/* Sub-tabs: Planlanan / Yayınlanan / Bekleyen */}
+                    <div className="channel-subtabs">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setChannelSubTabs((prev) => ({ ...prev, [acc.integrationId]: "scheduled" }))
+                        }
+                        className={`channel-subtab-btn ${
+                          currentSubTab === "scheduled" ? "active scheduled" : ""
+                        }`}
+                      >
+                        Planlanan ({scheduledItems.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setChannelSubTabs((prev) => ({ ...prev, [acc.integrationId]: "published" }))
+                        }
+                        className={`channel-subtab-btn ${
+                          currentSubTab === "published" ? "active published" : ""
+                        }`}
+                      >
+                        Yayınlanan ({publishedItems.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setChannelSubTabs((prev) => ({ ...prev, [acc.integrationId]: "draft" }))
+                        }
+                        className={`channel-subtab-btn ${
+                          currentSubTab === "draft" ? "active draft" : ""
+                        }`}
+                      >
+                        Bekleyen ({draftItems.length})
+                      </button>
+                    </div>
+
+                    {/* Rows Table */}
+                    <div className="channel-posts-list">
+                      {visibleItems.length > 0 ? (
+                        visibleItems.map((post) => {
+                          const dateObj = new Date(post.scheduledAt || post.createdAt);
+                          const formattedDate = dateObj.toLocaleDateString("tr-TR", {
+                            day: "numeric",
+                            month: "short",
+                          });
+                          const formattedTime = dateObj.toLocaleTimeString("tr-TR", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          });
+                          const thumbUrl = post.mediaUrl.startsWith("/api/assets/")
+                            ? `${post.mediaUrl}?thumb=1`
+                            : post.mediaUrl.startsWith("/api/videos/")
+                            ? `${post.mediaUrl}?thumb=1`
+                            : post.mediaUrl;
+
+                          return (
+                            <div
+                              key={post.id}
+                              className="channel-post-row"
+                              onClick={() => setEditingPost(post)}
+                            >
+                              {/* Date & Time */}
+                              <div className="channel-row-date">
+                                <strong>{formattedDate}</strong>
+                                <span>{formattedTime}</span>
+                              </div>
+
+                              {/* Thumbnail */}
+                              <div className="channel-row-thumb">
+                                {post.contentType === "video" ? (
+                                  <img
+                                    src={thumbUrl}
+                                    alt=""
+                                    loading="lazy"
+                                    decoding="async"
+                                    onError={(e) => {
+                                      // Fallback for video if thumbnail not found
+                                      (e.target as HTMLElement).style.display = "none";
+                                    }}
+                                  />
+                                ) : (
+                                  <img
+                                    src={thumbUrl}
+                                    alt=""
+                                    loading="lazy"
+                                    decoding="async"
+                                  />
+                                )}
+                                <span className="channel-thumb-badge">
+                                  {post.postType === "reel" ? "Reel" : post.postType === "story" ? "Hikâye" : "Post"}
+                                </span>
+                              </div>
+
+                              {/* Info */}
+                              <div className="channel-row-info">
+                                <span className="channel-row-title">
+                                  {post.title || "İsimsiz İçerik"}
+                                </span>
+                                <span className="channel-row-snippet">
+                                  {post.caption || "Açıklama girilmedi"}
+                                </span>
+                              </div>
+
+                              {/* Actions */}
+                              <div
+                                className="channel-row-actions"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {post.status === "scheduled" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => togglePostPause(post)}
+                                    className="channel-action-btn pause"
+                                    title="Beklemeye / Taslağa Al"
+                                  >
+                                    <Pause size={14} />
+                                  </button>
+                                )}
+                                {post.status === "draft" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => togglePostPause(post)}
+                                    className="channel-action-btn"
+                                    title="Zamanlama Kuyruğuna Al"
+                                  >
+                                    <Play size={14} />
+                                  </button>
+                                )}
+                                {post.releaseUrl && (
+                                  <a
+                                    href={post.releaseUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="channel-action-btn"
+                                    title="Canlı Gönderiyi Aç"
+                                  >
+                                    <ExternalLink size={14} />
+                                  </a>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => deletePost(post.id)}
+                                  className="channel-action-btn delete"
+                                  title="Sil"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div
+                          style={{
+                            padding: "36px 16px",
+                            textAlign: "center",
+                            color: "var(--muted)",
+                            fontSize: "11px",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            gap: "8px",
+                          }}
+                        >
+                          <CalendarClock size={24} style={{ opacity: 0.5 }} />
+                          <span>Bu sekmede henüz içerik bulunmuyor.</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="panel-empty" style={{ minHeight: "240px", marginTop: "18px" }}>
+              <div><CalendarClock size={24} /></div>
+              <strong>Bağlı Hesap Bulunmuyor</strong>
+              <p>Önce bir sosyal medya hesabı bağlayarak kanallarınızı görüntüleyebilirsiniz.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* POST DETAIL & EDIT MODAL                                      */}
+      {/* ------------------------------------------------------------- */}
+      {editingPost && (
         <div
           className="modal-backdrop"
           role="dialog"
           aria-modal="true"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget && !submitting) setModalOpen(false);
+            if (e.target === e.currentTarget && !savingEdit) setEditingPost(null);
           }}
         >
-          <section className="modal schedule-modal">
-            <button
-              type="button"
-              className="icon-button modal-close"
-              onClick={() => setModalOpen(false)}
-              disabled={submitting}
-              aria-label="Kapat"
-            >
-              <X size={18} />
-            </button>
-
-            <div className="modal-icon">
-              <Megaphone size={20} />
+          <section className="modal post-detail-modal">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Pencil size={16} style={{ color: "var(--primary)" }} />
+                <h3 style={{ margin: 0, font: "700 16px 'Manrope'" }}>
+                  Gönderi Detayı &amp; Düzenleme
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingPost(null)}
+                className="icon-button"
+                title="Kapat"
+              >
+                <X size={16} />
+              </button>
             </div>
 
-            <h2>Yeni İçerik Planla / Yayınla</h2>
-            <p>Kreatifinizi seçin, açıklama ve zamanlama belirleyerek doğrudan Postiz kuyruğuna gönderin.</p>
+            <form onSubmit={handleSaveEdit}>
+              <div className="post-detail-grid">
+                {/* Media Preview Box */}
+                <div className="post-detail-media-box">
+                  {editingPost.contentType === "video" ? (
+                    <video
+                      src={editingPost.mediaUrl}
+                      controls
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
+                    />
+                  ) : (
+                    <img src={editingPost.mediaUrl} alt="" />
+                  )}
+                </div>
 
-            {error && (
-              <div className="connection-result error" style={{ marginBottom: "14px" }}>
-                <CircleAlert size={16} />
-                <span><strong>Hata</strong><small>{error}</small></span>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} style={{ display: "grid", gap: "16px" }}>
-              {/* Media Selection */}
-              <div>
-                <label className="field-label">
-                  1. Medya Seçimi
-                  <div style={{ display: "flex", gap: "6px", margin: "4px 0 8px" }}>
-                    <button
-                      type="button"
-                      onClick={() => setMediaSourceTab("recent")}
-                      className={`button ${mediaSourceTab === "recent" ? "primary" : "secondary"}`}
-                      style={{ height: "32px", fontSize: "11px", padding: "0 12px" }}
-                    >
-                      Üretilenlerden Seç
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMediaSourceTab("custom")}
-                      className={`button ${mediaSourceTab === "custom" ? "primary" : "secondary"}`}
-                      style={{ height: "32px", fontSize: "11px", padding: "0 12px" }}
-                    >
-                      Özel Medya URL
-                    </button>
-                  </div>
-                </label>
-
-                {mediaSourceTab === "recent" ? (
+                {/* Edit Form Column */}
+                <div className="post-detail-form-col">
                   <div>
-                    {/* Category tabs: Görseller, Videolar, Stok Videolar, Stok Üretim */}
-                    <div className="segmented-filter" style={{ marginBottom: "10px", flexWrap: "wrap", gap: "4px" }}>
-                      <button
-                        type="button"
-                        className={modalMediaTab === "image" ? "active" : ""}
-                        onClick={() => setModalMediaTab("image")}
+                    <label className="input-label" style={{ fontSize: "11px", fontWeight: 700 }}>
+                      Başlık
+                    </label>
+                    <input
+                      type="text"
+                      value={editingPost.title}
+                      onChange={(e) =>
+                        setEditingPost({ ...editingPost, title: e.target.value })
+                      }
+                      className="custom-input"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="input-label" style={{ fontSize: "11px", fontWeight: 700 }}>
+                      Açıklama
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={editingPost.caption}
+                      onChange={(e) =>
+                        setEditingPost({ ...editingPost, caption: e.target.value })
+                      }
+                      className="custom-textarea"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="input-label" style={{ fontSize: "11px", fontWeight: 700 }}>
+                      Hashtagler
+                    </label>
+                    <input
+                      type="text"
+                      value={editingPost.hashtags}
+                      onChange={(e) =>
+                        setEditingPost({ ...editingPost, hashtags: e.target.value })
+                      }
+                      className="custom-input"
+                    />
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                    <div>
+                      <label className="input-label" style={{ fontSize: "11px", fontWeight: 700 }}>
+                        Durum
+                      </label>
+                      <select
+                        value={editingPost.status}
+                        onChange={(e) =>
+                          setEditingPost({
+                            ...editingPost,
+                            status: e.target.value as "draft" | "scheduled" | "published",
+                            scheduleType: e.target.value === "scheduled" ? "schedule" : "draft",
+                          })
+                        }
+                        className="custom-select"
                       >
-                        Görseller ({recentAssets.filter((a) => a.category === "image").length})
-                      </button>
-                      <button
-                        type="button"
-                        className={modalMediaTab === "canva_package" ? "active" : ""}
-                        onClick={() => setModalMediaTab("canva_package")}
-                      >
-                        Canva Paketleri ({recentAssets.filter((a) => a.category === "canva_package").length})
-                      </button>
-                      <button
-                        type="button"
-                        className={modalMediaTab === "video" ? "active" : ""}
-                        onClick={() => setModalMediaTab("video")}
-                      >
-                        Videolar ({recentAssets.filter((a) => a.category === "video").length})
-                      </button>
-                      <button
-                        type="button"
-                        className={modalMediaTab === "stock" ? "active" : ""}
-                        onClick={() => setModalMediaTab("stock")}
-                      >
-                        Stok Videolar ({recentAssets.filter((a) => a.category === "stock").length})
-                      </button>
-                      <button
-                        type="button"
-                        className={modalMediaTab === "stock_render" ? "active" : ""}
-                        onClick={() => setModalMediaTab("stock_render")}
-                      >
-                        ✨ Stok Üretim ({recentAssets.filter((a) => a.category === "stock_render").length})
-                      </button>
+                        <option value="scheduled">Planlanan (Kuyrukta)</option>
+                        <option value="draft">Bekleyen (Taslak)</option>
+                        <option value="published">Yayınlandı</option>
+                      </select>
                     </div>
 
-                    {loadingAssets ? (
-                      <div className="overview-loading" style={{ minHeight: "100px" }} />
-                    ) : recentAssets.filter((a) => a.category === modalMediaTab).length > 0 ? (
-                      <div className="media-picker-grid">
-                        {recentAssets
-                          .filter((a) => a.category === modalMediaTab)
-                          .map((asset) => {
-                            const isSelected = selectedMedia?.id === asset.id;
-                            return (
-                              <button
-                                key={asset.id}
-                                type="button"
-                                onClick={() => applyAssetSelection(asset)}
-                                className={`media-picker-item ${isSelected ? "selected" : ""}`}
-                              >
-                                {asset.thumbnailUrl ? (
-                                  <img
-                                    src={asset.thumbnailUrl}
-                                    alt=""
-                                    loading="lazy"
-                                  />
-                                ) : asset.type === "video" ? (
-                                  <div style={{ width: "100%", height: "100%", background: "#111", display: "grid", placeItems: "center", color: "white" }}>
-                                    <Video size={18} />
-                                  </div>
-                                ) : (
-                                  <img
-                                    src={asset.url.startsWith("/api/assets/") ? `${asset.url}?thumb=1` : asset.url}
-                                    alt=""
-                                    loading="lazy"
-                                  />
-                                )}
-                                <span>{asset.category === "canva_package" ? (asset.packageType === "carousel" ? `CAROUSEL (${asset.itemCount})` : "CANVA") : asset.category === "stock_render" ? "ÜRETİM" : asset.category === "stock" ? "STOK" : asset.type === "video" ? "MP4" : "IMG"}</span>
-                              </button>
-                            );
-                          })}
-                      </div>
-                    ) : (
-                      <div className="panel-empty" style={{ minHeight: "100px" }}>
-                        <p>
-                          {modalMediaTab === "image" && "Bu projede henüz üretilmiş görsel bulunamadı."}
-                          {modalMediaTab === "canva_package" && "Bu projede henüz üretilmiş Canva paketi bulunamadı."}
-                          {modalMediaTab === "video" && "Bu projede henüz üretilmiş video bulunamadı."}
-                          {modalMediaTab === "stock" && "Bu projede henüz senkronize edilmiş stok video bulunamadı."}
-                          {modalMediaTab === "stock_render" && "Bu projede henüz stok içerikten üretilmiş video bulunamadı."}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="field-label">
-                    <input
-                      type="url"
-                      value={customMediaUrl}
-                      onChange={(e) => setCustomMediaUrl(e.target.value)}
-                      placeholder="https://.../video.mp4 veya görsel linki"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Account Selection */}
-              <div>
-                <label className="field-label">
-                  2. Hedef Sosyal Medya Hesabı
-                </label>
-                <div className="account-select-grid">
-                  {accounts.map((acc) => {
-                    const isSelected = selectedIntegration === acc.integrationId;
-                    const isYt = acc.identifier === "youtube";
-                    const isTt = acc.identifier === "tiktok";
-                    return (
-                      <button
-                        key={acc.id}
-                        type="button"
-                        onClick={() => setSelectedIntegration(acc.integrationId)}
-                        className={`account-select-chip ${isSelected ? "selected" : ""}`}
-                      >
-                        {acc.picture ? (
-                          <img src={acc.picture} alt="" />
-                        ) : isYt ? (
-                          <Youtube size={18} style={{ color: "#ff0000" }} />
-                        ) : isTt ? (
-                          <Music2 size={18} style={{ color: "#010101" }} />
-                        ) : (
-                          <Instagram size={18} style={{ color: "#612bd3" }} />
-                        )}
-                        <div style={{ minWidth: 0 }}>
-                          <strong>{acc.name}</strong>
-                          <small>
-                            {isYt ? "YouTube Kanalı" : isTt ? "TikTok Hesabı" : `@${acc.profile || acc.identifier}`}
-                          </small>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Format & Title */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                <label className="field-label">
-                  3. Format
-                  {(() => {
-                    const currentAcc = accounts.find((a) => a.integrationId === selectedIntegration);
-                    if (currentAcc?.identifier === "youtube") {
-                      return (
-                        <select
-                          value={postType}
-                          onChange={(e) => setPostType(e.target.value as "post" | "reel" | "story")}
-                          style={{
-                            width: "100%",
-                            height: "40px",
-                            border: "1px solid #dedfe6",
-                            borderRadius: "10px",
-                            padding: "0 10px",
-                            background: "white",
-                            fontSize: "12px",
-                          }}
-                        >
-                          <option value="reel">YouTube Shorts (Dikey &le;60s)</option>
-                          <option value="post">Standart Video (Yatay/Genel)</option>
-                        </select>
-                      );
-                    }
-                    if (currentAcc?.identifier === "tiktok") {
-                      return (
-                        <select
-                          value={postType}
-                          onChange={(e) => setPostType(e.target.value as "post" | "reel" | "story")}
-                          style={{
-                            width: "100%",
-                            height: "40px",
-                            border: "1px solid #dedfe6",
-                            borderRadius: "10px",
-                            padding: "0 10px",
-                            background: "white",
-                            fontSize: "12px",
-                          }}
-                        >
-                          <option value="reel">TikTok Video (Akış / Doğrudan Paylaşım)</option>
-                          <option value="post">TikTok Fotoğraf Gönderisi</option>
-                        </select>
-                      );
-                    }
-                    return (
+                    <div>
+                      <label className="input-label" style={{ fontSize: "11px", fontWeight: 700 }}>
+                        Format
+                      </label>
                       <select
-                        value={postType}
-                        onChange={(e) => setPostType(e.target.value as "post" | "reel" | "story")}
-                        disabled={selectedMedia?.category === "canva_package" && selectedMedia.packageType === "carousel"}
-                        style={{
-                          width: "100%",
-                          height: "40px",
-                          border: "1px solid #dedfe6",
-                          borderRadius: "10px",
-                          padding: "0 10px",
-                          background: "white",
-                          fontSize: "12px",
-                        }}
+                        value={editingPost.postType}
+                        onChange={(e) =>
+                          setEditingPost({
+                            ...editingPost,
+                            postType: e.target.value as "post" | "reel" | "story",
+                          })
+                        }
+                        className="custom-select"
                       >
-                        <option value="post">Instagram Gönderi (Feed)</option>
-                        <option value="reel">Instagram Reels</option>
-                        <option value="story">Instagram Hikâye (Story)</option>
+                        <option value="post">Gönderi (Feed)</option>
+                        <option value="reel">Reels / Shorts</option>
+                        <option value="story">Hikâye</option>
                       </select>
-                    );
-                  })()}
-                </label>
-
-                <label className="field-label">
-                  Başlık (Dahili Not)
-                  <input
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Örn: Hafta Sonu Kampanyası"
-                  />
-                </label>
-              </div>
-
-              {/* Caption & Hashtags with AI Assistant */}
-              <div>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px", marginBottom: "6px" }}>
-                  <label className="field-label" style={{ margin: 0, fontWeight: 700 }}>
-                    4. Açıklama &amp; Reklam Metni
-                  </label>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <select
-                      value={aiStyle}
-                      onChange={(e) => setAiStyle(e.target.value as "sales" | "story" | "educational" | "punchy")}
-                      style={{
-                        height: "28px",
-                        border: "1px solid #dedfe6",
-                        borderRadius: "8px",
-                        padding: "0 8px",
-                        background: "white",
-                        fontSize: "11px",
-                      }}
-                    >
-                      <option value="sales">🎯 Satış &amp; Teklif</option>
-                      <option value="story">📖 Hikâye Anlatımı</option>
-                      <option value="educational">💡 Eğitici &amp; Değer</option>
-                      <option value="punchy">⚡ Kısa &amp; Çarpıcı</option>
-                    </select>
-                    <button
-                      type="button"
-                      onClick={generateAiCopy}
-                      disabled={generatingCopy}
-                      className="button secondary"
-                      style={{ height: "28px", fontSize: "11px", padding: "0 10px", color: "var(--primary)" }}
-                    >
-                      {generatingCopy ? <LoaderCircle className="spin" size={13} /> : <Sparkles size={13} />}
-                      {generatingCopy ? "Üretiliyor..." : "AI ile Metin Üret"}
-                    </button>
+                    </div>
                   </div>
-                </div>
 
-                {selectedMedia?.idea ? (
-                  <div style={{ padding: "6px 10px", background: "#f3f0ff", borderRadius: "8px", border: "1px solid #e1dcff", marginBottom: "8px", fontSize: "11px", color: "#5647d7" }}>
-                    <strong>Seçilen İçerik Fikri:</strong> {selectedMedia.idea.title}
-                  </div>
-                ) : selectedMedia?.sourceTopic ? (
-                  <div style={{ padding: "6px 10px", background: "#f8f8fc", borderRadius: "8px", border: "1px solid #e2e3ea", marginBottom: "8px", fontSize: "11px", color: "#555866" }}>
-                    <strong>Ana Konu:</strong> {selectedMedia.sourceTopic}
-                  </div>
-                ) : null}
-
-                {copyFeedback && (
-                  <div style={{ fontSize: "11px", color: "#278862", marginBottom: "6px", display: "flex", alignItems: "center", gap: "4px" }}>
-                    <CheckCircle2 size={12} /> {copyFeedback}
-                  </div>
-                )}
-
-                <div className="field-label">
-                  <textarea
-                    rows={4}
-                    value={caption}
-                    onChange={(e) => setCaption(e.target.value)}
-                    placeholder="Sosyal medyada takipçilerin göreceği açıklama metni..."
-                  />
+                  {editingPost.status === "scheduled" && (
+                    <div>
+                      <label className="input-label" style={{ fontSize: "11px", fontWeight: 700 }}>
+                        Planlanan Zaman
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={
+                          editingPost.scheduledAt
+                            ? new Date(editingPost.scheduledAt).toISOString().slice(0, 16)
+                            : ""
+                        }
+                        onChange={(e) =>
+                          setEditingPost({
+                            ...editingPost,
+                            scheduledAt: e.target.value
+                              ? new Date(e.target.value).toISOString()
+                              : undefined,
+                          })
+                        }
+                        className="custom-input"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <label className="field-label">
-                Hashtag&apos;ler
-                <input
-                  type="text"
-                  value={hashtags}
-                  onChange={(e) => setHashtags(e.target.value)}
-                  placeholder="#marka #reels #keşfet"
-                  style={{ fontFamily: "monospace" }}
-                />
-              </label>
-
-              {/* Schedule Type */}
-              <div>
-                <label className="field-label">
-                  5. Yayınlama Zamanı
-                </label>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px", margin: "6px 0 10px" }}>
-                  {(
-                    [
-                      { id: "now", label: "⚡ Hemen Paylaş" },
-                      { id: "schedule", label: "📅 Zamanla" },
-                      { id: "draft", label: "📝 Taslak Kaydet" },
-                    ] as const
-                  ).map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => setScheduleType(t.id)}
-                      className={`button ${scheduleType === t.id ? "primary" : "secondary"}`}
-                      style={{ height: "36px", fontSize: "11px", padding: "0 8px" }}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-
-                {scheduleType === "schedule" && (
-                  <div className="field-label">
-                    <input
-                      type="datetime-local"
-                      value={scheduledAt}
-                      onChange={(e) => setScheduledAt(e.target.value)}
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div className="modal-actions">
+              {/* Modal Footer */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginTop: "20px",
+                  paddingTop: "14px",
+                  borderTop: "1px solid #f0f0f5",
+                }}
+              >
                 <button
                   type="button"
-                  onClick={() => setModalOpen(false)}
-                  className="button secondary"
-                  disabled={submitting}
+                  onClick={() => deletePost(editingPost.id)}
+                  className="button danger ghost"
+                  style={{ color: "#ef4444" }}
                 >
-                  Vazgeç
+                  <Trash2 size={15} />
+                  İçeriği Sil
                 </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="button primary"
-                >
-                  {submitting ? (
-                    <LoaderCircle className="spin" size={15} />
-                  ) : (
-                    <Send size={15} />
-                  )}
-                  {submitting
-                    ? "Gönderiliyor..."
-                    : scheduleType === "now"
-                    ? "Hemen Paylaş"
-                    : scheduleType === "schedule"
-                    ? "Zamanla"
-                    : "Taslak Olarak Kaydet"}
-                </button>
+
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setEditingPost(null)}
+                    className="button secondary"
+                  >
+                    Vazgeç
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingEdit}
+                    className="button primary"
+                  >
+                    {savingEdit ? (
+                      <LoaderCircle size={15} className="spin" />
+                    ) : (
+                      <CheckCircle2 size={15} />
+                    )}
+                    Değişiklikleri Kaydet
+                  </button>
+                </div>
               </div>
             </form>
           </section>
