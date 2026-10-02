@@ -485,6 +485,42 @@ export function getDatabase() {
       assignAccount.run(assignment.accountId, new Date().toISOString(), assignment.projectId);
     }
   }
+
+  try {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS project_brand_strategies (
+        project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+        brand_name TEXT NOT NULL DEFAULT '',
+        brand_description TEXT NOT NULL DEFAULT '',
+        social_channels_json TEXT NOT NULL DEFAULT '[]',
+        competitors_json TEXT NOT NULL DEFAULT '[]',
+        brand_identity_json TEXT NOT NULL DEFAULT '{}',
+        competitor_analysis_json TEXT NOT NULL DEFAULT '{}',
+        audience_voc_json TEXT NOT NULL DEFAULT '{}',
+        growth_strategy_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS project_strategy_ideas (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        column_type TEXT NOT NULL, -- 'vertical_video', 'carousel', 'single_post', 'engagement'
+        title TEXT NOT NULL,
+        hook TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        structure_json TEXT NOT NULL DEFAULT '[]',
+        target_channel TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'suggested', -- 'suggested' (Öneri) or 'hidden' (Gizlenmiş)
+        used_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_strategy_ideas_project_col_status ON project_strategy_ideas(project_id, column_type, status);
+    `);
+  } catch (err) {
+    console.error("[Migration Strategy Tables Error]", err);
+  }
+
   database.exec("PRAGMA optimize;");
   globalDatabase.__yoneticiDb = database;
   return database;

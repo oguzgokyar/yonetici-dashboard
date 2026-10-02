@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import {
-  Bell, ChevronDown, Clapperboard, Film, FolderKanban, Image, LayoutDashboard, PanelsTopLeft,
+  Bell, ChevronDown, Clapperboard, Compass, Film, FolderKanban, Image, LayoutDashboard, PanelsTopLeft,
   Menu, Palette, PanelLeftClose, PanelLeftOpen, Pin, Plus, Search, Send, Settings, Share2, Sparkles, X,
 } from "lucide-react";
 import { useProjects } from "@/features/projects/projects-context";
@@ -19,6 +19,7 @@ type DashboardShellProps = {
 const projectNavigation = [
   { label: "Proje Merkezi", href: "", icon: PanelsTopLeft },
   { label: "Genel Bakış", href: "/overview", icon: LayoutDashboard },
+  { label: "Strateji & İçerik", href: "/strategy", icon: Compass },
   { label: "Görsel Üret", href: "/image-generation", icon: Image },
   { label: "Video Üret", href: "/video-generation", icon: Clapperboard },
   { label: "Stok İçerik", href: "/stock-videos", icon: Film },
