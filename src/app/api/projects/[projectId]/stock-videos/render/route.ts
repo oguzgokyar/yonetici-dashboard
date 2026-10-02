@@ -32,6 +32,8 @@ export async function POST(
     originalVolume?: number;
     musicVolume?: number;
     maxDurationSeconds?: number;
+    trimStartSeconds?: number;
+    trimEndSeconds?: number;
   } | null;
 
   if (!body?.stockVideoId) {
@@ -67,6 +69,8 @@ export async function POST(
       originalVolume: body.originalVolume,
       musicVolume: body.musicVolume,
       maxDurationSeconds: typeof body.maxDurationSeconds === "number" && body.maxDurationSeconds > 0 ? body.maxDurationSeconds : undefined,
+      trimStartSeconds: typeof body.trimStartSeconds === "number" ? body.trimStartSeconds : 0,
+      trimEndSeconds: typeof body.trimEndSeconds === "number" ? body.trimEndSeconds : 0,
     });
 
     return Response.json({ ok: true, video: result });

@@ -9,7 +9,7 @@ import { ensureCachedVideo } from "@/lib/server/google-drive";
 
 const execFileAsync = promisify(execFile);
 
-export type FrameStyle = "blur_padding" | "modern_card" | "split_screen" | "minimal_glow";
+export type FrameStyle = "none" | "blur_padding" | "modern_card" | "split_screen" | "minimal_glow";
 
 export type RenderStockVideoOptions = {
   projectId: string;
@@ -36,6 +36,8 @@ export type RenderStockVideoOptions = {
   originalVolume?: number;
   musicVolume?: number;
   maxDurationSeconds?: number;
+  trimStartSeconds?: number;
+  trimEndSeconds?: number;
 };
 
 export type RenderedStockVideoResult = {
@@ -218,29 +220,33 @@ export async function renderFramedStockVideo(
 
   const sharp = (await import("sharp")).default;
 
-  // 1. Generate foreground video rounded corner alpha mask
+  // 1. Generate foreground video rounded corner alpha mask (if framed)
   const maskSvgPath = path.join(tempDir, `${renderId}_fg_mask.png`);
-  const maskSvg = `
-    <svg width="${fgW}" height="${fgH}" xmlns="http://www.w3.org/2000/svg">
-      <rect x="0" y="0" width="${fgW}" height="${fgH}" rx="${rx}" fill="#ffffff" />
-    </svg>
-  `;
-  await sharp(Buffer.from(maskSvg)).png().toFile(maskSvgPath);
+  if (frameStyle !== "none") {
+    const maskSvg = `
+      <svg width="${fgW}" height="${fgH}" xmlns="http://www.w3.org/2000/svg">
+        <rect x="0" y="0" width="${fgW}" height="${fgH}" rx="${rx}" fill="#ffffff" />
+      </svg>
+    `;
+    await sharp(Buffer.from(maskSvg)).png().toFile(maskSvgPath);
+  }
 
-  // 2. Generate frame border and shadow overlay
+  // 2. Generate frame border and shadow overlay (if framed)
   const borderSvgPath = path.join(tempDir, `${renderId}_fg_border.png`);
-  const borderSvg = `
-    <svg width="1080" height="1920" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <filter id="card_shadow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="18" stdDeviation="${shadowBlur}" flood-color="#000000" flood-opacity="${shadowOpacity}"/>
-          ${glowOpacity > 0 ? `<feDropShadow dx="0" dy="0" stdDeviation="15" flood-color="${accentColor}" flood-opacity="${glowOpacity}"/>` : ""}
-        </filter>
-      </defs>
-      <rect x="${fgX}" y="${fgY}" width="${fgW}" height="${fgH}" rx="${rx}" fill="none" stroke="${accentColor}" stroke-width="${borderW}" stroke-opacity="${borderAlpha}" filter="url(#card_shadow)" />
-    </svg>
-  `;
-  await sharp(Buffer.from(borderSvg)).png().toFile(borderSvgPath);
+  if (frameStyle !== "none") {
+    const borderSvg = `
+      <svg width="1080" height="1920" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="card_shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="18" stdDeviation="${shadowBlur}" flood-color="#000000" flood-opacity="${shadowOpacity}"/>
+            ${glowOpacity > 0 ? `<feDropShadow dx="0" dy="0" stdDeviation="15" flood-color="${accentColor}" flood-opacity="${glowOpacity}"/>` : ""}
+          </filter>
+        </defs>
+        <rect x="${fgX}" y="${fgY}" width="${fgW}" height="${fgH}" rx="${rx}" fill="none" stroke="${accentColor}" stroke-width="${borderW}" stroke-opacity="${borderAlpha}" filter="url(#card_shadow)" />
+      </svg>
+    `;
+    await sharp(Buffer.from(borderSvg)).png().toFile(borderSvgPath);
+  }
 
   // 3. Generate headline card overlay (matching Remotion preview)
   const overlaySvgPath = path.join(tempDir, `${renderId}_overlay.png`);
@@ -476,13 +482,41 @@ export async function renderFramedStockVideo(
     }
   }
 
+  // 1b. Video Trimming (baştan ve sondan kesme) calculations
+  const rawTrimStart = typeof options.trimStartSeconds === "number" ? Math.max(0, options.trimStartSeconds) : 0;
+  const rawTrimEnd = typeof options.trimEndSeconds === "number" ? Math.max(0, options.trimEndSeconds) : 0;
+
+  let trimStart = rawTrimStart;
+  let trimDuration: number | null = null;
+
+  if (sourceDurationSeconds > 0) {
+    const maxTrim = Math.max(0, sourceDurationSeconds - 1);
+    if (trimStart > maxTrim) trimStart = maxTrim;
+
+    const remainingAfterStart = Math.max(1, sourceDurationSeconds - trimStart);
+    const validTrimEnd = Math.min(rawTrimEnd, remainingAfterStart - 1);
+    const calculatedDuration = remainingAfterStart - validTrimEnd;
+
+    if (calculatedDuration > 0 && (trimStart > 0 || validTrimEnd > 0)) {
+      trimDuration = Math.round(calculatedDuration);
+    }
+  }
+
   // Build FFmpeg inputs and filter complex
-  const inputs: string[] = [
-    "-i", localPath,
-    "-i", maskSvgPath,
-    "-i", borderSvgPath,
-  ];
-  let filterStreamIdx = 3;
+  const inputs: string[] = [];
+  if (trimStart > 0) {
+    inputs.push("-ss", String(trimStart));
+  }
+  if (trimDuration !== null && trimDuration > 0) {
+    inputs.push("-t", String(trimDuration));
+  }
+  inputs.push("-i", localPath);
+  let filterStreamIdx = 1;
+
+  if (frameStyle !== "none") {
+    inputs.push("-i", maskSvgPath, "-i", borderSvgPath);
+    filterStreamIdx = 3;
+  }
 
   let overlayInputIdx = -1;
   if (hasTextOverlay) {
@@ -509,14 +543,21 @@ export async function renderFramedStockVideo(
   }
 
   // Compose video filters
-  const filterParts: string[] = [
-    "[0:v]scale=1240:2200:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=32:5,eq=brightness=-0.18:saturation=1.2[bg]",
-    `[0:v]scale=${fgW}:${fgH}:force_original_aspect_ratio=increase,crop=${fgW}:${fgH}[fg_raw]`,
-    "[fg_raw][1:v]alphamerge[fg_rounded]",
-    `[bg][fg_rounded]overlay=${fgX}:${fgY}[v_fg]`,
-    "[v_fg][2:v]overlay=0:0[v_frame]",
-  ];
+  const filterParts: string[] = [];
   let currentVideoOut = "v_frame";
+
+  if (frameStyle === "none") {
+    // Direct full-screen 9:16 crop/fill without blur background or frame border
+    filterParts.push("[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[v_frame]");
+  } else {
+    filterParts.push(
+      "[0:v]scale=1240:2200:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=32:5,eq=brightness=-0.18:saturation=1.2[bg]",
+      `[0:v]scale=${fgW}:${fgH}:force_original_aspect_ratio=increase,crop=${fgW}:${fgH}[fg_raw]`,
+      "[fg_raw][1:v]alphamerge[fg_rounded]",
+      `[bg][fg_rounded]overlay=${fgX}:${fgY}[v_fg]`,
+      "[v_fg][2:v]overlay=0:0[v_frame]"
+    );
+  }
 
   // Overlay text banner if exists
   if (overlayInputIdx >= 0) {
@@ -572,9 +613,13 @@ export async function renderFramedStockVideo(
     audioMapArgs.push("-map", "0:a");
   }
 
-  const effectiveDuration = (typeof options.maxDurationSeconds === "number" && options.maxDurationSeconds > 0)
-    ? options.maxDurationSeconds
+  const baseDuration = trimDuration !== null && trimDuration > 0
+    ? trimDuration
     : (sourceDurationSeconds > 0 ? sourceDurationSeconds : 0);
+
+  const effectiveDuration = (typeof options.maxDurationSeconds === "number" && options.maxDurationSeconds > 0)
+    ? Math.min(options.maxDurationSeconds, baseDuration > 0 ? baseDuration : options.maxDurationSeconds)
+    : baseDuration;
 
   if (hasOutro) {
     const silentAudioIdx = filterStreamIdx++;
@@ -582,7 +627,7 @@ export async function renderFramedStockVideo(
     audioMapArgs.push("-map", `${silentAudioIdx}:a`);
   }
 
-  const durationArgs = effectiveDuration > 0 ? ["-t", String(effectiveDuration)] : [];
+  const durationArgs = effectiveDuration > 0 && trimDuration === null ? ["-t", String(effectiveDuration)] : [];
   const durationLimit = effectiveDuration > 0 ? effectiveDuration : (sourceDurationSeconds || 30);
 
   const ffmpegArgs: string[] = [
@@ -640,6 +685,8 @@ export async function renderFramedStockVideo(
       },
       musicTrack: options.musicTrack,
       outroId: options.outroId,
+      trimStartSeconds: trimStart,
+      trimEndSeconds: rawTrimEnd,
       renderer: "ffmpeg-frame-engine",
     }),
     now

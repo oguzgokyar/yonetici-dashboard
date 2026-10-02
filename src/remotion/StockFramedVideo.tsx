@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Audio, Img, Sequence, spring, useCurrentFrame, useVideoConfig, Video } from "remotion";
 
-export type StockFrameStyle = "blur_padding" | "modern_card" | "split_screen" | "minimal_glow";
+export type StockFrameStyle = "none" | "blur_padding" | "modern_card" | "split_screen" | "minimal_glow";
 
 export type StockFramedVideoProps = {
   videoSrc?: string;
@@ -26,6 +26,8 @@ export type StockFramedVideoProps = {
   musicSrc?: string;
   originalVolume?: number;
   musicVolume?: number;
+  trimStartSeconds?: number;
+  trimEndSeconds?: number;
 };
 
 export const defaultStockFramedProps: StockFramedVideoProps = {
@@ -72,10 +74,13 @@ export function StockFramedVideo({
   musicSrc,
   originalVolume = 1,
   musicVolume = 0.5,
+  trimStartSeconds = 0,
+  trimEndSeconds = 0,
 }: StockFramedVideoProps) {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
 
+  const startFromFrames = Math.max(0, Math.round(trimStartSeconds * fps));
   const outroDurationFrames = outroSrc ? 90 : 0;
   const mainDuration = Math.max(30, durationInFrames - outroDurationFrames);
 
@@ -149,8 +154,8 @@ export function StockFramedVideo({
   return (
     <AbsoluteFill style={{ backgroundColor: "#090a10", overflow: "hidden" }}>
       <Sequence from={0} durationInFrames={mainDuration}>
-        {/* Background blurred video */}
-        {videoSrc && (
+        {/* Background blurred video (only when frameStyle is not 'none') */}
+        {videoSrc && frameStyle !== "none" && (
           <AbsoluteFill
             style={{
               filter: "blur(32px) brightness(0.48) saturate(1.2)",
@@ -159,6 +164,7 @@ export function StockFramedVideo({
           >
             <Video
               src={videoSrc}
+              startFrom={startFromFrames}
               muted
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
@@ -167,6 +173,17 @@ export function StockFramedVideo({
 
         {/* Foreground container according to frame style */}
         <AbsoluteFill style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {frameStyle === "none" && videoSrc && (
+            <AbsoluteFill style={{ width: "100%", height: "100%", overflow: "hidden" }}>
+              <Video
+                src={videoSrc}
+                startFrom={startFromFrames}
+                volume={originalVolume}
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
+            </AbsoluteFill>
+          )}
+
           {frameStyle === "blur_padding" && (
             <div
               style={{
@@ -182,6 +199,7 @@ export function StockFramedVideo({
               {videoSrc && (
                 <Video
                   src={videoSrc}
+                  startFrom={startFromFrames}
                   volume={originalVolume}
                   style={{ width: "100%", height: "100%", objectFit: "cover" }}
                 />
@@ -204,6 +222,7 @@ export function StockFramedVideo({
               {videoSrc && (
                 <Video
                   src={videoSrc}
+                  startFrom={startFromFrames}
                   volume={originalVolume}
                   style={{ width: "100%", height: "100%", objectFit: "cover" }}
                 />
@@ -226,6 +245,7 @@ export function StockFramedVideo({
               {videoSrc && (
                 <Video
                   src={videoSrc}
+                  startFrom={startFromFrames}
                   volume={originalVolume}
                   style={{ width: "100%", height: "100%", objectFit: "cover" }}
                 />
@@ -248,6 +268,7 @@ export function StockFramedVideo({
               {videoSrc && (
                 <Video
                   src={videoSrc}
+                  startFrom={startFromFrames}
                   volume={originalVolume}
                   style={{ width: "100%", height: "100%", objectFit: "cover" }}
                 />

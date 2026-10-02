@@ -19,6 +19,7 @@ import {
   Music,
   Play,
   RefreshCw,
+  Scissors,
   Search,
   Send,
   Sparkles,
@@ -64,6 +65,11 @@ type RenderedItem = {
 
 const frameStyles: { id: StockFrameStyle; name: string; desc: string }[] = [
   {
+    id: "none",
+    name: "Çerçevesiz",
+    desc: "Tam Ekran Video",
+  },
+  {
     id: "blur_padding",
     name: "Modern Blur",
     desc: "Bulanık Zemin",
@@ -107,7 +113,9 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
   const [currentPage, setCurrentPage] = useState<number>(1);
 
   // Editor states
-  const [frameStyle, setFrameStyle] = useState<StockFrameStyle>("blur_padding");
+  const [frameStyle, setFrameStyle] = useState<StockFrameStyle>("none");
+  const [trimStartSeconds, setTrimStartSeconds] = useState<number>(0);
+  const [trimEndSeconds, setTrimEndSeconds] = useState<number>(0);
   const [headline, setHeadline] = useState("");
   const [subtitle, setSubtitle] = useState("");
   const [headlineColor, setHeadlineColor] = useState("#ffffff");
@@ -447,6 +455,8 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
           musicTrack: musicTrack !== "none" ? musicTrack : undefined,
           originalVolume,
           musicVolume: musicTrack !== "none" ? musicVolume : 0,
+          trimStartSeconds: trimStartSeconds > 0 ? trimStartSeconds : 0,
+          trimEndSeconds: trimEndSeconds > 0 ? trimEndSeconds : 0,
           maxDurationSeconds: selectedVideo.durationSeconds && selectedVideo.durationSeconds > 0 ? selectedVideo.durationSeconds : undefined,
         }),
       });
@@ -834,10 +844,20 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                       musicSrc: musicTrack !== "none" ? musicTrack : undefined,
                       originalVolume,
                       musicVolume: musicTrack !== "none" ? musicVolume : 0,
+                      trimStartSeconds,
+                      trimEndSeconds,
                     }}
                     durationInFrames={
-                      Math.max(150, Math.min((selectedVideo.durationSeconds || 30) * 30, 5400)) +
-                      (selectedOutroId ? 90 : 0)
+                      Math.max(
+                        60,
+                        Math.min(
+                          Math.max(
+                            3,
+                            (selectedVideo.durationSeconds || 30) - trimStartSeconds - trimEndSeconds
+                          ) * 30,
+                          5400
+                        )
+                      ) + (selectedOutroId ? 90 : 0)
                     }
                     compositionWidth={1080}
                     compositionHeight={1920}
@@ -881,6 +901,92 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                     <button type="button" className="button secondary" onClick={() => setOverlayModalOpen(true)}>
                       Özel Çerçeve Seç / Yönet
                     </button>
+                  </div>
+                </StockAccordionSection>
+
+                <StockAccordionSection
+                  id="trim"
+                  title="Videoyu Kes"
+                  summary={
+                    trimStartSeconds > 0 || trimEndSeconds > 0
+                      ? `Baş: ${trimStartSeconds}s · Son: ${trimEndSeconds}s (Net: ${Math.max(1, Math.round((selectedVideo.durationSeconds || 30) - trimStartSeconds - trimEndSeconds))}s)`
+                      : "Kesme uygulanmadı (Orijinal)"
+                  }
+                  icon={<Scissors size={15} />}
+                  openSection={openCustomizerSection}
+                  onToggle={(id) => setOpenCustomizerSection((current) => current === id ? "" : id)}
+                >
+                  <div className="stock-trim-grid">
+                    <div className="stock-trim-item">
+                      <div className="stock-trim-header">
+                        <label className="input-label" style={{ fontSize: "11px", fontWeight: 700, margin: 0 }}>
+                          Baştan Kes
+                        </label>
+                        <small style={{ color: "var(--muted)", fontSize: "10px" }}>
+                          Giriş kısmını at
+                        </small>
+                      </div>
+                      <div className="stock-trim-input-row">
+                        <input
+                          type="number"
+                          min="0"
+                          max={Math.max(0, (selectedVideo.durationSeconds || 30) - trimEndSeconds - 1)}
+                          step="0.5"
+                          value={trimStartSeconds || ""}
+                          placeholder="0"
+                          onChange={(e) => {
+                            const val = Math.max(0, parseFloat(e.target.value) || 0);
+                            const maxLimit = Math.max(0, (selectedVideo.durationSeconds || 30) - trimEndSeconds - 1);
+                            setTrimStartSeconds(Math.min(val, maxLimit));
+                          }}
+                          className="custom-input stock-trim-input"
+                        />
+                        <span className="stock-trim-unit">saniye</span>
+                      </div>
+                    </div>
+
+                    <div className="stock-trim-item">
+                      <div className="stock-trim-header">
+                        <label className="input-label" style={{ fontSize: "11px", fontWeight: 700, margin: 0 }}>
+                          Sondan Kes
+                        </label>
+                        <small style={{ color: "var(--muted)", fontSize: "10px" }}>
+                          Marka/logo sahnesini sil
+                        </small>
+                      </div>
+                      <div className="stock-trim-input-row">
+                        <input
+                          type="number"
+                          min="0"
+                          max={Math.max(0, (selectedVideo.durationSeconds || 30) - trimStartSeconds - 1)}
+                          step="0.5"
+                          value={trimEndSeconds || ""}
+                          placeholder="0"
+                          onChange={(e) => {
+                            const val = Math.max(0, parseFloat(e.target.value) || 0);
+                            const maxLimit = Math.max(0, (selectedVideo.durationSeconds || 30) - trimStartSeconds - 1);
+                            setTrimEndSeconds(Math.min(val, maxLimit));
+                          }}
+                          className="custom-input stock-trim-input"
+                        />
+                        <span className="stock-trim-unit">saniye</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="stock-trim-info-bar">
+                    <span>
+                      Orijinal: <strong>{Math.round(selectedVideo.durationSeconds || 30)}s</strong>
+                    </span>
+                    <span>→</span>
+                    <span>
+                      Kalan Süre: <strong>{Math.max(1, Math.round((selectedVideo.durationSeconds || 30) - trimStartSeconds - trimEndSeconds))}s</strong>
+                    </span>
+                    {selectedOutroId && (
+                      <span className="stock-trim-outro-note">
+                        (+ Outro hemen ardına eklenecek)
+                      </span>
+                    )}
                   </div>
                 </StockAccordionSection>
 
