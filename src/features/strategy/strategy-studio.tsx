@@ -820,32 +820,32 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                   </div>
 
                   {/* Yeni Fikir İste Butonu */}
-                  <div style={{ padding: "0 10px 8px" }}>
+                  <div>
                     <button
                       type="button"
                       onClick={() => handleGenerateMoreForColumn(colType)}
                       disabled={isColLoading || !brandName.trim()}
-                      className="btn-col-action"
+                      className="btn-request-idea"
                     >
                       {isColLoading ? (
                         <>
-                          <RefreshCw className="spin" size={12} />
+                          <RefreshCw className="spin" size={13} />
                           <span>Yeni Fikirler Üretiliyor...</span>
                         </>
                       ) : (
                         <>
-                          <Plus size={13} />
-                          <span>+ Yeni Fikir İste</span>
+                          <Plus size={14} />
+                          <span>Yeni Fikir İste</span>
                         </>
                       )}
                     </button>
                   </div>
 
                   {/* Fikir Kartları Listesi */}
-                  <div className="kanban-cards-list">
+                  <div className="kanban-cards-stack">
                     {displayList.length === 0 ? (
-                      <div className="kanban-empty">
-                        <small>
+                      <div style={{ textAlign: "center", padding: "24px 12px", background: "white", borderRadius: "10px", border: "1px dashed #cbd5e1" }}>
+                        <small style={{ color: "var(--muted)", fontSize: "11px" }}>
                           {activeColTab === "suggested"
                             ? "Henüz öneri yok. Yukarıdaki butondan yeni fikir isteyebilirsiniz."
                             : "Gizlenmiş içerik bulunmuyor."}
@@ -855,26 +855,34 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                       displayList.map((idea) => {
                         const isHidden = idea.status === "hidden";
                         const isCopied = copiedId === (idea.id || idea.title);
+                        // Clean any leading quotation marks to avoid double-quote rendering bugs
+                        const cleanHook = (idea.hook || "").replace(/^["'“”]+|["'“”]+$/g, "");
                         return (
                           <div
                             key={idea.id || idea.title}
-                            className={`kanban-idea-card ${isHidden ? "hidden-card" : ""}`}
+                            className={`kanban-card ${isHidden ? "is-hidden" : ""}`}
                           >
-                            {/* Kanca Kutusu */}
-                            <div className="idea-hook-box">
-                              <span className="idea-hook-label">KANCA (HOOK)</span>
-                              <p className="idea-hook-text">&ldquo;{idea.hook}&rdquo;</p>
+                            {/* Kart Başlığı */}
+                            <div className="kanban-card-head">
+                              <h5 className={`kanban-card-title ${isHidden ? "crossed" : ""}`}>{idea.title}</h5>
                             </div>
 
-                            {/* Başlık ve Açıklama */}
-                            <h5 className="idea-card-title">{idea.title}</h5>
-                            <p className="idea-card-desc">{idea.description}</p>
+                            {/* Kanca Kutusu */}
+                            <div className="kanban-hook-box">
+                              <span className="kanban-hook-tag">Kanca (Hook)</span>
+                              <p className="kanban-hook-quote">&ldquo;{cleanHook}&rdquo;</p>
+                            </div>
+
+                            {/* Açıklama */}
+                            <p className="kanban-card-desc">{idea.description}</p>
 
                             {/* 4 Adımlı İskelet (Accordion) */}
                             {idea.structure && idea.structure.length > 0 && (
-                              <details className="idea-structure-details">
-                                <summary>Akış İskeleti ({idea.structure.length} Adım)</summary>
-                                <ul>
+                              <details className="kanban-steps-details">
+                                <summary className="kanban-steps-summary">
+                                  <span>Akış İskeleti ({idea.structure.length} Adım)</span>
+                                </summary>
+                                <ul className="kanban-steps-list">
                                   {idea.structure.map((st, sIdx) => (
                                     <li key={sIdx}>{st}</li>
                                   ))}
@@ -883,49 +891,51 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                             )}
 
                             {/* Alt Çubuk: Hedef Kanal & Aksiyon Butonları */}
-                            <div className="idea-card-footer">
-                              <span className="idea-target-tag">{idea.targetChannel}</span>
+                            <div className="kanban-card-footer">
+                              <span className="kanban-channel-badge" title={idea.targetChannel}>
+                                {idea.targetChannel}
+                              </span>
 
-                              <div className="idea-actions-row">
+                              <div className="kanban-card-actions">
                                 <button
                                   type="button"
                                   onClick={() => idea.id && handleToggleHideIdea(idea.id)}
-                                  className="btn-mini-action"
+                                  className="btn-card-action icon-only"
                                   title={isHidden ? "Görünür Yap (Önerilere Taşı)" : "Gizle (Kullanıldı / Reddedildi)"}
                                 >
-                                  {isHidden ? <Eye size={11} /> : <EyeOff size={11} />}
+                                  {isHidden ? <Eye size={12} /> : <EyeOff size={12} />}
                                 </button>
 
                                 <button
                                   type="button"
                                   onClick={() => copyIdeaText(idea)}
-                                  className="btn-mini-action"
+                                  className="btn-card-action icon-only"
                                   title="Fikri Kopyala"
                                 >
                                   {isCopied ? (
-                                    <CheckCircle2 size={11} style={{ color: "#10b981" }} />
+                                    <CheckCircle2 size={12} style={{ color: "#10b981" }} />
                                   ) : (
-                                    <Copy size={11} />
+                                    <Copy size={12} />
                                   )}
                                 </button>
 
                                 <button
                                   type="button"
                                   onClick={() => handleSendToCanva(idea)}
-                                  className="btn-mini-action primary"
+                                  className="btn-card-action primary"
                                   title="Canva Görsel Üretim Stüdyosuna Aktar"
                                 >
-                                  <Palette size={11} />
+                                  <Palette size={12} />
                                   <span>Canva</span>
                                 </button>
 
                                 <button
                                   type="button"
                                   onClick={() => handleSendToPublishing(idea)}
-                                  className="btn-mini-action"
+                                  className="btn-card-action"
                                   title="Paylaşım Planına Ekle"
                                 >
-                                  <Send size={11} />
+                                  <Send size={12} />
                                   <span>Planla</span>
                                 </button>
                               </div>

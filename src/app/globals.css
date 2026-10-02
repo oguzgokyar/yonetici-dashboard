@@ -2136,16 +2136,17 @@ button { cursor:pointer; }
 .col-subtabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  background: #ececf3;
+  background: #f1f2f6;
   padding: 3px;
   border-radius: 10px;
-  gap: 2px;
+  gap: 3px;
+  border: 1px solid #e5e7eb;
 }
 
 .col-subtab-btn {
   border: 0;
   background: transparent;
-  padding: 6px 4px;
+  padding: 6px 8px;
   font-size: 11px;
   font-weight: 600;
   color: #64748b;
@@ -2153,23 +2154,30 @@ button { cursor:pointer; }
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 6px;
   transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.col-subtab-btn:hover {
+  color: var(--text);
 }
 
 .col-subtab-btn.active {
   background: white;
-  color: #1e293b;
+  color: var(--primary);
   font-weight: 700;
-  box-shadow: 0 1px 4px #1f21300a;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
 .col-subtab-badge {
-  font-size: 9px;
-  padding: 1px 5px;
-  border-radius: 6px;
-  background: #f1f5f9;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #e2e8f0;
   color: #475569;
+  line-height: 1.2;
 }
 
 .col-subtab-btn.active .col-subtab-badge {
@@ -2180,13 +2188,13 @@ button { cursor:pointer; }
 /* Quick Add Button */
 .btn-request-idea {
   width: 100%;
-  height: 36px;
-  border: 1px dashed #cbd5e1;
-  background: white;
-  border-radius: 9px;
+  height: 34px;
+  border: 1px dashed #c7d2fe;
+  background: #faf8ff;
+  border-radius: 8px;
   font-size: 11px;
   font-weight: 700;
-  color: var(--primary);
+  color: #6d28d9;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2195,39 +2203,47 @@ button { cursor:pointer; }
   cursor: pointer;
 }
 
-.btn-request-idea:hover {
-  background: #f8fafc;
-  border-color: #94a3b8;
+.btn-request-idea:hover:not(:disabled) {
+  background: #f3effe;
+  border-color: #a78bfa;
+  box-shadow: 0 2px 6px rgba(109, 40, 217, 0.08);
+}
+
+.btn-request-idea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Clean Kanban Idea Card */
 .kanban-cards-stack {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 12px;
 }
 
 .kanban-card {
   background: white;
-  border: 1px solid var(--border);
+  border: 1px solid #e2e8f0;
   border-radius: 12px;
-  padding: 12px;
-  box-shadow: 0 1px 4px #24253d04;
+  padding: 14px;
+  box-shadow: 0 1px 4px rgba(36, 37, 61, 0.04);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  transition: transform 0.15s ease, border-color 0.15s ease;
+  gap: 10px;
+  transition: all 0.15s ease;
 }
 
 .kanban-card:hover {
   border-color: #cbd5e1;
-  box-shadow: 0 3px 10px #24253d08;
+  box-shadow: 0 4px 12px rgba(36, 37, 61, 0.08);
+  transform: translateY(-1px);
 }
 
 .kanban-card.is-hidden {
-  background: #fafafc;
+  background: #f8fafc;
   border-style: dashed;
-  opacity: 0.85;
+  border-color: #cbd5e1;
+  opacity: 0.8;
 }
 
 .kanban-card-head {
@@ -2241,7 +2257,7 @@ button { cursor:pointer; }
   font: 700 12px "Manrope", sans-serif;
   color: var(--text);
   margin: 0;
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
 .kanban-card-title.crossed {
@@ -2249,71 +2265,95 @@ button { cursor:pointer; }
   color: #94a3b8;
 }
 
-.btn-card-toggle {
-  border: 0;
-  background: transparent;
-  color: #94a3b8;
-  padding: 2px;
-  display: grid;
-  place-items: center;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.btn-card-toggle:hover {
-  background: #f1f5f9;
-  color: var(--text);
-}
-
-.kanban-hook-pill {
-  background: #fbfaff;
-  border: 1px solid #ebe7ff;
+.kanban-hook-box {
+  background: #faf5ff;
+  border: 1px solid #f3e8ff;
   border-radius: 8px;
-  padding: 7px 9px;
-  font-size: 11px;
-  color: #4338ca;
-  line-height: 1.35;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
-.kanban-card-desc {
+.kanban-hook-tag {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #7c3aed;
+  text-transform: uppercase;
+}
+
+.kanban-hook-quote {
   font-size: 11px;
-  color: #64748b;
+  font-weight: 600;
+  color: #5b21b6;
   line-height: 1.4;
   margin: 0;
 }
 
+.kanban-card-desc {
+  font-size: 11px;
+  color: #475569;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.kanban-steps-details {
+  border: 1px solid #f1f5f9;
+  border-radius: 7px;
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.kanban-steps-summary {
+  padding: 5px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  user-select: none;
+}
+
+.kanban-steps-summary:hover {
+  color: var(--text);
+}
+
 .kanban-steps-list {
+  margin: 0;
+  padding: 4px 10px 8px 22px;
   display: flex;
   flex-direction: column;
   gap: 3px;
-  padding-top: 6px;
-  border-top: 1px solid #f1f2f6;
-}
-
-.kanban-step-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 5px;
   font-size: 10px;
-  color: #475569;
+  color: #334155;
+  line-height: 1.4;
+  border-top: 1px solid #edf2f7;
 }
 
 .kanban-card-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 8px;
-  border-top: 1px solid #f1f2f6;
-  font-size: 10px;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid #f1f5f9;
 }
 
-.kanban-card-channel {
-  font-weight: 600;
-  color: #94a3b8;
-  max-width: 85px;
+.kanban-channel-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #6366f1;
+  background: #eef2ff;
+  border: 1px solid #e0e7ff;
+  padding: 2px 7px;
+  border-radius: 5px;
+  white-space: nowrap;
+  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .kanban-card-actions {
@@ -2322,12 +2362,12 @@ button { cursor:pointer; }
   gap: 4px;
 }
 
-.btn-mini-action {
-  height: 26px;
+.btn-card-action {
+  height: 25px;
   padding: 0 7px;
-  border: 1px solid var(--border);
+  border: 1px solid #e2e8f0;
   background: white;
-  border-radius: 7px;
+  border-radius: 6px;
   font-size: 10px;
   font-weight: 600;
   color: #475569;
@@ -2338,19 +2378,27 @@ button { cursor:pointer; }
   transition: all 0.12s ease;
 }
 
-.btn-mini-action:hover {
+.btn-card-action:hover {
   background: #f8fafc;
   color: var(--text);
+  border-color: #cbd5e1;
 }
 
-.btn-mini-action.primary {
+.btn-card-action.icon-only {
+  width: 25px;
+  padding: 0;
+  justify-content: center;
+}
+
+.btn-card-action.primary {
   background: #f5f3ff;
   border-color: #ddd6fe;
   color: #6d28d9;
   font-weight: 700;
 }
 
-.btn-mini-action.primary:hover {
+.btn-card-action.primary:hover {
   background: #ede9fe;
+  border-color: #c4b5fd;
 }
 
