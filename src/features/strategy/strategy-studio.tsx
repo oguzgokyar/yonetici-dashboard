@@ -12,17 +12,13 @@ import {
   MessageCircle,
   Eye,
   EyeOff,
-  ChevronRight,
   Plus,
   Send,
   Palette,
   CheckCircle2,
-  AlertCircle,
-  TrendingUp,
-  Target,
-  Swords,
-  BadgePercent,
   Copy,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import type {
@@ -62,34 +58,38 @@ type StrategyResponse = {
 
 const COLUMN_CONFIG: Record<
   ColumnType,
-  { title: string; subtitle: string; icon: any; color: string; defaultTarget: string }
+  { title: string; subtitle: string; icon: any; iconBg: string; iconColor: string; defaultTarget: string }
 > = {
   vertical_video: {
     title: "Dikey Video",
-    subtitle: "Reels / TikTok / Shorts (9:16)",
+    subtitle: "Reels / TikTok (9:16)",
     icon: Video,
-    color: "#ec4899", // pink
-    defaultTarget: "Instagram Reels / TikTok",
+    iconBg: "#fdf2f8",
+    iconColor: "#db2777",
+    defaultTarget: "Reels / TikTok",
   },
   carousel: {
     title: "Karosel Seri",
     subtitle: "Canva Carousel (5-7 Slayt)",
     icon: Layers,
-    color: "#6366f1", // indigo
+    iconBg: "#eef2ff",
+    iconColor: "#4f46e5",
     defaultTarget: "Instagram Carousel",
   },
   single_post: {
     title: "Tekil / İnfografik",
-    subtitle: "Vurgu, Alıntı & Sektör Haberi",
+    subtitle: "Vurgu, Alıntı & Haber",
     icon: FileText,
-    color: "#06b6d4", // cyan
+    iconBg: "#ecfeff",
+    iconColor: "#0891b2",
     defaultTarget: "Instagram / LinkedIn",
   },
   engagement: {
     title: "Etkileşim & Story",
-    subtitle: "Anket, Soru-Cevap & DM Kurgusu",
+    subtitle: "Anket, İkilem & DM",
     icon: MessageCircle,
-    color: "#10b981", // emerald
+    iconBg: "#ecfdf5",
+    iconColor: "#059669",
     defaultTarget: "Instagram Story",
   },
 };
@@ -109,6 +109,7 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
     "YouTube",
   ]);
   const [competitorsText, setCompetitorsText] = useState("");
+  const [formExpanded, setFormExpanded] = useState(true);
 
   // Column Subtabs: 'suggested' or 'hidden' per column
   const [colTabs, setColTabs] = useState<Record<ColumnType, "suggested" | "hidden">>({
@@ -141,6 +142,7 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
         setBrandDescription(json.strategy.brandDescription || "");
         setSocialChannels(json.strategy.socialChannels || ["Instagram", "TikTok", "YouTube"]);
         setCompetitorsText((json.strategy.competitors || []).join(", "));
+        setFormExpanded(false); // Collapse form if strategy already exists to keep page minimal
       } else if (json.initialData) {
         setBrandName(json.initialData.brandName || "");
         setBrandDescription(json.initialData.brandDescription || "");
@@ -201,7 +203,6 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
       });
       const json = await res.json();
       if (json.success) {
-        // Optimistic local update
         setData((prev) => {
           if (!prev) return prev;
           const nextCols = { ...prev.columns };
@@ -236,7 +237,6 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
       });
       const json = await res.json();
       if (json.success && json.ideas) {
-        // Append new ideas to suggested
         setData((prev) => {
           if (!prev) return prev;
           const nextCols = { ...prev.columns };
@@ -246,7 +246,6 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
           ];
           return { ...prev, columns: nextCols };
         });
-        // Switch to suggested tab so user immediately sees them
         setColTabs((prev) => ({ ...prev, [columnType]: "suggested" }));
       } else {
         alert("Hata: " + (json.error || "Yeni fikir üretilemedi."));
@@ -259,7 +258,6 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
   }
 
   function handleSendToCanva(idea: StrategyIdea) {
-    // Pass idea title and concept to Canva studio via localStorage or query
     try {
       const payload = {
         title: idea.title,
@@ -300,203 +298,200 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
       title="Sosyal Medya Strateji & İçerik Matrisi"
       eyebrow="ScrapeCreators Metodolojisi & Hermes Ajanı"
     >
-      <div className="space-y-6 max-w-7xl mx-auto pb-16">
-        {/* ÜST PANEL: MARKA & ANALİZ FORMU */}
-        <section className="panel">
-          <div className="panel-header flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+      <div className="strategy-container max-w-7xl mx-auto">
+        {/* ÜST PANEL: MARKA & ANALİZ FORMU (Kompakt & Katlanabilir) */}
+        <section className="strategy-panel">
+          <div className="strategy-panel-header">
             <div>
-              <h2 className="text-base font-bold flex items-center gap-2 text-white">
-                <Compass className="text-brand-400" size={18} />
-                Marka ve Rakip Bilgileri
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Marka kimliği, sosyal kanallar ve takip edilen rakipleri girerek yapay zeka destekli içerik stratejinizi oluşturun.
+              <div className="strategy-panel-title">
+                <Compass size={18} />
+                <span>Marka &amp; Rakip Bilgileri</span>
+              </div>
+              <p className="strategy-panel-desc">
+                Hedef kitle acı noktalarını (VOC), rakip açıklarını ve 4 kolonluk içerik fikirlerini yapılandırın.
               </p>
             </div>
-            <button
-              onClick={handleGenerateFullStrategy}
-              disabled={generating || !brandName.trim()}
-              className="btn btn-primary text-xs flex items-center gap-2 cursor-pointer w-full md:w-auto justify-center"
-            >
-              {generating ? (
-                <>
-                  <RefreshCw className="animate-spin" size={14} />
-                  <span>Strateji & Fikirler Üretiliyor...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles size={14} />
-                  <span>{overview ? "Stratejiyi Yeniden Üret" : "Strateji ve Matrisi Başlat"}</span>
-                </>
-              )}
-            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setFormExpanded(!formExpanded)}
+                className="button secondary text-xs"
+                style={{ height: "36px", padding: "0 11px" }}
+              >
+                {formExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                <span>{formExpanded ? "Formu Gizle" : "Formu Aç"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleGenerateFullStrategy}
+                disabled={generating || !brandName.trim()}
+                className="button primary text-xs"
+                style={{ height: "36px", padding: "0 14px" }}
+              >
+                {generating ? (
+                  <>
+                    <RefreshCw className="spin" size={13} />
+                    <span>Üretiliyor...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={13} />
+                    <span>{overview ? "Yeniden Üret" : "Stratejiyi Başlat"}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
-          <form onSubmit={handleGenerateFullStrategy} className="p-4 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div>
-                <label className="field-label text-xs font-semibold text-slate-300 mb-1 block">
-                  Marka / Proje Adı *
-                </label>
-                <input
-                  type="text"
-                  value={brandName}
-                  onChange={(e) => setBrandName(e.target.value)}
-                  placeholder="Örn: Atölye Hanem"
-                  className="input-field text-xs w-full"
-                  required
-                />
-              </div>
+          {formExpanded && (
+            <form onSubmit={handleGenerateFullStrategy} style={{ marginTop: "12px" }}>
+              <div className="strategy-form-grid">
+                <div className="strategy-field">
+                  <label className="strategy-field-label">Marka / Proje Adı *</label>
+                  <input
+                    type="text"
+                    value={brandName}
+                    onChange={(e) => setBrandName(e.target.value)}
+                    placeholder="Örn: Atölye Hanem"
+                    className="strategy-input"
+                    required
+                  />
+                </div>
 
-              <div>
-                <label className="field-label text-xs font-semibold text-slate-300 mb-1 block">
-                  Sosyal Medya Kanalları
-                </label>
-                <div className="flex items-center gap-2 pt-1 text-xs">
-                  {["Instagram", "TikTok", "YouTube"].map((ch) => (
-                    <label
-                      key={ch}
-                      className="flex items-center gap-1.5 cursor-pointer bg-slate-900 border border-slate-800 px-2.5 py-1.5 rounded-lg text-slate-300 hover:border-slate-700"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={socialChannels.includes(ch)}
-                        onChange={(e) => {
-                          if (e.target.checked) setSocialChannels([...socialChannels, ch]);
-                          else setSocialChannels(socialChannels.filter((c) => c !== ch));
-                        }}
-                        className="rounded border-slate-700 text-brand-600 focus:ring-0"
-                      />
-                      <span>{ch}</span>
-                    </label>
-                  ))}
+                <div className="strategy-field">
+                  <label className="strategy-field-label">Hedef Sosyal Kanallar</label>
+                  <div className="channel-tag-group" style={{ height: "40px", alignItems: "center" }}>
+                    {["Instagram", "TikTok", "YouTube"].map((ch) => {
+                      const isActive = socialChannels.includes(ch);
+                      return (
+                        <div
+                          key={ch}
+                          onClick={() => {
+                            if (isActive) setSocialChannels(socialChannels.filter((c) => c !== ch));
+                            else setSocialChannels([...socialChannels, ch]);
+                          }}
+                          className={`channel-tag-chip ${isActive ? "active" : ""}`}
+                        >
+                          {isActive && <CheckCircle2 size={12} />}
+                          <span>{ch}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="strategy-field">
+                  <label className="strategy-field-label">Rakipler / Örnek Hesaplar</label>
+                  <input
+                    type="text"
+                    value={competitorsText}
+                    onChange={(e) => setCompetitorsText(e.target.value)}
+                    placeholder="@rakip1, @rakip2, @sektor_hesabi"
+                    className="strategy-input"
+                  />
                 </div>
               </div>
 
-              <div>
-                <label className="field-label text-xs font-semibold text-slate-300 mb-1 block">
-                  Rakipler / Örnek Hesaplar
-                </label>
-                <input
-                  type="text"
-                  value={competitorsText}
-                  onChange={(e) => setCompetitorsText(e.target.value)}
-                  placeholder="@rakip1, @rakip2, @sektor_lideri"
-                  className="input-field text-xs w-full"
+              <div className="strategy-field" style={{ marginTop: "12px" }}>
+                <label className="strategy-field-label">Marka Değer Vaadi &amp; Niş Özeti</label>
+                <textarea
+                  value={brandDescription}
+                  onChange={(e) => setBrandDescription(e.target.value)}
+                  placeholder="Örn: Çocuklar ve gençler için ahşap STEM ve robotik atölyesi. Ebeveynlerin ekran bağımlılığı endişesine pratik üretkenlik çözümü sunuyoruz."
+                  className="strategy-textarea"
                 />
               </div>
-            </div>
-
-            <div>
-              <label className="field-label text-xs font-semibold text-slate-300 mb-1 block">
-                Marka Değer Vaadi & Niş Açıklaması
-              </label>
-              <textarea
-                value={brandDescription}
-                onChange={(e) => setBrandDescription(e.target.value)}
-                placeholder="Örn: Çocuklar ve gençler için ahşap STEM ve robotik kodlama atölyesi. Ebeveynlere ekran süresini azaltıp üretkenliği artırma vaadi sunuyoruz."
-                rows={2}
-                className="input-field text-xs w-full"
-              />
-            </div>
-          </form>
+            </form>
+          )}
         </section>
 
-        {/* 1. KATMAN: STRATEJİ KOKPİTİ (4 KART) */}
+        {/* 1. KATMAN: STRATEJİ & BİLGİ KOKPİTİ (4 Temiz Light Kart) */}
         {overview && (
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                <Target size={14} className="text-brand-400" />
-                Katman 1: Strateji &amp; Bilgi Kokpiti
-              </h3>
-              <span className="text-[11px] text-slate-500 font-mono">
-                Son Güncelleme: {overview.updatedAt ? new Date(overview.updatedAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) : "Yeni"}
-              </span>
+          <section style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <strong style={{ font: "700 13px 'Manrope'", color: "var(--text)" }}>Katman 1: Strateji Kokpiti</strong>
+                <small style={{ color: "var(--muted)", fontSize: "11px" }}>· Marka Kimliği, Kitle ve Fırsat Haritası</small>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="cockpit-grid">
               {/* Kart 1: Marka Kimliği */}
-              <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 space-y-2 border-t-2 border-t-blue-500 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-xs text-white flex items-center gap-1.5">
-                    <span className="text-blue-400">🏷️</span> Marka Kimliği
-                  </h4>
-                  <span className="text-[10px] bg-blue-500/10 text-blue-300 border border-blue-500/20 px-1.5 py-0.2 rounded font-medium">
-                    {overview.brandIdentity?.tone || "Ton"}
-                  </span>
+              <div className="cockpit-box">
+                <div className="cockpit-box-header">
+                  <div className="cockpit-box-title">
+                    <span>🏷️</span>
+                    <span>Marka Kimliği</span>
+                  </div>
+                  <span className="cockpit-box-badge">{overview.brandIdentity?.tone || "Ton"}</span>
                 </div>
-                <p className="text-[11px] text-slate-300 leading-snug">
+                <p className="cockpit-box-desc">
                   <strong>Vaat:</strong> {overview.brandIdentity?.valueProposition}
                 </p>
-                <div className="text-[11px] text-slate-400 bg-slate-950/60 p-2 rounded-lg border border-slate-800">
-                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Kilit Mesaj</span>
+                <div className="cockpit-box-subbox">
+                  <span style={{ fontSize: "10px", fontWeight: "700", color: "#64748b", display: "block" }}>Kilit Mesaj</span>
                   {overview.brandIdentity?.keyMessaging}
                 </div>
               </div>
 
               {/* Kart 2: Rakip Açıkları */}
-              <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 space-y-2 border-t-2 border-t-purple-500 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-xs text-white flex items-center gap-1.5">
-                    <Swords size={13} className="text-purple-400" /> Rakip Açıkları
-                  </h4>
-                  <span className="text-[10px] bg-purple-500/10 text-purple-300 border border-purple-500/20 px-1.5 py-0.2 rounded font-medium">
-                    Fırsat
-                  </span>
+              <div className="cockpit-box purple">
+                <div className="cockpit-box-header">
+                  <div className="cockpit-box-title">
+                    <span>⚔️</span>
+                    <span>Rakip Açıkları</span>
+                  </div>
+                  <span className="cockpit-box-badge" style={{ background: "#f5f3ff", color: "#6d28d9" }}>Fırsat</span>
                 </div>
-                <div className="space-y-1">
-                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Yakalanan Fırsatlar</span>
-                  <ul className="text-[11px] text-slate-300 space-y-1 list-disc list-inside">
+                <div className="cockpit-box-subbox" style={{ background: "#faf5ff", borderColor: "#f3e8ff" }}>
+                  <ul style={{ margin: 0, paddingLeft: "14px", display: "flex", flexDirection: "column", gap: "3px" }}>
                     {(overview.competitorAnalysis?.contentGaps || []).slice(0, 2).map((g, i) => (
-                      <li key={i} className="line-clamp-2">{g}</li>
+                      <li key={i}>{g}</li>
                     ))}
                   </ul>
                 </div>
-                <p className="text-[10.5px] text-purple-300 font-medium">
+                <p style={{ fontSize: "11px", color: "#7c3aed", fontWeight: "600", margin: 0 }}>
                   ✦ {overview.competitorAnalysis?.differentiationAngle}
                 </p>
               </div>
 
               {/* Kart 3: Hedef Kitle & VOC */}
-              <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 space-y-2 border-t-2 border-t-amber-500 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-xs text-white flex items-center gap-1.5">
-                    <Target size={13} className="text-amber-400" /> Kitle &amp; VOC
-                  </h4>
-                  <span className="text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.2 rounded font-medium">
-                    Persona
-                  </span>
+              <div className="cockpit-box amber">
+                <div className="cockpit-box-header">
+                  <div className="cockpit-box-title">
+                    <span>🎯</span>
+                    <span>Kitle &amp; VOC</span>
+                  </div>
+                  <span className="cockpit-box-badge" style={{ background: "#fffbeb", color: "#b45309" }}>Persona</span>
                 </div>
-                <p className="text-[11px] text-slate-300 leading-snug line-clamp-2">
+                <p className="cockpit-box-desc">
                   <strong>Profil:</strong> {overview.audienceVoc?.targetPersona}
                 </p>
-                <div className="text-[11px] text-slate-400 bg-slate-950/60 p-2 rounded-lg border border-slate-800 space-y-1">
-                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">En Büyük Acı Noktası</span>
-                  <p className="text-amber-200/90 line-clamp-2">
-                    {overview.audienceVoc?.painPoints?.[0] || "Belirlenmedi"}
-                  </p>
+                <div className="cockpit-box-subbox" style={{ background: "#fffdfa", borderColor: "#fef3c7" }}>
+                  <span style={{ fontSize: "10px", fontWeight: "700", color: "#b45309", display: "block" }}>Müşteri Acı Noktası</span>
+                  <span style={{ color: "#78350f" }}>{overview.audienceVoc?.painPoints?.[0] || "Belirlenmedi"}</span>
                 </div>
               </div>
 
               {/* Kart 4: Büyüme Stratejisi */}
-              <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 space-y-2 border-t-2 border-t-emerald-500 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-xs text-white flex items-center gap-1.5">
-                    <TrendingUp size={13} className="text-emerald-400" /> Büyüme Stratejisi
-                  </h4>
-                  <span className="text-[10px] bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-1.5 py-0.2 rounded font-medium">
-                    Haftalık Plan
-                  </span>
+              <div className="cockpit-box emerald">
+                <div className="cockpit-box-header">
+                  <div className="cockpit-box-title">
+                    <span>🧭</span>
+                    <span>Büyüme Planı</span>
+                  </div>
+                  <span className="cockpit-box-badge" style={{ background: "#ecfdf5", color: "#047857" }}>Haftalık</span>
                 </div>
-                <p className="text-[11px] text-slate-300 leading-snug">
+                <p className="cockpit-box-desc">
                   {overview.growthStrategy?.weeklyPostingPlan}
                 </p>
-                <div className="flex flex-wrap gap-1 pt-1">
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
                   {(overview.growthStrategy?.primaryPillars || []).slice(0, 3).map((pil, idx) => (
                     <span
                       key={idx}
-                      className="text-[10px] bg-slate-950 text-slate-400 px-2 py-0.5 rounded border border-slate-800"
+                      style={{ fontSize: "10px", background: "#f0fdf4", color: "#166534", border: "1px solid #bbf7d0", padding: "1px 6px", borderRadius: "5px", fontWeight: "600" }}
                     >
                       #{pil}
                     </span>
@@ -507,20 +502,17 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
           </section>
         )}
 
-        {/* 2. KATMAN: İÇERİK TÜRÜNE GÖRE DİKEY KOLON MATRİSİ */}
+        {/* 2. KATMAN: İÇERİK TÜRÜNE GÖRE DİKEY KOLON MATRİSİ (KANBAN) */}
         {columns && (
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                <Layers size={14} className="text-emerald-400" />
-                Katman 2: İçerik Türüne Göre Dikey Kolon Matrisi (Kanban)
-              </h3>
-              <span className="text-xs text-slate-500">
-                Kolon bazlı yeni fikir üretebilir, kullanılan fikirleri gizleyebilirsiniz.
-              </span>
+          <section style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <strong style={{ font: "700 13px 'Manrope'", color: "var(--text)" }}>Katman 2: İçerik Türü Kolon Matrisi</strong>
+                <small style={{ color: "var(--muted)", fontSize: "11px" }}>· Kolon bazlı yeni fikir üretin veya kullanılanları gizleyin</small>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5 items-start">
+            <div className="kanban-grid">
               {(Object.keys(COLUMN_CONFIG) as ColumnType[]).map((colType) => {
                 const conf = COLUMN_CONFIG[colType];
                 const activeTab = colTabs[colType];
@@ -530,91 +522,96 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                 const IconComponent = conf.icon;
 
                 return (
-                  <div
-                    key={colType}
-                    className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 flex flex-col gap-3 shadow-md"
-                    style={{ borderTop: `3px solid ${conf.color}` }}
-                  >
+                  <div key={colType} className="kanban-column">
                     {/* Kolon Başlığı */}
-                    <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-                      <div className="flex items-center gap-2">
+                    <div className="kanban-column-header">
+                      <div className="kanban-col-title-wrap">
                         <div
-                          className="w-7 h-7 rounded-lg flex items-center justify-center"
-                          style={{ backgroundColor: `${conf.color}20`, color: conf.color }}
+                          className="kanban-col-icon"
+                          style={{ background: conf.iconBg, color: conf.iconColor }}
                         >
                           <IconComponent size={15} />
                         </div>
                         <div>
-                          <h4 className="font-bold text-xs text-white leading-tight">{conf.title}</h4>
-                          <p className="text-[10px] text-slate-500 leading-tight">{conf.subtitle}</p>
+                          <h4 className="kanban-col-title">{conf.title}</h4>
+                          <p className="kanban-col-subtitle">{conf.subtitle}</p>
                         </div>
                       </div>
                     </div>
 
                     {/* Çift Sekme: Öneri vs Gizlenmiş */}
-                    <div className="grid grid-cols-2 p-1 bg-slate-950 rounded-xl border border-slate-800 text-[11px] font-semibold">
+                    <div className="col-subtabs">
                       <button
                         type="button"
                         onClick={() => setColTabs((prev) => ({ ...prev, [colType]: "suggested" }))}
-                        className={`py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer ${
-                          activeTab === "suggested"
-                            ? "bg-slate-800 text-white shadow-sm"
-                            : "text-slate-400 hover:text-white"
-                        }`}
+                        className={`col-subtab-btn ${activeTab === "suggested" ? "active" : ""}`}
                       >
                         <span>Öneri</span>
-                        <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-slate-700 text-slate-200">
-                          {colData.suggested.length}
-                        </span>
+                        <span className="col-subtab-badge">{colData.suggested.length}</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => setColTabs((prev) => ({ ...prev, [colType]: "hidden" }))}
-                        className={`py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer ${
-                          activeTab === "hidden"
-                            ? "bg-slate-800 text-white shadow-sm"
-                            : "text-slate-400 hover:text-white"
-                        }`}
+                        className={`col-subtab-btn ${activeTab === "hidden" ? "active" : ""}`}
                       >
                         <span>Gizlenmiş</span>
-                        <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-slate-700 text-slate-200">
-                          {colData.hidden.length}
-                        </span>
+                        <span className="col-subtab-badge">{colData.hidden.length}</span>
                       </button>
                     </div>
 
-                    {/* + Bu Kolona Yeni Fikir İste Butonu */}
+                    {/* + Bu Kolona Yeni Fikir İste */}
                     <button
                       type="button"
                       onClick={() => handleGenerateMoreForColumn(colType)}
                       disabled={isColLoading || generating}
-                      className="w-full py-2 px-3 rounded-xl border border-dashed border-slate-700 hover:border-slate-500 bg-slate-950/40 hover:bg-slate-950 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                      className="btn-request-idea"
                     >
                       {isColLoading ? (
                         <>
-                          <RefreshCw size={12} className="animate-spin text-brand-400" />
-                          <span>3 Yeni Fikir Üretiliyor...</span>
+                          <RefreshCw size={12} className="spin" />
+                          <span>Üretiliyor...</span>
                         </>
                       ) : (
                         <>
-                          <Plus size={13} className="text-brand-400" />
-                          <span>+ Yeni Fikir İste</span>
+                          <Plus size={13} />
+                          <span>Yeni Fikir İste</span>
                         </>
                       )}
                     </button>
 
-                    {/* Kartlar Listesi */}
-                    <div className="space-y-2.5 min-h-[160px]">
+                    {/* Fikir Kartları Listesi */}
+                    <div className="kanban-cards-stack">
                       {displayList.length === 0 ? (
-                        <div className="text-center py-8 text-slate-500 border border-dashed border-slate-800/80 rounded-xl text-xs space-y-1">
-                          <p>{activeTab === "suggested" ? "Bu kolonda öneri yok." : "Gizlenmiş fikir yok."}</p>
+                        <div
+                          style={{
+                            textAlign: "center",
+                            padding: "24px 10px",
+                            border: "1px dashed var(--border)",
+                            borderRadius: "10px",
+                            background: "white",
+                            fontSize: "11px",
+                            color: "var(--muted)",
+                          }}
+                        >
+                          <p style={{ margin: 0 }}>
+                            {activeTab === "suggested" ? "Bu kolonda öneri yok." : "Gizlenmiş fikir yok."}
+                          </p>
                           {activeTab === "suggested" && (
                             <button
+                              type="button"
                               onClick={() => handleGenerateMoreForColumn(colType)}
-                              className="text-[11px] text-brand-400 underline cursor-pointer"
+                              style={{
+                                border: 0,
+                                background: "none",
+                                color: "var(--primary)",
+                                fontWeight: "700",
+                                fontSize: "11px",
+                                marginTop: "6px",
+                                cursor: "pointer",
+                              }}
                             >
-                              Şimdi üretin
+                              Şimdi 3 fikir üret ➔
                             </button>
                           )}
                         </div>
@@ -622,81 +619,66 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                         displayList.map((idea) => {
                           const isHidden = idea.status === "hidden";
                           return (
-                            <div
-                              key={idea.id || idea.title}
-                              className={`p-3 rounded-xl border transition space-y-2 ${
-                                isHidden
-                                  ? "bg-slate-950/60 border-slate-800/60 opacity-75"
-                                  : "bg-slate-950 border-slate-800 hover:border-slate-700 shadow-sm"
-                              }`}
-                            >
-                              {/* Kart Başlık ve Gizle/Geri Al Düğmesi */}
-                              <div className="flex items-start justify-between gap-2">
-                                <h5 className={`font-bold text-xs leading-snug ${isHidden ? "text-slate-400 line-through" : "text-white"}`}>
+                            <div key={idea.id || idea.title} className={`kanban-card ${isHidden ? "is-hidden" : ""}`}>
+                              <div className="kanban-card-head">
+                                <h5 className={`kanban-card-title ${isHidden ? "crossed" : ""}`}>
                                   {idea.title}
                                 </h5>
                                 <button
                                   type="button"
                                   onClick={() => handleToggleHideIdea(idea.id!, idea.status || "suggested")}
-                                  className="text-slate-500 hover:text-slate-300 p-1 rounded transition shrink-0 cursor-pointer"
-                                  title={isHidden ? "Önerilere Geri Döndür" : "Kullanıldı / Gizle"}
+                                  className="btn-card-toggle"
+                                  title={isHidden ? "Önerilere Geri Al" : "Kullanıldı / Gizle"}
                                 >
-                                  {isHidden ? <Eye size={13} className="text-emerald-400" /> : <EyeOff size={13} />}
+                                  {isHidden ? <Eye size={13} style={{ color: "#10b981" }} /> : <EyeOff size={13} />}
                                 </button>
                               </div>
 
-                              {/* Kanca (Hook) */}
                               {idea.hook && (
-                                <div className="text-[11px] text-brand-300 bg-brand-950/30 p-2 rounded-lg border border-brand-500/20">
-                                  <strong className="text-[10px] text-brand-400 uppercase block">⚡ Kanca (Hook):</strong>
+                                <div className="kanban-hook-pill">
+                                  <strong style={{ fontSize: "9px", textTransform: "uppercase", display: "block", color: "#6366f1" }}>
+                                    ⚡ Kanca (Hook)
+                                  </strong>
                                   &quot;{idea.hook}&quot;
                                 </div>
                               )}
 
-                              {/* Açıklama */}
-                              <p className="text-[11px] text-slate-400 leading-snug">
-                                {idea.description}
-                              </p>
+                              <p className="kanban-card-desc">{idea.description}</p>
 
-                              {/* Akış / Yapı Adımları */}
                               {idea.structure && idea.structure.length > 0 && (
-                                <div className="space-y-1 pt-1 border-t border-slate-900">
-                                  <span className="text-[10px] text-slate-500 font-semibold block">Yapı / Akış:</span>
-                                  <div className="space-y-0.5">
-                                    {idea.structure.map((st, sIdx) => (
-                                      <div key={sIdx} className="text-[10.5px] text-slate-300 flex items-start gap-1">
-                                        <span className="text-slate-600 font-mono text-[9px] mt-0.5">•</span>
-                                        <span>{st}</span>
-                                      </div>
-                                    ))}
-                                  </div>
+                                <div className="kanban-steps-list">
+                                  {idea.structure.slice(0, 3).map((st, sIdx) => (
+                                    <div key={sIdx} className="kanban-step-row">
+                                      <span style={{ color: "#94a3b8", fontWeight: "bold" }}>•</span>
+                                      <span>{st}</span>
+                                    </div>
+                                  ))}
                                 </div>
                               )}
 
-                              {/* Alt Aksiyon Butonları */}
-                              <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[10px]">
-                                <span className="text-slate-500 font-medium truncate max-w-[90px]">
+                              <div className="kanban-card-footer">
+                                <span className="kanban-card-channel">
                                   {idea.targetChannel || conf.defaultTarget}
                                 </span>
 
-                                <div className="flex items-center gap-1.5 shrink-0">
+                                <div className="kanban-card-actions">
                                   <button
                                     type="button"
                                     onClick={() => copyIdeaText(idea)}
-                                    className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                                    className="btn-mini-action"
                                     title="Metni Kopyala"
                                   >
                                     {copiedId === (idea.id || idea.title) ? (
-                                      <CheckCircle2 size={12} className="text-emerald-400" />
+                                      <CheckCircle2 size={11} style={{ color: "#10b981" }} />
                                     ) : (
-                                      <Copy size={12} />
+                                      <Copy size={11} />
                                     )}
                                   </button>
 
                                   <button
                                     type="button"
                                     onClick={() => handleSendToCanva(idea)}
-                                    className="px-2 py-1 rounded bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 border border-indigo-500/40 font-semibold flex items-center gap-1 transition cursor-pointer"
+                                    className="btn-mini-action primary"
                                     title="Canva Görsel Üretim Stüdyosuna Aktar"
                                   >
                                     <Palette size={11} />
@@ -706,8 +688,8 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                                   <button
                                     type="button"
                                     onClick={() => handleSendToPublishing(idea)}
-                                    className="px-2 py-1 rounded bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 font-semibold flex items-center gap-1 transition cursor-pointer"
-                                    title="Paylaşım Planı / Yayınlama Takvimine Ekle"
+                                    className="btn-mini-action"
+                                    title="Paylaşım Planına Ekle"
                                   >
                                     <Send size={11} />
                                     <span>Planla</span>

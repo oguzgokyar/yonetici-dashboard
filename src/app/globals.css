@@ -1714,3 +1714,519 @@ button { cursor:pointer; }
   color: var(--muted);
   text-align: center;
 }
+
+/* ========================================================
+   STRATEGY STUDIO CUSTOM STYLES (Clean Light Minimalist)
+======================================================== */
+.strategy-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.strategy-panel {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 2px 8px #25253d04;
+}
+
+.strategy-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #f0f0f5;
+  margin-bottom: 16px;
+}
+
+.strategy-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font: 700 15px "Manrope", sans-serif;
+  color: var(--text);
+}
+
+.strategy-panel-title svg {
+  color: var(--primary);
+}
+
+.strategy-panel-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 2px 0 0;
+}
+
+.strategy-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.2fr;
+  gap: 14px;
+}
+
+@media (max-width: 900px) {
+  .strategy-form-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+.strategy-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.strategy-field-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #4a4d5c;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.strategy-input {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+  background: white;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.strategy-input:focus,
+.strategy-textarea:focus {
+  border-color: #8e82f5;
+  box-shadow: 0 0 0 3px #6d5dfc12;
+}
+
+.strategy-textarea {
+  min-height: 80px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+  background: white;
+  color: var(--text);
+  outline: none;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.channel-tag-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.channel-tag-chip {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfbfd;
+  font-size: 12px;
+  font-weight: 600;
+  color: #555868;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.channel-tag-chip:hover {
+  background: #f4f3ff;
+  border-color: #d8d4ff;
+}
+
+.channel-tag-chip.active {
+  background: #f0edff;
+  border-color: #c4bdfa;
+  color: #5846ea;
+  font-weight: 700;
+}
+
+/* Tier 1 Cockpit Cards (Clean light corporate cards) */
+.cockpit-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 1050px) {
+  .cockpit-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 580px) {
+  .cockpit-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
+.cockpit-box {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 2px 6px #24253d04;
+  position: relative;
+  overflow: hidden;
+}
+
+.cockpit-box:before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--primary);
+}
+
+.cockpit-box.purple:before { background: #8b5cf6; }
+.cockpit-box.amber:before  { background: #f59e0b; }
+.cockpit-box.emerald:before{ background: #10b981; }
+
+.cockpit-box-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cockpit-box-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 700 13px "Manrope", sans-serif;
+  color: var(--text);
+}
+
+.cockpit-box-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: #f1f2f6;
+  color: #4b5563;
+}
+
+.cockpit-box-desc {
+  font-size: 12px;
+  color: #475569;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.cockpit-box-subbox {
+  background: #f8fafc;
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: #334155;
+  line-height: 1.4;
+}
+
+/* Tier 2 Kanban Columns */
+.kanban-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 1200px) {
+  .kanban-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 680px) {
+  .kanban-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+.kanban-column {
+  background: #fbfbfd;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 2px 8px #24253d03;
+}
+
+.kanban-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f0f6;
+}
+
+.kanban-col-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kanban-col-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.kanban-col-title {
+  font: 700 13px "Manrope", sans-serif;
+  color: var(--text);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.kanban-col-subtitle {
+  font-size: 10px;
+  color: var(--muted);
+  margin: 2px 0 0;
+  line-height: 1.2;
+}
+
+/* Subtabs bar (Öneri vs Gizlenmiş) */
+.col-subtabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: #ececf3;
+  padding: 3px;
+  border-radius: 10px;
+  gap: 2px;
+}
+
+.col-subtab-btn {
+  border: 0;
+  background: transparent;
+  padding: 6px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: all 0.15s ease;
+}
+
+.col-subtab-btn.active {
+  background: white;
+  color: #1e293b;
+  font-weight: 700;
+  box-shadow: 0 1px 4px #1f21300a;
+}
+
+.col-subtab-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.col-subtab-btn.active .col-subtab-badge {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+/* Quick Add Button */
+.btn-request-idea {
+  width: 100%;
+  height: 36px;
+  border: 1px dashed #cbd5e1;
+  background: white;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.btn-request-idea:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+/* Clean Kanban Idea Card */
+.kanban-cards-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.kanban-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 1px 4px #24253d04;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.kanban-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 3px 10px #24253d08;
+}
+
+.kanban-card.is-hidden {
+  background: #fafafc;
+  border-style: dashed;
+  opacity: 0.85;
+}
+
+.kanban-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.kanban-card-title {
+  font: 700 12px "Manrope", sans-serif;
+  color: var(--text);
+  margin: 0;
+  line-height: 1.35;
+}
+
+.kanban-card-title.crossed {
+  text-decoration: line-through;
+  color: #94a3b8;
+}
+
+.btn-card-toggle {
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  padding: 2px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-card-toggle:hover {
+  background: #f1f5f9;
+  color: var(--text);
+}
+
+.kanban-hook-pill {
+  background: #fbfaff;
+  border: 1px solid #ebe7ff;
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 11px;
+  color: #4338ca;
+  line-height: 1.35;
+}
+
+.kanban-card-desc {
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.kanban-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 6px;
+  border-top: 1px solid #f1f2f6;
+}
+
+.kanban-step-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: 10px;
+  color: #475569;
+}
+
+.kanban-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid #f1f2f6;
+  font-size: 10px;
+}
+
+.kanban-card-channel {
+  font-weight: 600;
+  color: #94a3b8;
+  max-width: 85px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kanban-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-mini-action {
+  height: 26px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  background: white;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #475569;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.btn-mini-action:hover {
+  background: #f8fafc;
+  color: var(--text);
+}
+
+.btn-mini-action.primary {
+  background: #f5f3ff;
+  border-color: #ddd6fe;
+  color: #6d28d9;
+  font-weight: 700;
+}
+
+.btn-mini-action.primary:hover {
+  background: #ede9fe;
+}
+
