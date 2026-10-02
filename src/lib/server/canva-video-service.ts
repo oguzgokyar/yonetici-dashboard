@@ -67,8 +67,9 @@ export async function exportPackageVideoHelper(
 
   let prompt = "";
   if (params.useMagicAnimate) {
-    prompt = `1. If CDP browser is available, apply magic animation on design_id='${designId}':
+    prompt = `1. Apply Canva Magic Animation (Sihirli Animasyon) to all pages of design_id='${designId}' by executing:
 /opt/hermes/.venv/bin/python /opt/data/scripts/canva_magic_animate_cdp.py ${designId}
+Make sure Magic Animation is applied and saved before exporting video.
 2. Call mcp__canva__export_design on design_id='${designId}' with format={'type':'mp4', 'quality':'horizontal_1080p'}.
 3. Return the exact download URL of the exported MP4 file.`;
   } else {
