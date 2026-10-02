@@ -98,6 +98,7 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [savingBrand, setSavingBrand] = useState(false);
   const [data, setData] = useState<StrategyResponse | null>(null);
 
   // Form inputs
@@ -158,6 +159,40 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
   useEffect(() => {
     loadStrategy();
   }, [projectId]);
+
+  async function handleSaveBrandOnly() {
+    if (!brandName.trim()) return alert("Lütfen marka adını girin.");
+    setSavingBrand(true);
+    try {
+      const competitors = competitorsText
+        .split(/[,\\n]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      const res = await fetch(`/api/projects/${projectId}/strategy`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brandName,
+          brandDescription,
+          socialChannels,
+          competitors,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        alert("✓ Marka ve niş bilgileri başarıyla kaydedildi! Şimdi dilediğiniz zaman 'Yeniden Üret' ile güncel stratejinizi oluşturabilirsiniz.");
+        // Refresh local strategy inputs
+        await loadStrategy();
+      } else {
+        alert("Hata: " + (json.error || "Kaydedilemedi."));
+      }
+    } catch (e: any) {
+      alert("Kayıt hatası: " + e.message);
+    } finally {
+      setSavingBrand(false);
+    }
+  }
 
   async function handleGenerateFullStrategy(e: React.FormEvent) {
     e.preventDefault();
@@ -312,7 +347,7 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
                 onClick={() => setFormExpanded(!formExpanded)}
@@ -325,6 +360,18 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
 
               <button
                 type="button"
+                onClick={handleSaveBrandOnly}
+                disabled={savingBrand || !brandName.trim()}
+                className="button secondary text-xs"
+                style={{ height: "36px", padding: "0 13px", fontWeight: "700" }}
+                title="Marka vaadi ve niş özetini kaydeder"
+              >
+                {savingBrand ? <RefreshCw className="spin" size={13} /> : <CheckCircle2 size={13} style={{ color: "#10b981" }} />}
+                <span>{savingBrand ? "Kaydediliyor..." : "Bilgileri Kaydet"}</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={handleGenerateFullStrategy}
                 disabled={generating || !brandName.trim()}
                 className="button primary text-xs"
@@ -333,12 +380,12 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                 {generating ? (
                   <>
                     <RefreshCw className="spin" size={13} />
-                    <span>Üretiliyor...</span>
+                    <span>Strateji Üretiliyor...</span>
                   </>
                 ) : (
                   <>
                     <Sparkles size={13} />
-                    <span>{overview ? "Yeniden Üret" : "Stratejiyi Başlat"}</span>
+                    <span>{overview ? "Stratejiyi Yeniden Üret" : "Stratejiyi Başlat"}</span>
                   </>
                 )}
               </button>

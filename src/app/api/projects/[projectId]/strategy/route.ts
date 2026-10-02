@@ -95,6 +95,62 @@ export async function GET(
   });
 }
 
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ projectId: string }> }
+) {
+  const { projectId } = await params;
+  const body = await request.json();
+  const brandName = (body.brandName || "").trim();
+  const brandDescription = (body.brandDescription || "").trim();
+  const socialChannels = Array.isArray(body.socialChannels) ? body.socialChannels : ["Instagram", "TikTok", "YouTube"];
+  const competitors = Array.isArray(body.competitors) ? body.competitors : [];
+
+  const db = getDatabase()!;
+  const now = new Date().toISOString();
+
+  // 1. Update brand strategy inputs
+  db.prepare(`
+    INSERT INTO project_brand_strategies (
+      project_id, brand_name, brand_description, social_channels_json, competitors_json,
+      brand_identity_json, competitor_analysis_json, audience_voc_json, growth_strategy_json,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, '{}', '{}', '{}', '{}', ?, ?)
+    ON CONFLICT(project_id) DO UPDATE SET
+      brand_name = excluded.brand_name,
+      brand_description = excluded.brand_description,
+      social_channels_json = excluded.social_channels_json,
+      competitors_json = excluded.competitors_json,
+      updated_at = excluded.updated_at
+  `).run(
+    projectId,
+    brandName,
+    brandDescription,
+    JSON.stringify(socialChannels),
+    JSON.stringify(competitors),
+    now,
+    now
+  );
+
+  // 2. Also update projects table brand_json so this project-wide context persists
+  try {
+    const proj = db.prepare("SELECT brand_json FROM projects WHERE id = ?").get(projectId) as any;
+    if (proj?.brand_json) {
+      const brandObj = JSON.parse(proj.brand_json || "{}");
+      if (brandName) brandObj.brandName = brandName;
+      brandObj.description = brandDescription;
+      db.prepare("UPDATE projects SET brand_json = ? WHERE id = ?").run(JSON.stringify(brandObj), projectId);
+    }
+  } catch (e) {
+    console.error("[Save Project Brand JSON Error]", e);
+  }
+
+  return NextResponse.json({
+    success: true,
+    message: "Marka ve niş bilgileri başarıyla kaydedildi.",
+  });
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> }
@@ -150,6 +206,19 @@ export async function POST(
       now,
       now
     );
+
+    // Also update project's brand_json so the new brandDescription & valueProposition persist globally
+    try {
+      const proj = db.prepare("SELECT brand_json FROM projects WHERE id = ?").get(projectId) as any;
+      if (proj?.brand_json) {
+        const brandObj = JSON.parse(proj.brand_json || "{}");
+        brandObj.brandName = brandName;
+        brandObj.description = brandDescription;
+        db.prepare("UPDATE projects SET brand_json = ? WHERE id = ?").run(JSON.stringify(brandObj), projectId);
+      }
+    } catch (e) {
+      console.error("[Update Project Brand JSON Error]", e);
+    }
 
     // Insert ideas
     const insertIdeaStmt = db.prepare(`
