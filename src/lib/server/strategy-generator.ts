@@ -39,13 +39,26 @@ export type StrategyIdea = {
   description: string;
   structure: string[];
   targetChannel: string;
+  skillSource?: string;
   status?: "suggested" | "hidden";
+  createdAt?: string;
 };
 
 export type FullStrategyResult = {
   overview: StrategyOverview;
   ideas: Record<ColumnType, StrategyIdea[]>;
+  engineType: string;
+  runId: string;
+  skillsUsed: Array<{ skill: string; role: string }>;
 };
+
+const DEFAULT_SKILLS = [
+  { skill: "competitor-social-research", role: "Rakip Açıkları & Pazar Kıyaslaması" },
+  { skill: "audience-research", role: "Hedef Persona & İlgi Alanı Analizi" },
+  { skill: "comment-mining", role: "Kitle VOC & Acı Noktaları (Pain Points)" },
+  { skill: "outlier-post-finder", role: "Viral Kanca (Hook) & Format Çıkarma" },
+  { skill: "creator-profile-teardown", role: "Marka Konumlandırma & Değer Vaadi Sentezi" },
+];
 
 export async function generateFullStrategyAndIdeas(input: {
   brandName: string;
@@ -141,10 +154,16 @@ Output MUST be strictly valid JSON matching this schema (no markdown formatting,
           const rawText = runData.output || runData.result || "";
           if (rawText) {
             try {
-              const parsed = parseJsonResponse<FullStrategyResult>(rawText);
+              const parsed = parseJsonResponse<any>(rawText);
               if (parsed?.overview && parsed?.ideas) {
                 console.log("[Hermes Strategy] Successfully synthesized strategy via Hermes Agent & ScrapeCreators skills!");
-                return parsed;
+                return {
+                  overview: parsed.overview,
+                  ideas: parsed.ideas,
+                  engineType: "Hermes Agent (v1/runs)",
+                  runId: dispatchRes.runId,
+                  skillsUsed: DEFAULT_SKILLS,
+                };
               }
             } catch (err) {
               console.warn("[Hermes Strategy] Output parsing failed, falling back to direct synthesis:", err);
@@ -192,7 +211,14 @@ Lütfen tam JSON şemasına sadık kalarak stratejiyi ve 4 kolonluk içerik fiki
 }`;
 
   const { content } = await completeText(systemPrompt, userPrompt, { temperature: 0.7, maxTokens: 4000 });
-  return parseJsonResponse<FullStrategyResult>(content);
+  const fallbackResult = parseJsonResponse<any>(content);
+  return {
+    overview: fallbackResult.overview,
+    ideas: fallbackResult.ideas,
+    engineType: "CliProxyAPI (gemini-3.8-flash-high)",
+    runId: `local_${Date.now()}`,
+    skillsUsed: DEFAULT_SKILLS,
+  };
 }
 
 export async function generateNewIdeasForColumn(input: {

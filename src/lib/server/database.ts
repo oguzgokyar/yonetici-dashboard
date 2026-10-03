@@ -498,6 +498,10 @@ export function getDatabase() {
         competitor_analysis_json TEXT NOT NULL DEFAULT '{}',
         audience_voc_json TEXT NOT NULL DEFAULT '{}',
         growth_strategy_json TEXT NOT NULL DEFAULT '{}',
+        generation_status TEXT NOT NULL DEFAULT 'idle', -- 'idle' | 'generating' | 'completed' | 'failed'
+        current_run_id TEXT NOT NULL DEFAULT '',
+        engine_type TEXT NOT NULL DEFAULT 'hermes-agent',
+        skills_used_json TEXT NOT NULL DEFAULT '[]',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -510,6 +514,7 @@ export function getDatabase() {
         description TEXT NOT NULL DEFAULT '',
         structure_json TEXT NOT NULL DEFAULT '[]',
         target_channel TEXT NOT NULL DEFAULT '',
+        skill_source TEXT NOT NULL DEFAULT '',
         status TEXT NOT NULL DEFAULT 'suggested', -- 'suggested' (Öneri) or 'hidden' (Gizlenmiş)
         used_at TEXT,
         created_at TEXT NOT NULL,
@@ -517,6 +522,21 @@ export function getDatabase() {
       );
       CREATE INDEX IF NOT EXISTS idx_strategy_ideas_project_col_status ON project_strategy_ideas(project_id, column_type, status);
     `);
+    try {
+      database.exec("ALTER TABLE project_brand_strategies ADD COLUMN generation_status TEXT NOT NULL DEFAULT 'idle';");
+    } catch {}
+    try {
+      database.exec("ALTER TABLE project_brand_strategies ADD COLUMN current_run_id TEXT NOT NULL DEFAULT '';");
+    } catch {}
+    try {
+      database.exec("ALTER TABLE project_brand_strategies ADD COLUMN engine_type TEXT NOT NULL DEFAULT 'hermes-agent';");
+    } catch {}
+    try {
+      database.exec("ALTER TABLE project_brand_strategies ADD COLUMN skills_used_json TEXT NOT NULL DEFAULT '[]';");
+    } catch {}
+    try {
+      database.exec("ALTER TABLE project_strategy_ideas ADD COLUMN skill_source TEXT NOT NULL DEFAULT '';");
+    } catch {}
   } catch (err) {
     console.error("[Migration Strategy Tables Error]", err);
   }

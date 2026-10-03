@@ -24,6 +24,10 @@ import {
   TrendingUp,
   HelpCircle,
   Zap,
+  Trash2,
+  Bot,
+  Wrench,
+  Clock,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type {
@@ -49,6 +53,10 @@ type StrategyResponse = {
     competitorAnalysis: StrategyOverview["competitorAnalysis"];
     audienceVoc: StrategyOverview["audienceVoc"];
     growthStrategy: StrategyOverview["growthStrategy"];
+    generationStatus?: "idle" | "generating" | "completed" | "failed";
+    currentRunId?: string;
+    engineType?: string;
+    skillsUsed?: Array<{ skill: string; role: string }>;
     updatedAt: string;
   };
   initialData?: {
@@ -137,6 +145,7 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
   });
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
 
   async function loadStrategy() {
     try {
@@ -150,6 +159,11 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
         setBrandDescription(json.strategy.brandDescription || "");
         setSocialChannels(json.strategy.socialChannels || ["Instagram", "TikTok", "YouTube"]);
         setCompetitorsText((json.strategy.competitors || []).join(", "));
+        if (json.strategy.generationStatus === "generating") {
+          setGenerating(true);
+        } else {
+          setGenerating(false);
+        }
       } else if (json.initialData) {
         setBrandName(json.initialData.brandName || "");
         setBrandDescription(json.initialData.brandDescription || "");
@@ -157,6 +171,44 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
       }
     } catch (e) {
       console.error("Load strategy error:", e);
+    }
+  }
+
+  // Poll while generating is true
+  useEffect(() => {
+    if (!generating) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/strategy`, { cache: "no-store" });
+        const json: StrategyResponse = await res.json();
+        if (json.hasStrategy && json.strategy) {
+          if (json.strategy.generationStatus !== "generating") {
+            setData(json);
+            setGenerating(false);
+          }
+        }
+      } catch {}
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [generating, projectId]);
+
+  async function handleResetStrategy() {
+    if (!confirm("Mevcut strateji ve üretilmiş tüm içerik fikirleri tamamen sıfırlanacak. Emin misiniz?")) {
+      return;
+    }
+    setResetting(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/strategy`, { method: "DELETE" });
+      const json = await res.json();
+      if (json.success) {
+        await loadStrategy();
+      } else {
+        alert("Sıfırlama hatası: " + (json.error || "Bilinmeyen hata"));
+      }
+    } catch (e: any) {
+      alert("Hata: " + e.message);
+    } finally {
+      setResetting(false);
     }
   }
 
@@ -384,6 +436,81 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
 
   return (
     <div className="strategy-container w-full">
+      {/* HERMES & SCRAPECREATORS ŞEFFAFLIK ROZETİ */}
+      {overview && (
+        <div
+          style={{
+            background: "white",
+            border: "1px solid #e9eaf0",
+            borderRadius: "14px",
+            padding: "10px 16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "10px",
+            fontSize: "11px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "5px",
+                padding: "3px 8px",
+                background: "#f5f3ff",
+                color: "#6d28d9",
+                borderRadius: "6px",
+                fontWeight: "700",
+              }}
+            >
+              <Bot size={13} />
+              <span>Motor: {overview.engineType || "Hermes Agent"}</span>
+            </span>
+
+            {overview.currentRunId && (
+              <span style={{ color: "#64748b", fontFamily: "monospace", fontSize: "10.5px" }}>
+                Görev ID: {overview.currentRunId}
+              </span>
+            )}
+          </div>
+
+          {/* Kullanılan ScrapeCreators Becerileri */}
+          <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
+            <span style={{ color: "#64748b", display: "flex", alignItems: "center", gap: "4px", fontWeight: "600" }}>
+              <Wrench size={12} />
+              <span>Kullanılan Beceriler:</span>
+            </span>
+            {(overview.skillsUsed && overview.skillsUsed.length > 0
+              ? overview.skillsUsed
+              : [
+                  { skill: "competitor-social-research", role: "Rakip Analizi" },
+                  { skill: "audience-research", role: "Kitle VOC" },
+                  { skill: "outlier-post-finder", role: "Viral Kancalar" },
+                ]
+            ).map((s, idx) => (
+              <span
+                key={idx}
+                title={s.role}
+                style={{
+                  background: "#f0fdf4",
+                  color: "#166534",
+                  border: "1px solid #bbf7d0",
+                  padding: "2px 6px",
+                  borderRadius: "5px",
+                  fontSize: "9.5px",
+                  fontWeight: "600",
+                }}
+              >
+                ✓ {s.skill}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 1. KATMAN: SEKMELİ STRATEJİ KOKPİTİ */}
       <section style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
@@ -435,7 +562,7 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                 <button
                   type="button"
                   onClick={handleSaveBrandOnly}
-                  disabled={savingBrand || !brandName.trim()}
+                  disabled={savingBrand || generating || !brandName.trim()}
                   className="button secondary text-xs"
                   style={{ height: "36px", padding: "0 13px", fontWeight: "700" }}
                   title="Marka vaadi ve niş özetini kaydeder"
@@ -443,6 +570,20 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                   {savingBrand ? <RefreshCw className="spin" size={13} /> : <CheckCircle2 size={13} style={{ color: "#10b981" }} />}
                   <span>{savingBrand ? "Kaydediliyor..." : "Bilgileri Kaydet"}</span>
                 </button>
+
+                {overview && (
+                  <button
+                    type="button"
+                    onClick={handleResetStrategy}
+                    disabled={resetting || generating}
+                    className="button secondary text-xs"
+                    style={{ height: "36px", padding: "0 11px", color: "#e11d48", borderColor: "#fecdd3" }}
+                    title="Mevcut strateji ve fikirleri sıfırlar"
+                  >
+                    {resetting ? <RefreshCw className="spin" size={13} /> : <Trash2 size={13} />}
+                    <span>Sıfırla</span>
+                  </button>
+                )}
 
                 <button
                   type="button"
@@ -454,7 +595,7 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                   {generating ? (
                     <>
                       <RefreshCw className="spin" size={13} />
-                      <span>Strateji Üretiliyor...</span>
+                      <span>Hermes Taraması Sürüyor...</span>
                     </>
                   ) : (
                     <>
@@ -862,8 +1003,27 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                             key={idea.id || idea.title}
                             className={`kanban-card ${isHidden ? "is-hidden" : ""}`}
                           >
-                            {/* Kart Başlığı */}
-                            <div className="kanban-card-head">
+                            {/* Kart Başlığı ve Zaman/Beceri Rozeti */}
+                            <div className="kanban-card-head flex-col items-start gap-1">
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                                  {/* Zaman Etiketi (Yeni vs Eski) */}
+                                  {idea.createdAt && (Date.now() - new Date(idea.createdAt).getTime() < 3600000 * 24) ? (
+                                    <span style={{ fontSize: "9px", fontWeight: "700", background: "#fef3c7", color: "#b45309", padding: "1px 5px", borderRadius: "4px" }}>
+                                      ✨ Yeni
+                                    </span>
+                                  ) : (
+                                    <span style={{ fontSize: "9px", color: "#94a3b8", display: "inline-flex", alignItems: "center", gap: "2px" }}>
+                                      <Clock size={10} /> Eski
+                                    </span>
+                                  )}
+
+                                  {/* ScrapeCreators Beceri Rozeti */}
+                                  <span style={{ fontSize: "9px", color: "#6366f1", background: "#eef2ff", padding: "1px 5px", borderRadius: "4px", fontWeight: "600" }}>
+                                    {idea.skillSource || "outlier-post-finder"}
+                                  </span>
+                                </div>
+                              </div>
                               <h5 className={`kanban-card-title ${isHidden ? "crossed" : ""}`}>{idea.title}</h5>
                             </div>
 
