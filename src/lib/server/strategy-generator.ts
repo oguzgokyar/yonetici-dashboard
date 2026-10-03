@@ -1,6 +1,7 @@
 import "server-only";
 
 import { completeText, parseJsonResponse } from "@/lib/server/cliproxy-text";
+import { dispatchHermesCanvaTask } from "@/lib/server/hermes-agent-client";
 
 export type ColumnType = "vertical_video" | "carousel" | "single_post" | "engagement";
 
@@ -36,8 +37,8 @@ export type StrategyIdea = {
   title: string;
   hook: string;
   description: string;
-  structure: string[]; // e.g. ["1. Hook", "2. Problem", "3. Solution", "4. CTA"]
-  targetChannel: string; // "Instagram Reels", "TikTok", "YouTube Shorts", "Instagram Carousel", "Story"
+  structure: string[];
+  targetChannel: string;
   status?: "suggested" | "hidden";
 };
 
@@ -52,16 +53,119 @@ export async function generateFullStrategyAndIdeas(input: {
   socialChannels: string[];
   competitors: string[];
 }): Promise<FullStrategyResult> {
-  const systemPrompt = `Sen üst düzey bir Sosyal Medya Büyüme & İçerik Stratejisi Ajanısın (ScrapeCreators metodolojisi uzmanı).
-Görevin: Kullanıcının verdiği marka bilgisi, sosyal medya kanalları ve rakipleri derinlemesine analiz ederek;
-1. Stratejik Konumlandırma & Kitle Analizi (VOC - Voice of Customer, acı noktaları, kancalar, rakip açıkları, büyüme taktiği)
-2. 4 ana içerik türü kolonuna dağıtılmış, hemen üretilebilecek somut, kanıtlanmış kancalara (hook) sahip içerik fikirleri üretmek.
+  // 1. Try dispatching via Hermes Agent with ScrapeCreators skills enabled
+  const hermesPrompt = `Load skills: competitor-social-research, audience-research, comment-mining, outlier-post-finder, creator-profile-teardown, social-media-research.
 
-İçerik Türü Kolonları:
-- vertical_video: 9:16 Dikey Video (Instagram Reels, TikTok, YouTube Shorts için viral kancalar ve senaryo adımları)
-- carousel: Çoklu Kaydırmalı Karosel (Instagram/LinkedIn Carousel, 5-7 slaytlık eğitici veya vaka akışı)
-- single_post: Tekil Görsel & İnfografik (Sektör haberi, çarpıcı veri, alıntı veya hap bilgi)
-- engagement: Etkileşim & Topluluk (Story, anket, ikilem, soru-cevap, DM teşvik kurguları)
+Act as the Social Media Research & Brand Strategy Agent for brand '${input.brandName}'.
+Brand Description & Promise: ${input.brandDescription}
+Target Social Channels: ${input.socialChannels.join(", ") || "Instagram, TikTok, YouTube"}
+Competitor Handles: ${input.competitors.join(", ") || "None specified (use industry best practices)"}
+
+Using ScrapeCreators research frameworks (outlier post analysis, comment mining VOC, competitor gap analysis):
+Synthesize a comprehensive brand strategy and generate at least 3 distinct, high-performing ideas for each of the 4 content columns:
+- vertical_video (9:16 Reels/TikTok/Shorts with viral hook and script breakdown)
+- carousel (5-7 slide educational or case study Canva carousel)
+- single_post (infographic, punchy industry statistic, or high-value quote)
+- engagement (Story poll, dilemma, question-and-answer, DM incentive)
+
+Output MUST be strictly valid JSON matching this schema (no markdown formatting, no conversational text):
+{
+  "overview": {
+    "brandIdentity": {
+      "tone": "string",
+      "valueProposition": "string",
+      "positioning": "string",
+      "keyMessaging": "string"
+    },
+    "competitorAnalysis": {
+      "contentGaps": ["string", "string"],
+      "viralPatternsToAdapt": ["string", "string"],
+      "differentiationAngle": "string"
+    },
+    "audienceVoc": {
+      "targetPersona": "string",
+      "painPoints": ["string", "string"],
+      "frequentQuestions": ["string", "string"],
+      "winningHooks": ["string", "string"]
+    },
+    "growthStrategy": {
+      "primaryPillars": ["string", "string"],
+      "weeklyPostingPlan": "string",
+      "channelPriorities": ["string", "string"],
+      "conversionFunnel": "string"
+    }
+  },
+  "ideas": {
+    "vertical_video": [
+      {
+        "title": "string",
+        "hook": "string",
+        "description": "string",
+        "structure": ["string", "string"],
+        "targetChannel": "string"
+      }
+    ],
+    "carousel": [...],
+    "single_post": [...],
+    "engagement": [...]
+  }
+}`;
+
+  // Attempt Hermes Agent execution via local API
+  try {
+    const dispatchRes = await dispatchHermesCanvaTask({
+      taskPrompt: hermesPrompt,
+      timeoutMs: 12000,
+    });
+
+    if (dispatchRes.dispatched && dispatchRes.runId) {
+      console.log(`[Hermes Strategy] Task dispatched to Hermes Agent (runId: ${dispatchRes.runId})`);
+      // Poll Hermes for completion up to 45s
+      const baseUrl = "http://127.0.0.1:8643";
+      const pollDeadline = Date.now() + 45000;
+      while (Date.now() < pollDeadline) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const statusRes = await fetch(`${baseUrl}/v1/runs/${dispatchRes.runId}`, {
+          headers: { Accept: "application/json" },
+          signal: AbortSignal.timeout(5000),
+        }).catch(() => null);
+
+        if (!statusRes || !statusRes.ok) continue;
+        const runData = (await statusRes.json().catch(() => ({}))) as {
+          status?: string;
+          output?: string;
+          result?: string;
+        };
+
+        if (runData.status === "completed") {
+          const rawText = runData.output || runData.result || "";
+          if (rawText) {
+            try {
+              const parsed = parseJsonResponse<FullStrategyResult>(rawText);
+              if (parsed?.overview && parsed?.ideas) {
+                console.log("[Hermes Strategy] Successfully synthesized strategy via Hermes Agent & ScrapeCreators skills!");
+                return parsed;
+              }
+            } catch (err) {
+              console.warn("[Hermes Strategy] Output parsing failed, falling back to direct synthesis:", err);
+              break;
+            }
+          }
+        } else if (runData.status === "failed") {
+          console.warn("[Hermes Strategy] Hermes run marked failed, falling back to direct synthesis.");
+          break;
+        }
+      }
+    }
+  } catch (hermesErr) {
+    console.warn("[Hermes Strategy] Hermes dispatch bypassed or timed out, executing direct fast synthesis:", hermesErr);
+  }
+
+  // Direct high-speed synthesis fallback (keeps dashboard resilient)
+  const systemPrompt = `Sen üst düzey bir Sosyal Medya Büyüme & İçerik Stratejisi Ajanısın (ScrapeCreators metodolojisi uzmanı).
+Görevin: Kullanıcının verdiği marka bilgisi, sosyal medya kanalları ve rakipleri ScrapeCreators kurallarıyla (outlier detection, comment mining, competitor teardown) analiz ederek;
+1. Stratejik Konumlandırma & Kitle Analizi (VOC - Voice of Customer, acı noktaları, kancalar, rakip açıkları, büyüme taktiği)
+2. 4 ana içerik türü kolonuna dağıtılmış (vertical_video, carousel, single_post, engagement), hemen üretilebilecek kanıtlanmış kancalara (hook) sahip içerik fikirleri üretmek.
 
 Her kolonda EN AZ 3'er adet son derece yaratıcı, jenerik olmayan, doğrudan markanın nişine özel içerik fikri üret.
 Yanıtını YALNIZCA geçerli ve hatasız bir JSON nesnesi olarak ver. Markdown bloğu veya ekstra metin ekleme.`;
@@ -71,76 +175,24 @@ Marka Açıklaması & Değer Vaadi: ${input.brandDescription}
 Kullanılan Sosyal Medya Kanalları: ${input.socialChannels.join(", ") || "Instagram, TikTok, YouTube"}
 Takip Edilen Rakipler / Örnek Hesaplar: ${input.competitors.join(", ") || "Belirtilmedi (Sektör liderleri baz alınsın)"}
 
-Lütfen aşağıdaki JSON şemasına birebir sadık kalarak stratejiyi ve 4 kolonluk içerik fikirlerini üret:
+Lütfen tam JSON şemasına sadık kalarak stratejiyi ve 4 kolonluk içerik fikirlerini üret:
 {
   "overview": {
-    "brandIdentity": {
-      "tone": "...",
-      "valueProposition": "...",
-      "positioning": "...",
-      "keyMessaging": "..."
-    },
-    "competitorAnalysis": {
-      "contentGaps": ["...", "..."],
-      "viralPatternsToAdapt": ["...", "..."],
-      "differentiationAngle": "..."
-    },
-    "audienceVoc": {
-      "targetPersona": "...",
-      "painPoints": ["...", "..."],
-      "frequentQuestions": ["...", "..."],
-      "winningHooks": ["...", "..."]
-    },
-    "growthStrategy": {
-      "primaryPillars": ["...", "..."],
-      "weeklyPostingPlan": "...",
-      "channelPriorities": ["...", "..."],
-      "conversionFunnel": "..."
-    }
+    "brandIdentity": { "tone": "...", "valueProposition": "...", "positioning": "...", "keyMessaging": "..." },
+    "competitorAnalysis": { "contentGaps": ["..."], "viralPatternsToAdapt": ["..."], "differentiationAngle": "..." },
+    "audienceVoc": { "targetPersona": "...", "painPoints": ["..."], "frequentQuestions": ["..."], "winningHooks": ["..."] },
+    "growthStrategy": { "primaryPillars": ["..."], "weeklyPostingPlan": "...", "channelPriorities": ["..."], "conversionFunnel": "..." }
   },
   "ideas": {
-    "vertical_video": [
-      {
-        "title": "...",
-        "hook": "...",
-        "description": "...",
-        "structure": ["1. Saniye 0-3: Kanca", "2. Saniye 4-15: Problem", "3. Saniye 16-35: Çözüm", "4. CTA"],
-        "targetChannel": "Instagram Reels / TikTok"
-      }
-    ],
-    "carousel": [
-      {
-        "title": "...",
-        "hook": "...",
-        "description": "...",
-        "structure": ["Slayt 1: Kapak & Kanca", "Slayt 2: Yaygın Hata", "Slayt 3-4: 3 Adımlı Çözüm", "Slayt 5: Kaydet & Paylaş"],
-        "targetChannel": "Instagram Carousel"
-      }
-    ],
-    "single_post": [
-      {
-        "title": "...",
-        "hook": "...",
-        "description": "...",
-        "structure": ["Görsel: Vurucu İstatistik", "Açıklama: Sektörel Yorum & Soru"],
-        "targetChannel": "Instagram / LinkedIn"
-      }
-    ],
-    "engagement": [
-      {
-        "title": "...",
-        "hook": "...",
-        "description": "...",
-        "structure": ["Story 1: Anket / İkilem", "Story 2: Doğru Cevap & Püf Noktası", "Story 3: DM Teşviki"],
-        "targetChannel": "Instagram Story"
-      }
-    ]
+    "vertical_video": [{ "title": "...", "hook": "...", "description": "...", "structure": ["..."], "targetChannel": "..." }],
+    "carousel": [...],
+    "single_post": [...],
+    "engagement": [...]
   }
 }`;
 
   const { content } = await completeText(systemPrompt, userPrompt, { temperature: 0.7, maxTokens: 4000 });
-  const parsed = parseJsonResponse<FullStrategyResult>(content);
-  return parsed;
+  return parseJsonResponse<FullStrategyResult>(content);
 }
 
 export async function generateNewIdeasForColumn(input: {
@@ -157,7 +209,7 @@ export async function generateNewIdeasForColumn(input: {
     engagement: "Etkileşim & Topluluk (Story, Anket, Soru-Cevap)",
   };
 
-  const systemPrompt = `Sen sosyal medya içerik stratejisi uzmanısın.
+  const systemPrompt = `Sen sosyal medya içerik stratejisi uzmanısın (ScrapeCreators outlier & hook metodolojisi).
 Kullanıcı senden sadece '${columnLabels[input.columnType]}' kolonu için 3 YENİ ve TAZE içerik fikri istiyor.
 Önemli Kurallar:
 - Önceden üretilmiş şu başlıklardan ve konulardan KESİNLİKLE farklı, tekrara düşmeyen yepyeni kancalar üret:
@@ -169,7 +221,7 @@ Marka Açıklaması: ${input.brandDescription}
 İçerik Türü Kolonu: ${columnLabels[input.columnType]}
 Hedef Kitle & Strateji Özeti: ${input.strategyContext ? JSON.stringify(input.strategyContext.audienceVoc) : "Belirtilmedi"}
 
-Lütfen 3 yeni fikir içeren şu JSON formatını üret:
+Lütfen 3 yeni fikir içeren JSON formatını üret:
 [
   {
     "title": "...",
