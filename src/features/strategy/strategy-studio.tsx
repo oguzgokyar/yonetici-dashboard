@@ -224,6 +224,11 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
           setBrandDescription(json.strategy.brandDescription || "");
           setSocialChannels(json.strategy.socialChannels || ["Instagram", "TikTok", "YouTube"]);
           setCompetitorsText((json.strategy.competitors || []).join(", "));
+          if (json.strategy.generationStatus === "generating") {
+            setGenerating(true);
+          } else {
+            setGenerating(false);
+          }
         } else if (json.initialData) {
           setBrandName(json.initialData.brandName || "");
           setBrandDescription(json.initialData.brandDescription || "");
@@ -241,12 +246,24 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
 
   async function handleGenerateFullStrategy(e?: React.FormEvent) {
     if (e) e.preventDefault();
+    if (generating) return; // Prevent double-triggering
     if (!brandName.trim()) {
       alert("Lütfen bir marka / proje adı girin.");
       return;
     }
 
     setGenerating(true);
+    // Optimistically update local data status so button and UI lock immediately
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        strategy: prev.strategy
+          ? { ...prev.strategy, generationStatus: "generating" }
+          : undefined,
+      };
+    });
+
     try {
       const competitors = competitorsText
         .split(",")
@@ -270,9 +287,11 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
         setActiveTab("brand_identity");
       } else {
         alert("Hata: " + (json.error || "Strateji üretilemedi."));
+        await loadStrategy();
       }
     } catch (e: unknown) {
       alert("Hata: " + (e instanceof Error ? e.message : String(e)));
+      await loadStrategy();
     } finally {
       setGenerating(false);
     }
@@ -588,11 +607,11 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                 <button
                   type="button"
                   onClick={handleGenerateFullStrategy}
-                  disabled={generating || !brandName.trim()}
+                  disabled={generating || (overview?.generationStatus === "generating") || !brandName.trim()}
                   className="button primary text-xs"
                   style={{ height: "36px", padding: "0 14px" }}
                 >
-                  {generating ? (
+                  {(generating || overview?.generationStatus === "generating") ? (
                     <>
                       <RefreshCw className="spin" size={13} />
                       <span>Hermes Taraması Sürüyor...</span>
