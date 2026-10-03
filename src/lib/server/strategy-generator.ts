@@ -1,6 +1,7 @@
 import "server-only";
 
 import { completeText, parseJsonResponse } from "@/lib/server/cliproxy-text";
+import { getCanvaConfig } from "@/lib/server/canva-config";
 import { dispatchHermesCanvaTask } from "@/lib/server/hermes-agent-client";
 
 export type ColumnType = "vertical_video" | "carousel" | "single_post" | "engagement";
@@ -124,23 +125,30 @@ Output MUST be strictly valid JSON matching this schema (no markdown formatting,
   }
 }`;
 
-  // Attempt Hermes Agent execution via local API
   try {
+    const config = getCanvaConfig();
+    const baseUrl = config.baseUrl.replace(/\/+$/, "");
+    const apiKey = config.apiKey;
+
     const dispatchRes = await dispatchHermesCanvaTask({
       taskPrompt: hermesPrompt,
-      timeoutMs: 12000,
+      baseUrl,
+      apiKey,
+      timeoutMs: 15000,
     });
 
     if (dispatchRes.dispatched && dispatchRes.runId) {
       console.log(`[Hermes Strategy] Task dispatched to Hermes Agent (runId: ${dispatchRes.runId})`);
-      // Poll Hermes for completion up to 45s
-      const baseUrl = "http://127.0.0.1:8643";
-      const pollDeadline = Date.now() + 45000;
+      // Poll Hermes for completion up to 120s
+      const pollDeadline = Date.now() + 120000;
       while (Date.now() < pollDeadline) {
-        await new Promise((r) => setTimeout(r, 3000));
+        await new Promise((r) => setTimeout(r, 4000));
         const statusRes = await fetch(`${baseUrl}/v1/runs/${dispatchRes.runId}`, {
-          headers: { Accept: "application/json" },
-          signal: AbortSignal.timeout(5000),
+          headers: {
+            Accept: "application/json",
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+          },
+          signal: AbortSignal.timeout(8000),
         }).catch(() => null);
 
         if (!statusRes || !statusRes.ok) continue;
