@@ -1516,13 +1516,12 @@ export function PublishingStudio({
 
               {/* Platform Switcher for Preview */}
               {selectedIntegrationIds.length > 1 && (
-                <div className="preview-platform-picker">
+                <div className="preview-platform-picker" style={{ width: "100%", maxWidth: "100%", boxSizing: "border-box" }}>
                   {selectedIntegrationIds.map((intId) => {
                     const acc = accounts.find((a) => a.integrationId === intId);
                     const isYt = acc?.identifier?.includes("youtube");
                     const isTt = acc?.identifier?.includes("tiktok");
                     const isFb = acc?.identifier?.includes("facebook");
-                    const cleanHandle = (acc?.profile || acc?.name || "").replace(/^@+/, "");
                     const isAct = previewIntegrationId === intId;
 
                     return (
@@ -1531,7 +1530,8 @@ export function PublishingStudio({
                         type="button"
                         onClick={() => setPreviewIntegrationId(intId)}
                         className={`preview-platform-btn ${isAct ? "active" : ""}`}
-                        title={`${acc?.name || "Kanal"} (@${cleanHandle})`}
+                        title={acc?.name || "Kanal"}
+                        style={{ flex: "1 1 auto", justifyContent: "center" }}
                       >
                         {isYt ? (
                           <Youtube size={12} color="#ff0000" />
@@ -1543,7 +1543,6 @@ export function PublishingStudio({
                           <Instagram size={12} color="#e1306c" />
                         )}
                         <span>{isYt ? "YouTube" : isTt ? "TikTok" : isFb ? "Facebook" : "Instagram"}</span>
-                        <small>@{cleanHandle}</small>
                       </button>
                     );
                   })}
