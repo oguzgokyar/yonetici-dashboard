@@ -472,6 +472,21 @@ export function PublishingStudio({
     loadRecentAssets(initialAssetId);
     const d = new Date(Date.now() + 24 * 3600 * 1000);
     setScheduledAt(d.toISOString().slice(0, 16));
+
+    // Check for prefill from Strategy Studio
+    try {
+      const prefillRaw = localStorage.getItem(`publishing_prefill_${projectId}`);
+      if (prefillRaw) {
+        localStorage.removeItem(`publishing_prefill_${projectId}`);
+        const parsed = JSON.parse(prefillRaw);
+        if (parsed.caption) {
+          const lines = parsed.caption.split("\n").filter((l: string) => l.trim().length > 0);
+          const firstLine = lines[0] ? lines[0].replace(/^🎯\s*/, "").trim() : "";
+          if (firstLine) setGlobalTitle(firstLine.slice(0, 50));
+          setGlobalCaption(parsed.caption);
+        }
+      }
+    } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, initialAssetId]);
 
@@ -907,16 +922,17 @@ export function PublishingStudio({
 
                   <div className="composer-media-grid">
                     {loadingAssets ? (
-                      <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "20px", color: "var(--muted)", fontSize: "11px" }}>
+                      <div style={{ width: "100%", textAlign: "center", padding: "24px 12px", color: "var(--muted)", fontSize: "11px" }}>
                         Kreatifler yükleniyor...
                       </div>
                     ) : filteredAssets.length > 0 ? (
-                      filteredAssets.map((asset) => {
+                      filteredAssets.slice(0, 60).map((asset) => {
                         const isSelected = selectedMedia?.id === asset.id;
                         return (
-                          <button
+                          <div
                             key={asset.id}
-                            type="button"
+                            role="button"
+                            tabIndex={0}
                             onClick={() => applyAssetSelection(asset)}
                             className={`composer-media-item ${isSelected ? "selected" : ""}`}
                             title={asset.prompt || asset.sourceTopic || ""}
@@ -934,11 +950,11 @@ export function PublishingStudio({
                                 ? "Video"
                                 : "Görsel"}
                             </span>
-                          </button>
+                          </div>
                         );
                       })
                     ) : (
-                      <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "20px", color: "var(--muted)", fontSize: "11px" }}>
+                      <div style={{ width: "100%", textAlign: "center", padding: "24px 12px", color: "var(--muted)", fontSize: "11px" }}>
                         Bu kategoride henüz kreatif üretilmemiş.
                       </div>
                     )}
