@@ -22,6 +22,8 @@ import {
   Trash2,
   X,
   Youtube,
+  Eye,
+  Layers,
 } from "lucide-react";
 import {
   extractStockPublishingMetadata,
@@ -941,6 +943,68 @@ export function PublishingStudio({
                       </div>
                     )}
                   </div>
+
+                  {/* Seçili Medya Büyük Önizleme Kartı */}
+                  {selectedMedia && (
+                    <div className="composer-selected-card">
+                      <div className="composer-selected-card-left">
+                        <img
+                          src={selectedMedia.thumbnailUrl || selectedMedia.url}
+                          alt=""
+                          className="composer-selected-thumb"
+                          onClick={() => {
+                            window.open(selectedMedia.url, "_blank");
+                          }}
+                          title="Büyük boyutta aç"
+                        />
+                        <div className="composer-selected-info">
+                          <span className="composer-selected-title">
+                            {selectedMedia.prompt || selectedMedia.sourceTopic || "Seçilen Medya"}
+                          </span>
+                          <span className="composer-selected-badge">
+                            {selectedMedia.category === "canva_package" ? (
+                              <>
+                                <Layers size={11} />
+                                <span>Canva Paketi ({selectedMedia.itemCount || 1} sayfa)</span>
+                              </>
+                            ) : selectedMedia.type === "video" ? (
+                              <>
+                                <Film size={11} />
+                                <span>Video Kreatifi</span>
+                              </>
+                            ) : (
+                              <>
+                                <ImageIcon size={11} />
+                                <span>Görsel Kreatifi</span>
+                              </>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="composer-selected-actions">
+                        <button
+                          type="button"
+                          onClick={() => window.open(selectedMedia.url, "_blank")}
+                          className="button compact ghost"
+                          style={{ fontSize: "11px", height: "28px", padding: "0 8px" }}
+                          title="Tam boyutta incele"
+                        >
+                          <Eye size={12} />
+                          <span>İncele</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedMedia(null)}
+                          className="button compact ghost"
+                          style={{ fontSize: "11px", height: "28px", padding: "0 6px", color: "#e11d48" }}
+                          title="Seçimi Kaldır"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
