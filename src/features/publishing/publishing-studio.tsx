@@ -925,7 +925,22 @@ export function PublishingStudio({
                     </button>
                   </div>
 
-                  <div className="composer-media-grid">
+                  <div
+                    className="composer-media-grid"
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                      gap: "8px",
+                      maxHeight: "320px",
+                      overflowY: "auto",
+                      padding: "8px",
+                      background: "#f8fafc",
+                      borderRadius: "12px",
+                      border: "1px solid #e2e8f0",
+                      width: "100%",
+                      boxSizing: "border-box",
+                    }}
+                  >
                     {loadingAssets ? (
                       <div style={{ width: "100%", textAlign: "center", padding: "24px 12px", color: "var(--muted)", fontSize: "11px" }}>
                         Kreatifler yükleniyor...
@@ -941,14 +956,49 @@ export function PublishingStudio({
                             onClick={() => applyAssetSelection(asset)}
                             className={`composer-media-item ${isSelected ? "selected" : ""}`}
                             title={asset.prompt || asset.sourceTopic || ""}
+                            style={{
+                              position: "relative",
+                              width: "100%",
+                              aspectRatio: "1 / 1",
+                              minHeight: "110px",
+                              borderRadius: "10px",
+                              overflow: "hidden",
+                              border: isSelected ? "2.5px solid var(--primary, #6d5dfc)" : "1.5px solid #e2e8f0",
+                              boxShadow: isSelected ? "0 0 0 2px rgba(109, 93, 252, 0.3)" : "none",
+                              cursor: "pointer",
+                              background: "#f1f5f9",
+                              display: "block",
+                              boxSizing: "border-box",
+                              padding: 0,
+                            }}
                           >
                             <img
                               src={asset.thumbnailUrl || asset.url}
                               alt=""
                               loading="lazy"
                               decoding="async"
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                                display: "block",
+                              }}
                             />
-                            <span>
+                            <span
+                              style={{
+                                position: "absolute",
+                                bottom: "4px",
+                                right: "4px",
+                                fontSize: "9px",
+                                fontWeight: "700",
+                                background: "rgba(15, 23, 42, 0.8)",
+                                backdropFilter: "blur(4px)",
+                                color: "white",
+                                padding: "2px 5px",
+                                borderRadius: "4px",
+                                pointerEvents: "none",
+                              }}
+                            >
                               {asset.category === "canva_package"
                                 ? `Canva (${asset.itemCount || 1})`
                                 : asset.type === "video"
