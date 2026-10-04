@@ -410,18 +410,66 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
     }
   }
 
-  function handleSendToCanva(idea: StrategyIdea) {
+  async function handleSendToCanva(idea: StrategyIdea) {
+    const confirmMsg = `"${idea.title}" fikri Canva Tasarım Stüdyosu'na aktarılacak ve 'Gizlenmiş' sekmesine taşınacak.\n\nOnaylıyor musunuz?`;
+    if (!window.confirm(confirmMsg)) {
+      return;
+    }
+
+    // 1. Automatically move idea to 'hidden' (consumed) if it has an id
+    if (idea.id && idea.status !== "hidden") {
+      await handleToggleHideIdea(idea.id);
+    }
+
+    // 2. Build full rich creative brief / prompt from card details
+    const cleanHook = (idea.hook || "").replace(/^["'“”]+|["'“”]+$/g, "");
+    const structureText = idea.structure && idea.structure.length > 0
+      ? `\nAkış ve Slayt Planı:\n${idea.structure.map((s, idx) => `${idx + 1}. ${s}`).join("\n")}`
+      : "";
+
+    const fullPrompt = [
+      `Başlık: ${idea.title}`,
+      idea.targetChannel ? `Hedef Kanal: ${idea.targetChannel}` : "",
+      cleanHook ? `\nKanca (Hook):\n"${cleanHook}"` : "",
+      idea.description ? `\nKonu & İçerik Özeti:\n${idea.description}` : "",
+      structureText,
+    ].filter(Boolean).join("\n").trim();
+
+    // Determine target Canva content type
+    let targetContentType = "instagram_post";
+    let targetSlideCount = 5;
+
+    if (idea.columnType === "vertical_video") {
+      targetContentType = "reels_video";
+      targetSlideCount = 6;
+    } else if (idea.columnType === "carousel") {
+      targetContentType = "instagram_carousel";
+      targetSlideCount = Math.max(3, Math.min(10, idea.structure?.length || 5));
+    } else if (idea.columnType === "engagement") {
+      targetContentType = "instagram_story";
+      targetSlideCount = 3;
+    } else {
+      targetContentType = "instagram_post";
+      targetSlideCount = 1;
+    }
+
     try {
-      const payload = {
-        title: idea.title,
-        concept: `${idea.hook}\n\n${idea.description}`,
-        contentType: idea.columnType === "carousel" ? "instagram_carousel" : "reels_video",
-        slideCount: idea.columnType === "carousel" ? 5 : 6,
+      // Clear previous text completely and prefill with card brief
+      const formPayload = {
+        prompt: fullPrompt,
+        contentType: targetContentType,
+        slideCount: targetSlideCount,
+        style: "minimalist_modern",
+        isPrefilledFromIdea: true,
+        timestamp: Date.now(),
       };
-      localStorage.setItem(`canva_prefill_${projectId}`, JSON.stringify(payload));
-      router.push(`/projects/${projectId}/image-generation`);
+      localStorage.setItem(`canva_form_${projectId}`, JSON.stringify(formPayload));
+      localStorage.setItem(`canva_prefill_${projectId}`, JSON.stringify(formPayload));
+
+      // Direct transition to Image Generation page with Canva studio active tab
+      router.push(`/projects/${projectId}/image-generation?studio=canva`);
     } catch {
-      router.push(`/projects/${projectId}/image-generation`);
+      router.push(`/projects/${projectId}/image-generation?studio=canva`);
     }
   }
 

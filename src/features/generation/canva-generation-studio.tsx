@@ -136,9 +136,22 @@ export function CanvaGenerationStudio({
 
   const available = useMemo(() => project.brand || {}, [project]);
 
-  // Form persistence in localStorage
+  // Form persistence in localStorage & Pre-fill from Strategy Studio
   useEffect(() => {
     try {
+      // Check for incoming prefill first
+      const prefill = localStorage.getItem(`canva_prefill_${projectId}`);
+      if (prefill) {
+        localStorage.removeItem(`canva_prefill_${projectId}`); // consume once
+        const parsedPrefill = JSON.parse(prefill);
+        if (parsedPrefill.prompt) setPrompt(parsedPrefill.prompt);
+        if (parsedPrefill.contentType) setContentType(parsedPrefill.contentType);
+        if (parsedPrefill.slideCount) setSlideCount(parsedPrefill.slideCount);
+        if (parsedPrefill.style) setStyle(parsedPrefill.style);
+        setMessage("✓ Strateji sayfasından aktarılan kreatif fikir prompt alanına yerleştirildi.");
+        return;
+      }
+
       const saved = localStorage.getItem(`canva_form_${projectId}`);
       if (saved) {
         const parsed = JSON.parse(saved);
