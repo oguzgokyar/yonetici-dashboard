@@ -140,6 +140,8 @@ export function PublishingStudio({
   const [mediaCategoryFilter, setMediaCategoryFilter] = useState<
     "all" | "image" | "canva_package" | "video" | "stock"
   >("all");
+  const [mediaPage, setMediaPage] = useState(1);
+  const MEDIA_PER_PAGE = 12;
   const [recentAssets, setRecentAssets] = useState<RecentAsset[]>([]);
   const [loadingAssets, setLoadingAssets] = useState(false);
 
@@ -704,12 +706,15 @@ export function PublishingStudio({
   // Filtered Assets for Picker
   const filteredAssets = recentAssets.filter((a) => {
     if (mediaCategoryFilter === "all") return true;
-    if (mediaCategoryFilter === "image") return a.category === "image";
     if (mediaCategoryFilter === "canva_package") return a.category === "canva_package";
-    if (mediaCategoryFilter === "video") return a.category === "video" || a.category === "stock_render";
-    if (mediaCategoryFilter === "stock") return a.category === "stock";
+    if (mediaCategoryFilter === "video") return a.type === "video" && a.category !== "stock";
+    if (mediaCategoryFilter === "stock") return a.category === "stock" || a.category === "stock_render";
+    if (mediaCategoryFilter === "image") return a.type === "image" && a.category !== "canva_package";
     return true;
   });
+
+  const totalMediaPages = Math.ceil(filteredAssets.length / MEDIA_PER_PAGE) || 1;
+  const paginatedAssets = filteredAssets.slice((mediaPage - 1) * MEDIA_PER_PAGE, mediaPage * MEDIA_PER_PAGE);
 
   const previewAccount = accounts.find((a) => a.integrationId === previewIntegrationId) || accounts[0];
   const previewPlatform: PreviewPlatform =
@@ -886,35 +891,35 @@ export function PublishingStudio({
                     <button
                       type="button"
                       className={`composer-media-tab-btn ${mediaCategoryFilter === "all" ? "active" : ""}`}
-                      onClick={() => setMediaCategoryFilter("all")}
+                      onClick={() => { setMediaCategoryFilter("all"); setMediaPage(1); }}
                     >
                       Tümü ({recentAssets.length})
                     </button>
                     <button
                       type="button"
                       className={`composer-media-tab-btn ${mediaCategoryFilter === "image" ? "active" : ""}`}
-                      onClick={() => setMediaCategoryFilter("image")}
+                      onClick={() => { setMediaCategoryFilter("image"); setMediaPage(1); }}
                     >
                       Görseller
                     </button>
                     <button
                       type="button"
                       className={`composer-media-tab-btn ${mediaCategoryFilter === "canva_package" ? "active" : ""}`}
-                      onClick={() => setMediaCategoryFilter("canva_package")}
+                      onClick={() => { setMediaCategoryFilter("canva_package"); setMediaPage(1); }}
                     >
                       Canva Paketleri
                     </button>
                     <button
                       type="button"
                       className={`composer-media-tab-btn ${mediaCategoryFilter === "video" ? "active" : ""}`}
-                      onClick={() => setMediaCategoryFilter("video")}
+                      onClick={() => { setMediaCategoryFilter("video"); setMediaPage(1); }}
                     >
                       Videolar
                     </button>
                     <button
                       type="button"
                       className={`composer-media-tab-btn ${mediaCategoryFilter === "stock" ? "active" : ""}`}
-                      onClick={() => setMediaCategoryFilter("stock")}
+                      onClick={() => { setMediaCategoryFilter("stock"); setMediaPage(1); }}
                     >
                       Stok
                     </button>
@@ -925,8 +930,8 @@ export function PublishingStudio({
                       <div style={{ width: "100%", textAlign: "center", padding: "24px 12px", color: "var(--muted)", fontSize: "11px" }}>
                         Kreatifler yükleniyor...
                       </div>
-                    ) : filteredAssets.length > 0 ? (
-                      filteredAssets.slice(0, 60).map((asset) => {
+                    ) : paginatedAssets.length > 0 ? (
+                      paginatedAssets.map((asset) => {
                         const isSelected = selectedMedia?.id === asset.id;
                         return (
                           <div
@@ -959,6 +964,46 @@ export function PublishingStudio({
                       </div>
                     )}
                   </div>
+
+                  {/* Sayfalandırma Çubuğu (Pagination) */}
+                  {totalMediaPages > 1 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "6px 8px",
+                        background: "#f8fafc",
+                        borderRadius: "8px",
+                        border: "1px solid #e2e8f0",
+                        fontSize: "11px",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setMediaPage((p) => Math.max(1, p - 1))}
+                        disabled={mediaPage <= 1}
+                        className="button compact ghost"
+                        style={{ height: "26px", padding: "0 10px", fontSize: "10.5px" }}
+                      >
+                        ← Önceki
+                      </button>
+
+                      <span style={{ color: "#64748b", fontWeight: "600" }}>
+                        Sayfa {mediaPage} / {totalMediaPages} ({filteredAssets.length} Medya)
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => setMediaPage((p) => Math.min(totalMediaPages, p + 1))}
+                        disabled={mediaPage >= totalMediaPages}
+                        className="button compact ghost"
+                        style={{ height: "26px", padding: "0 10px", fontSize: "10.5px" }}
+                      >
+                        Sonraki →
+                      </button>
+                    </div>
+                  )}
 
                   {/* Seçili Medya Büyük Önizleme Kartı */}
                   {selectedMedia && (
