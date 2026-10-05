@@ -274,7 +274,7 @@ function buildPlatformSettings(params: CreatePostizPostParams): Record<string, u
 
     return {
       ...(title ? { title: title.slice(0, 90) } : {}),
-      content_posting_method: params.tiktokSettings?.content_posting_method || "UPLOAD",
+      content_posting_method: params.tiktokSettings?.content_posting_method || "DIRECT_POST",
       privacy_level: params.tiktokSettings?.privacy_level || "SELF_ONLY",
       comment: params.tiktokSettings?.comment ?? true,
       duet: params.tiktokSettings?.duet ?? true,
