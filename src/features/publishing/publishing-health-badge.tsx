@@ -7,8 +7,10 @@ import {
   AlertTriangle,
   XCircle,
   LoaderCircle,
-  ExternalLink,
   ChevronDown,
+  RefreshCw,
+  Trash2,
+  RotateCcw,
 } from "lucide-react";
 
 export type HealthService = {
@@ -49,6 +51,7 @@ export function PublishingHealthBadge() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     checkHealth();
     const interval = setInterval(checkHealth, 30_000);
     return () => clearInterval(interval);
@@ -64,6 +67,30 @@ export function PublishingHealthBadge() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const [rescueLoading, setRescueLoading] = useState<string | null>(null);
+  const [rescueMsg, setRescueMsg] = useState<string | null>(null);
+
+  async function handleRescue(action: "sync" | "purge_stuck" | "restart_service") {
+    setRescueLoading(action);
+    setRescueMsg(null);
+    try {
+      const res = await fetch("/api/system/publishing-rescue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || json.message || "İşlem başarısız");
+      setRescueMsg(json.message || "İşlem tamamlandı.");
+      setTimeout(() => setRescueMsg(null), 5000);
+      await checkHealth();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRescueLoading(null);
+    }
+  }
 
   const overallStatus = data?.status || "healthy";
 
@@ -127,6 +154,58 @@ export function PublishingHealthBadge() {
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Rescue & Recovery Toolkit */}
+          <div style={{ padding: "12px", borderTop: "1px solid #f0f0f5", background: "#fcfcfe" }}>
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--foreground)", display: "block", marginBottom: "8px" }}>
+              🛠️ Sistem Kurtarma &amp; Sıfırlama
+            </span>
+            {rescueMsg && (
+              <div style={{ fontSize: "11px", color: "#10b981", background: "#ecfdf5", padding: "6px 8px", borderRadius: "6px", marginBottom: "8px" }}>
+                ✓ {rescueMsg}
+              </div>
+            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <button
+                type="button"
+                onClick={() => handleRescue("sync")}
+                disabled={Boolean(rescueLoading)}
+                className="button secondary compact"
+                style={{ justifyContent: "flex-start", fontSize: "11px", height: "28px" }}
+              >
+                {rescueLoading === "sync" ? <LoaderCircle size={12} className="spin" /> : <RefreshCw size={12} />}
+                Tüm Gönderileri Postiz ile Senkronize Et
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm("Planlanan saati 3 saatten fazla geçmiş ve hala takılı kalmış gönderiler kuyruktan temizlenecektir. Devam edilsin mi?")) {
+                    handleRescue("purge_stuck");
+                  }
+                }}
+                disabled={Boolean(rescueLoading)}
+                className="button secondary compact"
+                style={{ justifyContent: "flex-start", fontSize: "11px", height: "28px", color: "#d97706" }}
+              >
+                {rescueLoading === "purge_stuck" ? <LoaderCircle size={12} className="spin" /> : <Trash2 size={12} />}
+                Kilitli / Zamanı Geçmiş Kuyruğu Temizle
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm("Postiz dağıtım servisi ve Temporal orkestratörü yeniden başlatılacaktır. Devam edilsin mi?")) {
+                    handleRescue("restart_service");
+                  }
+                }}
+                disabled={Boolean(rescueLoading)}
+                className="button secondary compact"
+                style={{ justifyContent: "flex-start", fontSize: "11px", height: "28px", color: "#ef4444" }}
+              >
+                {rescueLoading === "restart_service" ? <LoaderCircle size={12} className="spin" /> : <RotateCcw size={12} />}
+                Dağıtım Servisini Yeniden Başlat (Restart)
+              </button>
+            </div>
           </div>
 
           <div className="health-popover-footer">

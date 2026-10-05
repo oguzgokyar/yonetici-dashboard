@@ -58,10 +58,53 @@ type PostRecord = {
   integrationId: string;
   postType: "post" | "reel" | "story";
   postizPostId?: string;
+  mediaPackageId?: string;
   releaseUrl?: string;
   errorMessage?: string;
   createdAt: string;
+  updatedAt?: string;
 };
+
+/**
+ * Converts an ISO string (UTC) to a local YYYY-MM-DDTHH:mm string in Europe/Istanbul (TRT, UTC+3)
+ */
+function toIstanbulDatetimeLocal(isoOrDate?: string | Date | null): string {
+  if (!isoOrDate) return "";
+  const date = typeof isoOrDate === "string" ? new Date(isoOrDate) : isoOrDate;
+  if (isNaN(date.getTime())) return "";
+
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(date);
+  const findPart = (t: string) => parts.find((p) => p.type === t)?.value || "00";
+  const year = findPart("year");
+  const month = findPart("month");
+  const day = findPart("day");
+  let hour = findPart("hour");
+  if (hour === "24") hour = "00";
+  const minute = findPart("minute");
+
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
+/**
+ * Converts a YYYY-MM-DDTHH:mm input in Turkey time (Europe/Istanbul, UTC+3)
+ * into a canonical UTC ISO string for storage and API delivery.
+ */
+function parseIstanbulDatetimeLocalToUtc(val: string): string | undefined {
+  if (!val) return undefined;
+  const isoWithTz = `${val}:00+03:00`;
+  const d = new Date(isoWithTz);
+  return isNaN(d.getTime()) ? undefined : d.toISOString();
+}
 
 type RecentAsset = {
   id: string;
@@ -185,12 +228,16 @@ export function PublishingStudio({
   // -------------------------------------------------------------
   // LOAD DATA
   // -------------------------------------------------------------
-  async function loadData() {
+  async function loadData(forceSync = false) {
     setLoading(true);
     setError(null);
     try {
+      if (forceSync) {
+        await fetch(`/api/projects/${projectId}/posts/sync`, { method: "POST" }).catch(() => undefined);
+      }
+
       const [postsRes, accRes, hashtagRes] = await Promise.all([
-        fetch(`/api/projects/${projectId}/posts`),
+        fetch(`/api/projects/${projectId}/posts?sync=${forceSync ? 1 : 0}`),
         fetch(`/api/projects/${projectId}/accounts`),
         fetch(`/api/projects/${projectId}/hashtag-sets`),
       ]);
@@ -531,10 +578,11 @@ export function PublishingStudio({
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadData();
+    loadData(true);
     loadRecentAssets(initialAssetId);
+    // eslint-disable-next-line react-hooks/purity
     const d = new Date(Date.now() + 24 * 3600 * 1000);
-    setScheduledAt(d.toISOString().slice(0, 16));
+    setScheduledAt(toIstanbulDatetimeLocal(d));
 
     // Check for prefill from Strategy Studio
     try {
@@ -666,7 +714,7 @@ export function PublishingStudio({
         ? selectedMedia?.type === "video"
         : mediaUrl.endsWith(".mp4");
     const formattedDate =
-      scheduleType === "schedule" && scheduledAt ? new Date(scheduledAt).toISOString() : undefined;
+      scheduleType === "schedule" && scheduledAt ? parseIstanbulDatetimeLocalToUtc(scheduledAt) : undefined;
     const isPackage =
       mediaSourceTab === "recent" && selectedMedia?.category === "canva_package";
 
@@ -774,18 +822,27 @@ export function PublishingStudio({
     }
   }
 
-  // Delete Post
-  async function deletePost(id: string) {
-    if (!confirm("Bu gönderiyi silmek istediğinize emin misiniz?")) return;
+  // Delete Post State & Handlers
+  const [deleteTarget, setDeleteTarget] = useState<PostRecord | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  async function executeDelete(target: PostRecord, scope: "single" | "all" = "single") {
+    setIsDeleting(true);
     try {
-      const response = await fetch(`/api/projects/${projectId}/posts?id=${id}`, {
+      const response = await fetch(`/api/projects/${projectId}/posts?id=${target.id}&scope=${scope}`, {
         method: "DELETE",
       });
-      if (!response.ok) throw new Error("Silme işlemi başarısız.");
-      if (editingPost?.id === id) setEditingPost(null);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Silme işlemi başarısız.");
+      if (editingPost?.id === target.id) setEditingPost(null);
+      setDeleteTarget(null);
+      setSuccess(data.message || "Gönderi silindi.");
+      setTimeout(() => setSuccess(null), 4000);
       await loadData();
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -1751,9 +1808,27 @@ export function PublishingStudio({
 
                 const currentSubTab = channelSubTabs[acc.integrationId] || "scheduled";
 
-                const scheduledItems = accPosts.filter((p) => p.status === "scheduled");
-                const publishedItems = accPosts.filter((p) => p.status === "published");
-                const draftItems = accPosts.filter((p) => p.status === "draft" || p.status === "failed");
+                const scheduledItems = accPosts
+                  .filter((p) => p.status === "scheduled")
+                  .sort(
+                    (a, b) =>
+                      new Date(a.scheduledAt || a.createdAt).getTime() -
+                      new Date(b.scheduledAt || b.createdAt).getTime()
+                  );
+                const publishedItems = accPosts
+                  .filter((p) => p.status === "published")
+                  .sort(
+                    (a, b) =>
+                      new Date(b.scheduledAt || b.createdAt).getTime() -
+                      new Date(a.scheduledAt || a.createdAt).getTime()
+                  );
+                const draftItems = accPosts
+                  .filter((p) => p.status === "draft" || p.status === "failed")
+                  .sort(
+                    (a, b) =>
+                      new Date(b.updatedAt || b.createdAt).getTime() -
+                      new Date(a.updatedAt || a.createdAt).getTime()
+                  );
 
                 const visibleItems =
                   currentSubTab === "scheduled"
@@ -1850,10 +1925,12 @@ export function PublishingStudio({
                           const formattedDate = dateObj.toLocaleDateString("tr-TR", {
                             day: "numeric",
                             month: "short",
+                            timeZone: "Europe/Istanbul",
                           });
                           const formattedTime = dateObj.toLocaleTimeString("tr-TR", {
                             hour: "2-digit",
                             minute: "2-digit",
+                            timeZone: "Europe/Istanbul",
                           });
                           const thumbUrl = post.mediaUrl.startsWith("/api/assets/")
                             ? `${post.mediaUrl}?thumb=1`
@@ -1947,7 +2024,7 @@ export function PublishingStudio({
                                 )}
                                 <button
                                   type="button"
-                                  onClick={() => deletePost(post.id)}
+                                  onClick={() => setDeleteTarget(post)}
                                   className="channel-action-btn delete"
                                   title="Sil"
                                 >
@@ -2133,14 +2210,14 @@ export function PublishingStudio({
                         type="datetime-local"
                         value={
                           editingPost.scheduledAt
-                            ? new Date(editingPost.scheduledAt).toISOString().slice(0, 16)
+                            ? toIstanbulDatetimeLocal(editingPost.scheduledAt)
                             : ""
                         }
                         onChange={(e) =>
                           setEditingPost({
                             ...editingPost,
                             scheduledAt: e.target.value
-                              ? new Date(e.target.value).toISOString()
+                              ? parseIstanbulDatetimeLocalToUtc(e.target.value)
                               : undefined,
                           })
                         }
@@ -2164,7 +2241,7 @@ export function PublishingStudio({
               >
                 <button
                   type="button"
-                  onClick={() => deletePost(editingPost.id)}
+                  onClick={() => setDeleteTarget(editingPost)}
                   className="button danger ghost"
                   style={{ color: "#ef4444" }}
                 >
@@ -2196,6 +2273,110 @@ export function PublishingStudio({
               </div>
             </form>
           </section>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* DELETE CONFIRMATION MODAL                                     */}
+      {/* ------------------------------------------------------------- */}
+      {deleteTarget && (
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => !isDeleting && setDeleteTarget(null)}
+        >
+          <div
+            className="modal-content"
+            style={{ maxWidth: "480px" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Trash2 size={18} color="#ef4444" />
+                <strong style={{ fontSize: "15px" }}>Gönderiyi Sil</strong>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={isDeleting}
+                className="icon-button"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{ padding: "16px 20px" }}>
+              <p style={{ fontSize: "13px", color: "var(--foreground)", lineHeight: "1.5", margin: "0 0 12px 0" }}>
+                <strong>&quot;{deleteTarget.title || "İsimsiz Gönderi"}&quot;</strong> başlıklı gönderiyi silmek istediğinize emin misiniz?
+              </p>
+              {(() => {
+                const siblings = posts.filter(
+                  (p) =>
+                    p.id !== deleteTarget.id &&
+                    ((deleteTarget.mediaPackageId && p.mediaPackageId === deleteTarget.mediaPackageId) ||
+                      (p.title === deleteTarget.title && p.scheduledAt === deleteTarget.scheduledAt))
+                );
+
+                if (siblings.length > 0) {
+                  return (
+                    <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "12px", marginBottom: "16px" }}>
+                      <span style={{ fontSize: "12px", fontWeight: 600, color: "#334155", display: "block", marginBottom: "6px" }}>
+                        📌 Çoklu Kanal Dağıtımı Tespit Edildi
+                      </span>
+                      <p style={{ fontSize: "12px", color: "#64748b", margin: 0 }}>
+                        Bu içerik diğer {siblings.length} kanalda da planlanmış/yayınlanmış görünüyor.
+                      </p>
+                      <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+                        <button
+                          type="button"
+                          onClick={() => executeDelete(deleteTarget, "single")}
+                          disabled={isDeleting}
+                          className="button secondary compact"
+                          style={{ flex: 1, fontSize: "12px" }}
+                        >
+                          {isDeleting ? <LoaderCircle size={12} className="spin" /> : null}
+                          Yalnızca Bu Kanaldan Sil
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => executeDelete(deleteTarget, "all")}
+                          disabled={isDeleting}
+                          className="button danger compact"
+                          style={{ flex: 1, fontSize: "12px" }}
+                        >
+                          {isDeleting ? <LoaderCircle size={12} className="spin" /> : null}
+                          Tüm Kanallardan Sil ({siblings.length + 1})
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "16px" }}>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(null)}
+                      disabled={isDeleting}
+                      className="button secondary compact"
+                    >
+                      Vazgeç
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => executeDelete(deleteTarget, "single")}
+                      disabled={isDeleting}
+                      className="button danger compact"
+                    >
+                      {isDeleting ? <LoaderCircle size={12} className="spin" /> : <Trash2 size={13} />}
+                      Evet, Sil
+                    </button>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
         </div>
       )}
     </>

@@ -357,6 +357,51 @@ export async function createPostizPost(
   return (await response.json()) as { postId: string; integration: string }[];
 }
 
+export type PostizPostItem = {
+  id: string;
+  state: "QUEUE" | "PUBLISHED" | "ERROR" | "DRAFT";
+  publishDate: string;
+  releaseURL?: string | null;
+  releaseId?: string | null;
+  group?: string;
+  error?: string | null;
+  integration?: {
+    id: string;
+    providerIdentifier: string;
+    name: string;
+    picture?: string;
+  };
+};
+
+export async function fetchPostizPosts(options?: {
+  startDate?: string;
+  endDate?: string;
+}): Promise<PostizPostItem[]> {
+  const { baseUrl, apiKey, enabled } = getPostizStoredConfig();
+  if (!enabled || !apiKey) return [];
+
+  const start = options?.startDate || new Date(Date.now() - 30 * 86400 * 1000).toISOString();
+  const end = options?.endDate || new Date(Date.now() + 30 * 86400 * 1000).toISOString();
+
+  const url = `${baseUrl}/public/v1/posts?startDate=${encodeURIComponent(start)}&endDate=${encodeURIComponent(end)}`;
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: apiKey,
+      Accept: "application/json",
+    },
+    signal: AbortSignal.timeout(15_000),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Postiz gönderileri alınamadı: HTTP ${response.status}`);
+  }
+
+  const data = (await response.json()) as { posts?: PostizPostItem[] };
+  return data.posts || [];
+}
+
 export async function deletePostizPost(postId: string): Promise<boolean> {
   const { baseUrl, apiKey, enabled } = getPostizStoredConfig();
   if (!enabled || !apiKey) return false;
@@ -369,6 +414,11 @@ export async function deletePostizPost(postId: string): Promise<boolean> {
     },
     signal: AbortSignal.timeout(10_000),
   });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    console.error(`Postiz silme hatası (${response.status}) [postId: ${postId}]:`, errorText);
+  }
 
   return response.ok;
 }

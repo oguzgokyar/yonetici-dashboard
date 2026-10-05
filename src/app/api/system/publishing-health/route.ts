@@ -62,12 +62,16 @@ export async function GET() {
       });
     } else {
       const integrations = await fetchPostizIntegrations();
+      const disabledCount = integrations.filter((i) => i.disabled).length;
       checks.push({
         id: "postiz-api",
-        name: "Postiz API",
-        status: "healthy",
+        name: "Postiz API & Sosyal Kanallar",
+        status: disabledCount > 0 ? "warning" : "healthy",
         latencyMs: Date.now() - postizStart,
-        message: `${integrations.length} bağlı hesap aktif.`,
+        message:
+          disabledCount > 0
+            ? `${integrations.length} hesaptan ${disabledCount} tanesi oturum yenileme gerektiriyor!`
+            : `${integrations.length} bağlı hesap aktif ve yetkili.`,
       });
     }
   } catch (err) {

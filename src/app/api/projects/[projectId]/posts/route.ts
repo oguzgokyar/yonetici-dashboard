@@ -27,9 +27,71 @@ export type TargetSetting = {
   tiktokSettings?: TikTokPostSettings;
 };
 
-export async function GET(_request: Request, context: Context) {
+export async function GET(request: Request, context: Context) {
   const { projectId } = await context.params;
+  const url = new URL(request.url);
+  const doSync = url.searchParams.get("sync") === "1" || url.searchParams.get("sync") === "true";
   const database = getDatabase();
+
+  if (doSync) {
+    try {
+      const { fetchPostizPosts } = await import("@/lib/server/postiz-client");
+      const postizPosts = await fetchPostizPosts().catch(() => []);
+      if (postizPosts.length > 0) {
+        const localPosts = database
+          .prepare("SELECT id, status, postiz_post_id, release_url, error_message FROM content_posts WHERE project_id = ? AND postiz_post_id IS NOT NULL")
+          .all(projectId) as Array<{
+          id: string;
+          status: string;
+          postiz_post_id: string;
+          release_url?: string;
+          error_message?: string;
+        }>;
+
+        const postizMap = new Map<string, (typeof postizPosts)[0]>();
+        for (const p of postizPosts) {
+          postizMap.set(p.id, p);
+        }
+
+        const now = new Date().toISOString();
+        const updateStmt = database.prepare(`
+          UPDATE content_posts
+          SET status = ?, release_url = COALESCE(?, release_url), error_message = ?, updated_at = ?
+          WHERE id = ?
+        `);
+
+        for (const local of localPosts) {
+          const remote = postizMap.get(local.postiz_post_id);
+          if (!remote) continue;
+
+          let newStatus = local.status;
+          let newReleaseUrl = local.release_url || null;
+          let newErrorMessage = local.error_message || null;
+
+          if (remote.state === "PUBLISHED") {
+            newStatus = "published";
+            if (remote.releaseURL) newReleaseUrl = remote.releaseURL;
+          } else if (remote.state === "ERROR") {
+            newStatus = "failed";
+            if (remote.error) newErrorMessage = remote.error;
+          } else if (remote.state === "QUEUE") {
+            newStatus = "scheduled";
+          } else if (remote.state === "DRAFT") {
+            newStatus = "draft";
+          }
+
+          if (
+            newStatus !== local.status ||
+            (newReleaseUrl && newReleaseUrl !== local.release_url)
+          ) {
+            updateStmt.run(newStatus, newReleaseUrl, newErrorMessage, now, local.id);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Inline postiz sync error:", e);
+    }
+  }
 
   const rows = database
     .prepare(`
@@ -41,7 +103,10 @@ export async function GET(_request: Request, context: Context) {
         release_url, error_message, created_at, updated_at
       FROM content_posts
       WHERE project_id = ?
-      ORDER BY created_at DESC
+      ORDER BY
+        CASE WHEN status = 'scheduled' THEN 0 ELSE 1 END,
+        CASE WHEN status = 'scheduled' THEN scheduled_at END ASC,
+        created_at DESC
     `)
     .all(projectId) as Record<string, unknown>[];
 
@@ -576,6 +641,7 @@ export async function DELETE(request: Request, context: Context) {
   const { projectId } = await context.params;
   const url = new URL(request.url);
   const postId = url.searchParams.get("id");
+  const scope = url.searchParams.get("scope") || "single"; // "single" | "all"
 
   if (!postId) {
     return Response.json({ ok: false, message: "Silinecek gönderi id'si eksik." }, { status: 400 });
@@ -583,17 +649,61 @@ export async function DELETE(request: Request, context: Context) {
 
   const database = getDatabase();
   const existing = database
-    .prepare("SELECT id, postiz_post_id FROM content_posts WHERE id = ? AND project_id = ?")
-    .get(postId, projectId) as { id: string; postiz_post_id?: string } | undefined;
+    .prepare("SELECT id, title, scheduled_at, media_url, media_package_id, postiz_post_id FROM content_posts WHERE id = ? AND project_id = ?")
+    .get(postId, projectId) as {
+      id: string;
+      title: string;
+      scheduled_at?: string;
+      media_url?: string;
+      media_package_id?: string;
+      postiz_post_id?: string;
+    } | undefined;
 
   if (!existing) {
     return Response.json({ ok: false, message: "Gönderi bulunamadı." }, { status: 404 });
   }
 
-  if (existing.postiz_post_id) {
-    await deletePostizPost(existing.postiz_post_id).catch(() => undefined);
+  let postsToDelete: Array<{ id: string; postiz_post_id?: string }> = [];
+
+  if (scope === "all") {
+    if (existing.media_package_id) {
+      postsToDelete = database
+        .prepare("SELECT id, postiz_post_id FROM content_posts WHERE project_id = ? AND media_package_id = ?")
+        .all(projectId, existing.media_package_id) as Array<{ id: string; postiz_post_id?: string }>;
+    } else if (existing.title && existing.scheduled_at) {
+      postsToDelete = database
+        .prepare("SELECT id, postiz_post_id FROM content_posts WHERE project_id = ? AND title = ? AND scheduled_at = ?")
+        .all(projectId, existing.title, existing.scheduled_at) as Array<{ id: string; postiz_post_id?: string }>;
+    } else if (existing.media_url) {
+      postsToDelete = database
+        .prepare("SELECT id, postiz_post_id FROM content_posts WHERE project_id = ? AND media_url = ?")
+        .all(projectId, existing.media_url) as Array<{ id: string; postiz_post_id?: string }>;
+    }
   }
 
-  database.prepare("DELETE FROM content_posts WHERE id = ?").run(postId);
-  return Response.json({ ok: true, message: "Gönderi başarıyla silindi." });
+  if (postsToDelete.length === 0) {
+    postsToDelete = [{ id: existing.id, postiz_post_id: existing.postiz_post_id }];
+  }
+
+  // Delete from Postiz (parallel)
+  await Promise.allSettled(
+    postsToDelete
+      .filter((p) => Boolean(p.postiz_post_id))
+      .map((p) => deletePostizPost(p.postiz_post_id!))
+  );
+
+  // Delete from SQLite
+  const deleteStmt = database.prepare("DELETE FROM content_posts WHERE id = ?");
+  for (const p of postsToDelete) {
+    deleteStmt.run(p.id);
+  }
+
+  return Response.json({
+    ok: true,
+    deletedCount: postsToDelete.length,
+    message:
+      postsToDelete.length > 1
+        ? `Gönderi ${postsToDelete.length} kanaldan başarıyla silindi.`
+        : "Gönderi başarıyla silindi.",
+  });
 }
