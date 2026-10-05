@@ -59,6 +59,19 @@ function runMigrations(database: DatabaseSync) {
       UNIQUE(project_id, integration_id)
     );
     CREATE INDEX IF NOT EXISTS idx_project_social_accounts_project ON project_social_accounts(project_id);
+    CREATE TABLE IF NOT EXISTS project_hashtag_sets (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      platform TEXT NOT NULL,
+      name TEXT NOT NULL,
+      hashtags_json TEXT NOT NULL DEFAULT '[]',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(project_id, platform, name)
+    );
+    CREATE INDEX IF NOT EXISTS idx_hashtag_sets_project_platform ON project_hashtag_sets(project_id, platform);
     CREATE TABLE IF NOT EXISTS content_posts (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,

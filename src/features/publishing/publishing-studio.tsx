@@ -25,10 +25,7 @@ import {
   Eye,
   Layers,
 } from "lucide-react";
-import {
-  extractStockPublishingMetadata,
-  mergeHashtagText,
-} from "@/lib/stock-publishing-metadata";
+import { extractStockPublishingMetadata } from "@/lib/stock-publishing-metadata";
 import { useProjects } from "@/features/projects/projects-context";
 import {
   MultiPlatformPreview,
@@ -93,6 +90,23 @@ type ChannelCustomData = {
   postType: "post" | "reel" | "story";
 };
 
+type HashtagSet = {
+  id: string;
+  platform: "instagram" | "youtube" | "tiktok" | "facebook" | "twitter";
+  name: string;
+  hashtags: string[];
+  enabled: boolean;
+  isDefault: boolean;
+};
+
+type PlatformCopyResult = {
+  title: string;
+  caption: string;
+  hashtags: string;
+  tags?: string[];
+  hashtagMeta?: { ai: number; savedSet: number; removedDuplicates: number; removedInvalid: number };
+};
+
 export function PublishingStudio({
   projectId,
   initialAssetId,
@@ -123,6 +137,7 @@ export function PublishingStudio({
   const [selectedIntegrationIds, setSelectedIntegrationIds] = useState<string[]>([]);
   const [activeFormTab, setActiveFormTab] = useState<string>(""); // specific integrationId or "all"
   const [channelData, setChannelData] = useState<Record<string, ChannelCustomData>>({});
+  const [channelYouTubeTags, setChannelYouTubeTags] = useState<Record<string, string[]>>({});
 
   // Common/Global Form Values
   const [globalTitle, setGlobalTitle] = useState("");
@@ -149,6 +164,13 @@ export function PublishingStudio({
   const [aiStyle, setAiStyle] = useState<"sales" | "story" | "educational" | "punchy">("sales");
   const [generatingCopy, setGeneratingCopy] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const [hashtagSets, setHashtagSets] = useState<HashtagSet[]>([]);
+  const [includeHashtagSets, setIncludeHashtagSets] = useState(true);
+  const [selectedHashtagSetIds, setSelectedHashtagSetIds] = useState<Record<string, string[]>>({});
+  const [newSetPlatform, setNewSetPlatform] = useState<HashtagSet["platform"]>("instagram");
+  const [newSetName, setNewSetName] = useState("");
+  const [newSetTags, setNewSetTags] = useState("");
+  const [savingHashtagSet, setSavingHashtagSet] = useState(false);
 
   // Live Preview Target
   const [previewIntegrationId, setPreviewIntegrationId] = useState<string>("");
@@ -167,14 +189,25 @@ export function PublishingStudio({
     setLoading(true);
     setError(null);
     try {
-      const [postsRes, accRes] = await Promise.all([
+      const [postsRes, accRes, hashtagRes] = await Promise.all([
         fetch(`/api/projects/${projectId}/posts`),
         fetch(`/api/projects/${projectId}/accounts`),
+        fetch(`/api/projects/${projectId}/hashtag-sets`),
       ]);
 
       if (postsRes.ok) {
         const pJson = await postsRes.json();
         setPosts(pJson.posts || []);
+      }
+      if (hashtagRes.ok) {
+        const hJson = await hashtagRes.json();
+        const sets: HashtagSet[] = hJson.sets || [];
+        setHashtagSets(sets);
+        const selected: Record<string, string[]> = {};
+        for (const set of sets) {
+          if (set.enabled) selected[set.platform] = [...(selected[set.platform] || []), set.id];
+        }
+        setSelectedHashtagSetIds(selected);
       }
       if (accRes.ok) {
         const aJson = await accRes.json();
@@ -428,39 +461,67 @@ export function PublishingStudio({
       const rawDesc = extracted.description || fallbackDesc;
       const rawKeywords = extracted.hashtags ? extracted.hashtags.split(/\s+/) : [];
 
+      const platformByIntegration: Record<string, HashtagSet["platform"]> = {};
+      for (const intId of selectedIntegrationIds) {
+        platformByIntegration[intId] = platformForAccount(accounts.find((account) => account.integrationId === intId));
+      }
+      const platforms = [...new Set(Object.values(platformByIntegration))];
+      if (!platforms.length) platforms.push("instagram");
+
       const response = await fetch("/api/ai/posts/generate-copy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId,
+          platforms,
           postType: globalPostType,
           style: aiStyle,
           idea: targetAsset?.idea,
           sourceTopic: rawTitle || rawDesc || globalCaption || globalTitle,
+          includeHashtagSets,
+          selectedHashtagSetIds,
           stockVideoMeta:
             rawTitle || rawDesc || rawKeywords.length > 0
-              ? {
-                  rawTitle,
-                  rawDescription: rawDesc,
-                  keywords: Array.isArray(rawKeywords) ? rawKeywords : [],
-                }
+              ? { rawTitle, rawDescription: rawDesc, keywords: Array.isArray(rawKeywords) ? rawKeywords : [] }
               : undefined,
         }),
       });
 
       const result = await response.json();
-      if (!response.ok || !result.ok || !result.copy) {
-        throw new Error(result.message || "Metin üretilemedi.");
+      if (!response.ok || !result.ok || !result.copies) throw new Error(result.message || "Metin üretilemedi.");
+      const copies = result.copies as Record<string, PlatformCopyResult>;
+      setChannelData((current) => {
+        const next = { ...current };
+        for (const intId of selectedIntegrationIds) {
+          const copy = copies[platformByIntegration[intId]];
+          if (!copy) continue;
+          next[intId] = {
+            title: copy.title?.slice(0, 100) || globalTitle,
+            caption: copy.caption || globalCaption,
+            hashtags: copy.hashtags || "",
+            postType: current[intId]?.postType || globalPostType,
+          };
+        }
+        return next;
+      });
+      setChannelYouTubeTags((current) => {
+        const next = { ...current };
+        for (const intId of selectedIntegrationIds) {
+          const copy = copies[platformByIntegration[intId]];
+          if (platformByIntegration[intId] === "youtube" && copy?.tags) next[intId] = copy.tags;
+        }
+        return next;
+      });
+      const firstCopy = copies[platforms[0]];
+      if (firstCopy) {
+        setGlobalTitle(firstCopy.title?.slice(0, 100) || globalTitle);
+        setGlobalCaption(firstCopy.caption || globalCaption);
+        setGlobalHashtags(firstCopy.hashtags || "");
       }
-
-      if (result.copy.title) setGlobalTitle(result.copy.title.slice(0, 50));
-      if (result.copy.caption) setGlobalCaption(result.copy.caption);
-      if (result.copy.hashtags) {
-        setGlobalHashtags((current) =>
-          mergeHashtagText(current || extracted.hashtags, result.copy.hashtags)
-        );
-      }
-      setCopyFeedback("Metin ve etiketler AI ile Türkçe sosyal medya diline göre revize edildi.");
+      const failed = Object.keys(result.errors || {});
+      setCopyFeedback(failed.length
+        ? `${platforms.length - failed.length} platform hazır; ${failed.join(", ")} yeniden denenebilir.`
+        : `${platforms.length} platform için özgün metin ve etiketler hazırlandı.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -544,6 +605,44 @@ export function PublishingStudio({
     setTimeout(() => setSuccess(null), 3000);
   }
 
+  function platformForAccount(account?: ConnectedAccount): HashtagSet["platform"] {
+    const id = account?.identifier?.toLowerCase() || "";
+    if (id.includes("youtube")) return "youtube";
+    if (id.includes("tiktok")) return "tiktok";
+    if (id.includes("facebook")) return "facebook";
+    if (id.includes("twitter") || id === "x") return "twitter";
+    return "instagram";
+  }
+
+  async function createHashtagSet() {
+    if (!newSetName.trim() || !newSetTags.trim()) {
+      setError("Etiket kümesi adı ve etiketleri zorunludur.");
+      return;
+    }
+    setSavingHashtagSet(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${projectId}/hashtag-sets`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform: newSetPlatform, name: newSetName, hashtags: newSetTags, enabled: true }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Etiket kümesi oluşturulamadı.");
+      setHashtagSets((prev) => [...prev, result.set]);
+      setSelectedHashtagSetIds((prev) => ({ ...prev, [newSetPlatform]: [...(prev[newSetPlatform] || []), result.set.id] }));
+      setNewSetName(""); setNewSetTags("");
+      setSuccess("Etiket kümesi kaydedildi.");
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    finally { setSavingHashtagSet(false); }
+  }
+
+  async function deleteHashtagSet(id: string) {
+    const response = await fetch(`/api/projects/${projectId}/hashtag-sets/${id}`, { method: "DELETE" });
+    if (!response.ok) return;
+    setHashtagSets((prev) => prev.filter((set) => set.id !== id));
+    setSelectedHashtagSetIds((prev) => Object.fromEntries(Object.entries(prev).map(([key, ids]) => [key, ids.filter((item) => item !== id)])));
+  }
+
   // Submit Publishing / Schedule
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -573,17 +672,26 @@ export function PublishingStudio({
 
     const targets = selectedIntegrationIds.map((intId) => {
       const acc = accounts.find((a) => a.integrationId === intId);
-      const isYt = acc?.identifier === "youtube";
-      const isTt = acc?.identifier === "tiktok";
+      const isYt = Boolean(acc?.identifier?.includes("youtube"));
+      const isTt = Boolean(acc?.identifier?.includes("tiktok"));
 
-      const title = getChannelValue(intId, "title");
+      const rawTitle = getChannelValue(intId, "title");
       const caption = getChannelValue(intId, "caption");
-      const hashtags = getChannelValue(intId, "hashtags");
+      let hashtags = getChannelValue(intId, "hashtags");
       const postType = getChannelValue(intId, "postType") as "post" | "reel" | "story";
+
+      // YouTube / TikTok channel-specific hashtag cleanup
+      if (isYt) {
+        // Strip platform-inappropriate or random dev tags from YouTube
+        hashtags = hashtags
+          .split(/\s+/)
+          .filter((t) => !/^#(instagram|tiktok|facebook|dd\w+|studiotoylab)/i.test(t))
+          .join(" ");
+      }
 
       return {
         integrationId: intId,
-        title: title || (isPackage ? selectedMedia?.prompt : isVideo ? "Video Paylaşımı" : "Görsel Paylaşımı"),
+        title: rawTitle || (isPackage ? selectedMedia?.prompt : isVideo ? "Video Paylaşımı" : "Görsel Paylaşımı"),
         caption,
         hashtags,
         postType,
@@ -591,14 +699,21 @@ export function PublishingStudio({
         scheduledAt: formattedDate,
         youtubeSettings: isYt
           ? {
-              title: (title || "Video Paylaşımı").slice(0, 100),
+              title: (rawTitle || "Video Paylaşımı").slice(0, 100),
               type: "public" as const,
               selfDeclaredMadeForKids: "no" as const,
+              tags: (() => {
+                const aiTags = channelYouTubeTags[intId] || [];
+                const visibleTags = hashtags
+                  ? hashtags.split(/\s+/).map((t) => t.replace(/^#+/, "").trim()).filter(Boolean)
+                  : [];
+                return [...new Set([...aiTags, ...visibleTags])].slice(0, 15);
+              })(),
             }
           : undefined,
         tiktokSettings: isTt
           ? {
-              title: (title || "Video Paylaşımı").slice(0, 90),
+              title: (rawTitle || "Video Paylaşımı").slice(0, 90),
               content_posting_method: "UPLOAD" as const,
               privacy_level: "SELF_ONLY" as const,
               video_made_with_ai: true,
@@ -1262,6 +1377,42 @@ export function PublishingStudio({
                     >
                       {generatingCopy ? <LoaderCircle size={12} className="spin" /> : <Sparkles size={12} />}
                       Metin Üret
+                    </button>
+                  </div>
+                </div>
+
+                <div className="hashtag-set-panel">
+                  <div className="hashtag-set-header">
+                    <div>
+                      <strong># Hazır Etiket Kümeleri</strong>
+                      <span>Platforma özel kayıtlı etiketleri AI sonucuna ekler.</span>
+                    </div>
+                    <label className="hashtag-set-toggle">
+                      <input type="checkbox" checked={includeHashtagSets} onChange={(e) => setIncludeHashtagSets(e.target.checked)} />
+                      {includeHashtagSets ? "Açık" : "Kapalı"}
+                    </label>
+                  </div>
+                  {hashtagSets.length > 0 && (
+                    <div className="hashtag-set-chips">
+                      {hashtagSets.map((set) => {
+                        const selected = (selectedHashtagSetIds[set.platform] || []).includes(set.id);
+                        return <button key={set.id} type="button" className={`hashtag-set-chip ${selected ? "active" : ""}`}
+                          onClick={() => setSelectedHashtagSetIds((prev) => ({ ...prev, [set.platform]: selected ? (prev[set.platform] || []).filter((id) => id !== set.id) : [...(prev[set.platform] || []), set.id] }))}>
+                          <span>{set.platform} · {set.name}</span><small>{set.hashtags.length}</small>
+                          <X size={11} onClick={(event) => { event.stopPropagation(); void deleteHashtagSet(set.id); }} />
+                        </button>;
+                      })}
+                    </div>
+                  )}
+                  <div className="hashtag-set-create">
+                    <select value={newSetPlatform} onChange={(e) => setNewSetPlatform(e.target.value as HashtagSet["platform"])} className="custom-select">
+                      <option value="instagram">Instagram</option><option value="youtube">YouTube</option>
+                      <option value="tiktok">TikTok</option><option value="facebook">Facebook</option><option value="twitter">X</option>
+                    </select>
+                    <input value={newSetName} onChange={(e) => setNewSetName(e.target.value)} placeholder="Küme adı" className="custom-input" />
+                    <input value={newSetTags} onChange={(e) => setNewSetTags(e.target.value)} placeholder="#AtolyeHanem #RobotikKodlama" className="custom-input" />
+                    <button type="button" onClick={() => void createHashtagSet()} disabled={savingHashtagSet} className="button secondary compact">
+                      {savingHashtagSet ? <LoaderCircle size={12} className="spin" /> : <span>+</span>} Kaydet
                     </button>
                   </div>
                 </div>
