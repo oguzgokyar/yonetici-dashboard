@@ -1,0 +1,49 @@
+.music-provider-settings { margin-top:28px; min-width:0; }
+.music-section-heading { display:flex; align-items:center; gap:11px; margin-bottom:16px; color:var(--primary); }
+.music-section-heading>div { flex:1; min-width:0; }
+.music-section-heading h2 { margin:0 0 4px; color:var(--text); font:700 19px "Manrope",sans-serif; }
+.music-section-heading p { margin:0; color:var(--muted); font-size:11px; line-height:1.5; }
+.music-provider-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; align-items:start; }
+.music-provider-card,.music-provider-unlock { min-width:0; padding:24px; background:var(--surface); border:1px solid var(--border); border-radius:17px; }
+.music-provider-heading { display:flex; align-items:center; gap:12px; border-bottom:1px solid var(--border); padding-bottom:18px; }
+.music-provider-heading>div { min-width:0; }
+.music-provider-heading h3,.music-provider-unlock h3 { margin:0 0 5px; font:700 17px "Manrope",sans-serif; }
+.music-provider-heading p,.music-provider-unlock p { margin:0; font-size:11px; color:var(--muted); line-height:1.6; }
+.music-provider-icon { width:40px; height:40px; flex:none; display:grid; place-items:center; border-radius:12px; }
+.music-provider-icon.youtube { background:#fff0f0; color:#dc373f; }
+.music-provider-icon.instagram { background:#f8edfa; color:#b143af; }
+.music-provider-fields { display:grid; gap:16px; margin:18px 0; padding:0; border:0; min-width:0; }
+.music-provider-fields .field-label,.music-provider-unlock .field-label { font-size:11px; min-width:0; }
+.music-provider-fields input,.music-setup input { min-width:0; }
+.music-enabled { display:flex; gap:8px; align-items:center; color:#555866; font-size:12px; font-weight:600; }
+.music-enabled input { accent-color:var(--primary); width:16px; height:16px; }
+.music-field-note { color:var(--muted); font-size:10px; line-height:1.5; font-weight:400; }
+.music-details { border-top:1px solid var(--border); padding-top:14px; margin-top:14px; min-width:0; }
+.music-details summary { font-size:11px; font-weight:600; cursor:pointer; color:#6555e8; }
+.music-detail-fields { display:grid; gap:14px; padding-top:16px; }
+.music-setup { display:grid; gap:12px; margin-top:12px; color:var(--muted); font-size:11px; line-height:1.6; }
+.music-setup p { margin:0; }
+.music-setup small { font-size:10px; }
+.music-account-status { display:grid; gap:6px; padding:12px; border:1px solid var(--border); border-radius:11px; background:#fafafd; font-size:11px; color:#666977; overflow-wrap:anywhere; }
+.music-account-status strong { color:#454754; font-size:11px; }
+.music-account-status small { font-size:10px; line-height:1.5; }
+.music-account-picker { display:grid; gap:10px; margin-top:14px; }
+.music-account-picker select { width:100%; min-width:0; padding:11px; border:1px solid var(--border); border-radius:10px; background:white; color:var(--text); }
+.music-notice { margin:14px 0; padding:12px; border-radius:10px; font-size:11px; line-height:1.6; overflow-wrap:anywhere; }
+.music-notice.error { background:#fff3f3; color:#c94850; }
+.music-notice.success { background:#effaf5; color:#278862; }
+.music-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
+.music-actions .button { font-size:11px; }
+.music-lifecycle { display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:16px; padding-top:12px; border-top:1px solid var(--border); }
+.music-lifecycle button { padding:5px 0; border:0; background:none; font-size:10px; color:#737789; }
+.music-lifecycle button:disabled { opacity:.45; cursor:not-allowed; }
+.music-provider-unlock { max-width:650px; display:grid; gap:16px; }
+.music-provider-unlock .button { justify-self:start; }
+.music-provider-settings :focus-visible { outline:2px solid var(--primary); outline-offset:3px; }
+@media(max-width:760px) {
+  .music-provider-grid { grid-template-columns:minmax(0,1fr); gap:14px; }
+  .music-provider-card,.music-provider-unlock { padding:20px; }
+  .music-section-heading { flex-wrap:wrap; }
+  .music-actions { display:grid; grid-template-columns:minmax(0,1fr); }
+  .music-provider-unlock .button { width:100%; }
+}

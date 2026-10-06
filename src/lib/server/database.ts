@@ -36,6 +36,13 @@ function runMigrations(database: DatabaseSync) {
       used_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_content_ideas_project_created ON content_ideas(project_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS music_oauth_sessions (
+      state TEXT PRIMARY KEY,
+      binding TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      encrypted_payload TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS integration_configs (
       service TEXT PRIMARY KEY,
       enabled INTEGER NOT NULL DEFAULT 0,

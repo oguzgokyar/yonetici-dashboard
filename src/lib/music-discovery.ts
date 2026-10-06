@@ -35,4 +35,5 @@ export type MusicSearchResult = {
   items: MusicSearchItem[];
   status: "ok" | "empty" | "not-configured" | "unsupported" | "error";
   message: string;
+  nativeStatus?: MusicSearchResult["status"];
 };

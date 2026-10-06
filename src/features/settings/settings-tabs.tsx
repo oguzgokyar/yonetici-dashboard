@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Bot, Settings2 } from "lucide-react";
 import { AiProviders } from "@/features/settings/ai-providers";
+import { MusicProviderSettings } from "@/features/settings/music-provider-settings";
 import { SystemUpdates } from "@/features/settings/system-updates";
 
 type SettingsTab = "api" | "system";
@@ -17,7 +18,7 @@ export function SettingsTabs() {
     </div>
 
     <div role="tabpanel" aria-label={activeTab === "api" ? "API Yönetimi" : "Sistem"}>
-      {activeTab === "api" ? <AiProviders /> : <SystemUpdates />}
+      {activeTab === "api" ? <><AiProviders /><MusicProviderSettings /></> : <SystemUpdates />}
     </div>
   </div>;
 }

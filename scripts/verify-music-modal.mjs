@@ -1,5 +1,5 @@
 import { openBrowser } from '@remotion/renderer';
-const base='http://127.0.0.1:3199';
+const base=process.env.UI_SMOKE_BASE || 'http://127.0.0.1:3199';
 const projects=await fetch(base+'/api/projects').then(r=>r.json());
 if(!projects.length)throw Error('No project available for read-only UI smoke test');
 const browser=await openBrowser('chrome',{browserExecutable:'/opt/data/browsers/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell'});
@@ -18,12 +18,14 @@ try {
  await page.evaluate(()=>[...document.querySelectorAll('button')].find(e=>e.textContent.includes('Müzik keşfet')).click());
  await waitFor(()=>Boolean(document.querySelector('[role=dialog]')));
  await waitFor(()=>Boolean(document.querySelector('.music-discovery-item') || (document.querySelector('.music-discovery-notice') && !document.querySelector('.music-discovery-results[aria-busy=true]'))));
- console.log('desktop',await page.evaluate(()=>({tabs:[...document.querySelectorAll('[role=tab]')].map(e=>e.textContent),items:document.querySelectorAll('.music-discovery-item').length,selectable:[...document.querySelectorAll('.music-discovery-item button')].filter(e=>e.textContent==='Seç'&&!e.disabled).length,message:document.querySelector('.music-discovery-notice')?.textContent})));
+ console.log('desktop',await page.evaluate(()=>({tabs:[...document.querySelectorAll('[role=tab]')].map(e=>e.textContent),items:document.querySelectorAll('.music-discovery-item').length,message:document.querySelector('.music-discovery-notice')?.textContent})));
  await page.evaluate(()=>[...document.querySelectorAll('[role=tab]')].find(e=>e.textContent==='YouTube').click());
  await waitFor(()=>document.querySelector('[role=tab][aria-selected=true]')?.textContent==='YouTube');
+ await waitFor(()=>document.querySelectorAll('.music-discovery-item').length>0);
  await page.setViewport({width:390,height:844,deviceScaleFactor:1});
- const mobile=await page.evaluate(()=>({viewport:innerWidth,width:document.querySelector('[role=dialog]').getBoundingClientRect().width,overflow:document.documentElement.scrollWidth>innerWidth}));
+ const mobile=await page.evaluate(()=>({viewport:innerWidth,width:document.querySelector('[role=dialog]').getBoundingClientRect().width,overflow:document.documentElement.scrollWidth>innerWidth,rows:[...document.querySelectorAll('.music-discovery-item')].map(e=>({height:e.getBoundingClientRect().height,overflow:e.scrollWidth>e.clientWidth,hasParagraph:Boolean(e.querySelector('p'))}))}));
  if(mobile.overflow)throw Error('Mobile page overflows');
+ if(mobile.rows.some(row=>row.height>64 || row.overflow || row.hasParagraph))throw Error('Music rows must be compact one-line without explanations: '+JSON.stringify(mobile.rows));
  console.log('mobile',mobile);
  await page.evaluate(()=>document.querySelector('[aria-label=Kapat]').click());
  if(await page.evaluate(()=>Boolean(document.querySelector('[role=dialog]'))))throw Error('Dialog did not close');

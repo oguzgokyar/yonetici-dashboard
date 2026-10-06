@@ -7,6 +7,8 @@ registerHooks({ resolve(specifier, context, nextResolve) {
   if (specifier === 'server-only') return { url: 'data:text/javascript,export {};', shortCircuit: true };
   if (specifier === '@/lib/server/music-discovery') return { url: new URL('../src/lib/server/music-discovery.ts', import.meta.url).href, shortCircuit: true };
   if (specifier === '@/lib/server/database') return { url: 'data:text/javascript,export function getDatabase() { return { prepare() { return { get(id) { return id === "project-a" ? { id } : undefined; } }; } }; }', shortCircuit: true };
+  if (specifier === '@/lib/server/music-provider-config') return {url:'data:text/javascript,export function getMusicProviderStoredConfig() {return {source: "none",enabled:false,regionCode:"TR",apiKey:""};}',shortCircuit:true};
+  if (specifier === '@/lib/server/music-provider-oauth') return {url:'data:text/javascript,export async function getMusicProviderAccessToken() {return "";}',shortCircuit:true};
   if (specifier === './licensed-music') return { url: new URL('../src/lib/server/licensed-music.ts', import.meta.url).href, shortCircuit: true };
   return nextResolve(specifier, context);
 } });
@@ -150,3 +152,39 @@ test('HTTP search route returns project 404, invalid provider 400 and no-store r
   assert.ok(['unsupported', 'not-configured'].includes(body.status));
 });
 
+
+test('async credentials, selected region and native status survive licensed fallback', async()=>{
+ const result=await setup({getYouTubeKey:async()=> 'synthetic',getYouTubeRegion:()=> 'US',fetch:async url=>{assert.equal(new URL(url).searchParams.get('regionCode'),'US');return Response.json({items:[]});}}).searchMusic({projectId:'project-a',provider:'youtube'});
+ assert.equal(result.nativeStatus,'empty');
+});
+test('explicit provider test distinguishes official errors without diagnostics or licensed fetches',async()=>{
+ for(const [reason,code] of [['quotaExceeded','quota'],['keyInvalid','invalid-key'],['accessNotConfigured','permission']]){
+ const service=setup({getYouTubeKey:()=> 'synthetic',fetch:async()=>Response.json({error:{message:'sensitive',errors:[{reason}]}},{status:403})});
+ const result=await service.testConnection('youtube');
+ assert.equal(result.code,code);assert.doesNotMatch(JSON.stringify(result),/sensitive/);
+ }
+});
+
+test('disabled native provider never reads credentials or spends quota',async()=>{
+ const service=setup({isEnabled:()=>false,getYouTubeKey:()=>{throw Error('must not read');}});
+ assert.equal((await service.testConnection('youtube')).code,'disabled');
+ assert.equal((await service.searchMusic({projectId:'project-a',provider:'youtube'})).nativeStatus,'not-configured');
+});
+test('credential refresh failure is redacted in search',async()=>{
+ const result=await setup({getInstagramCredentials:async()=>{throw Error('secret-refresh');}}).searchMusic({projectId:'project-a',provider:'instagram'});
+ assert.equal(result.nativeStatus,'error');assert.doesNotMatch(result.message,/secret-refresh/);
+});
+test('YouTube OAuth-only discovery uses bearer not token query parameters',async()=>{
+ const service=setup({getYouTubeAccessToken:async()=> 'synthetic-oauth',fetch:async(url,init)=>{assert.equal(new URL(url).searchParams.has('key'),false);assert.equal(init.headers.Authorization,'Bearer synthetic-oauth');return Response.json({items:[]});}});
+ assert.equal((await service.testConnection('youtube')).code,'ok');
+});
+
+test('expired stored token test requests reconnect without network',async()=>{
+ const service=setup({getTokenExpiresAt:()=> '2000-01-01T00:00:00Z',getInstagramCredentials:()=>{throw Error('must not read expired token');}});
+ assert.equal((await service.testConnection('instagram')).code,'expired');
+});
+
+test('expired Google token with failed refresh is distinguished from provider outage',async()=>{
+ const service=setup({getTokenExpiresAt:()=> '2000-01-01T00:00:00Z',getYouTubeAccessToken:async()=>{throw Error('synthetic-refresh-failure');}});
+ assert.equal((await service.testConnection('youtube')).code,'expired');
+});
