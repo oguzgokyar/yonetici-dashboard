@@ -762,7 +762,7 @@ export function PublishingStudio({
         tiktokSettings: isTt
           ? {
               title: (rawTitle || "Video Paylaşımı").slice(0, 90),
-              content_posting_method: "UPLOAD" as const,
+              content_posting_method: "DIRECT_POST" as const,
               privacy_level: "SELF_ONLY" as const,
               video_made_with_ai: true,
             }

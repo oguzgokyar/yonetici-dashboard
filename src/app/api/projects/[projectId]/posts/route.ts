@@ -610,15 +610,116 @@ export async function PATCH(request: Request, context: Context) {
   const scheduleType = body.scheduleType !== undefined ? body.scheduleType : (existing.schedule_type as string);
   const scheduledAt = body.scheduledAt !== undefined ? body.scheduledAt : (existing.scheduled_at as string | null);
   const postType = body.postType !== undefined ? body.postType : (existing.post_type as string);
+
+  let postizPostId = (existing.postiz_post_id as string) || null;
+  let finalStatus = status;
+  let errorMessage = (existing.error_message as string) || null;
+
+  // If transitioning to scheduled but missing Postiz postId (e.g. failed/draft recovery), create in Postiz now
+  if (
+    status === "scheduled" &&
+    !postizPostId &&
+    existing.integration_id &&
+    (existing.media_url || existing.postiz_media_id)
+  ) {
+    try {
+      const targetAccount = database
+        .prepare("SELECT identifier FROM project_social_accounts WHERE project_id=? AND integration_id=?")
+        .get(projectId, existing.integration_id as string) as { identifier?: string } | undefined;
+      const platformIdentifier = targetAccount?.identifier || "instagram";
+
+      let fullCaption = caption;
+      if (hashtags) {
+        const formattedTags = hashtags
+          .split(/[\s,]+/)
+          .map((t) => (t.startsWith("#") ? t : `#${t}`))
+          .join(" ");
+        fullCaption = `${caption}\n\n${formattedTags}`.trim();
+      }
+
+      const isYt = Boolean(platformIdentifier.includes("youtube"));
+      const isTt = Boolean(platformIdentifier.includes("tiktok"));
+
+      const ytTags = hashtags
+        ? hashtags.split(/\s+/).map((t) => t.trim().replace(/^#+/, "").trim()).filter(Boolean)
+        : [];
+
+      const postizMedia = existing.postiz_media_id
+        ? [{ id: existing.postiz_media_id as string, path: (existing.media_url as string) || "" }]
+        : [];
+
+      const postizResult = await createPostizPost({
+        type: scheduleType === "now" || scheduleType === "draft" ? scheduleType : "schedule",
+        date: scheduledAt || (existing.scheduled_at as string | undefined),
+        integrationId: existing.integration_id as string,
+        platformIdentifier,
+        caption: fullCaption,
+        media: postizMedia,
+        postType: (postType || "post") as "post" | "reel" | "story",
+        youtubeSettings: isYt
+          ? {
+              title: title.slice(0, 100),
+              type: "public",
+              selfDeclaredMadeForKids: "no",
+              tags: ytTags,
+            }
+          : undefined,
+        tiktokSettings: isTt
+          ? {
+              title: title.slice(0, 90),
+              content_posting_method: "DIRECT_POST",
+              privacy_level: "SELF_ONLY",
+              video_made_with_ai: true,
+            }
+          : undefined,
+      });
+
+      if (postizResult[0]?.postId) {
+        postizPostId = postizResult[0].postId;
+        errorMessage = null;
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      finalStatus = "failed";
+      errorMessage = `Postiz Gönderi Hatası: ${errMsg}`;
+      const now = new Date().toISOString();
+      database
+        .prepare(`
+          UPDATE content_posts
+          SET status = 'failed', error_message = ?, updated_at = ?
+          WHERE id = ? AND project_id = ?
+        `)
+        .run(errorMessage, now, body.id, projectId);
+
+      return Response.json(
+        { ok: false, message: `Postiz'de zamanlanamadı: ${errMsg}` },
+        { status: 500 }
+      );
+    }
+  }
+
   const now = new Date().toISOString();
 
   database
     .prepare(`
       UPDATE content_posts
-      SET title = ?, caption = ?, hashtags = ?, status = ?, schedule_type = ?, scheduled_at = ?, post_type = ?, updated_at = ?
+      SET title = ?, caption = ?, hashtags = ?, status = ?, schedule_type = ?, scheduled_at = ?, post_type = ?, postiz_post_id = ?, error_message = ?, updated_at = ?
       WHERE id = ? AND project_id = ?
     `)
-    .run(title, caption, hashtags, status, scheduleType, scheduledAt, postType, now, body.id, projectId);
+    .run(
+      title,
+      caption,
+      hashtags,
+      finalStatus,
+      scheduleType,
+      scheduledAt || null,
+      postType,
+      postizPostId || null,
+      errorMessage || null,
+      now,
+      body.id,
+      projectId
+    );
 
   return Response.json({
     ok: true,
@@ -628,10 +729,11 @@ export async function PATCH(request: Request, context: Context) {
       title,
       caption,
       hashtags,
-      status,
+      status: finalStatus,
       scheduleType,
       scheduledAt,
       postType,
+      postizPostId,
       updatedAt: now,
     },
   });
