@@ -13,12 +13,21 @@ const POSTIZ_SERVICE_UUID = "e1k5a86lpapxf1hjjsqervzi";
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
-    action?: "sync" | "purge_stuck" | "restart_service" | "health_details";
+    action?: "sync" | "purge_stuck" | "restart_service" | "health_details" | "raw_posts";
     projectId?: string;
   };
 
   const action = body.action || "sync";
   const database = getDatabase();
+
+  if (action === "raw_posts") {
+    try {
+      const posts = await fetchPostizPosts();
+      return Response.json({ ok: true, posts });
+    } catch (e) {
+      return Response.json({ ok: false, error: String(e) }, { status: 500 });
+    }
+  }
 
   // -------------------------------------------------------------
   // 1. SYNC ACTION
