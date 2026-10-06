@@ -4,8 +4,13 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
+import { getStockTimeline } from "@/lib/stock-timeline";
+import { parseStockVideoProbe } from "@/lib/stock-render-timing";
 import { getDatabase } from "@/lib/server/database";
 import { ensureCachedVideo } from "@/lib/server/google-drive";
+import type { MusicSelection } from "@/lib/music-discovery";
+import { resolveEmbeddableMusic } from "@/lib/server/music-discovery";
+import { withTransientMusic, mixMusicIntoVideo } from "@/lib/server/transient-music";
 
 const execFileAsync = promisify(execFile);
 
@@ -33,6 +38,7 @@ export type RenderStockVideoOptions = {
   customOverlayId?: string;
   outroId?: string;
   musicTrack?: string;
+  musicSelection?: MusicSelection;
   originalVolume?: number;
   musicVolume?: number;
   maxDurationSeconds?: number;
@@ -53,6 +59,15 @@ export type RenderedStockVideoResult = {
 export async function renderFramedStockVideo(
   options: RenderStockVideoOptions
 ): Promise<RenderedStockVideoResult> {
+  if (options.musicSelection) {
+    const verified = await resolveEmbeddableMusic(options.projectId, options.musicSelection);
+    const verifiedOptions = { ...options, musicSelection: { track: verified, offsetSeconds: options.musicSelection.offsetSeconds } };
+    return withTransientMusic(verified.downloadUrl, (localMusicPath) => renderStockVideoCore(verifiedOptions, localMusicPath));
+  }
+  return renderStockVideoCore(options);
+}
+
+async function renderStockVideoCore(options: RenderStockVideoOptions, transientMusicPath?: string): Promise<RenderedStockVideoResult> {
   const db = getDatabase();
   const projectDir = process.cwd();
   const outputDir = path.join(projectDir, ".data", "video-renders");
@@ -112,41 +127,23 @@ export async function renderFramedStockVideo(
   // Ensure local video is cached
   const { localPath } = await ensureCachedVideo(stockRow.drive_file_id, options.projectId);
 
-  // Probe if source video contains an audio stream and check real video duration
-  let hasSourceAudio = false;
-  let sourceDurationSeconds = typeof stockRow.duration_seconds === "number" && stockRow.duration_seconds > 0
-    ? stockRow.duration_seconds
-    : 0;
-
-  try {
-    const probeRes = await execFileAsync("/usr/bin/ffprobe", [
-      "-v", "error",
-      "-show_entries", "stream=codec_type:format=duration",
-      "-of", "default=noprint_wrappers=1:nokey=1",
-      localPath,
+  // Probe failures are fatal: stale database metadata must never substitute for the file.
+  const probeVideo = async (file: string) => {
+    const result = await execFileAsync("/usr/bin/ffprobe", [
+      "-v", "error", "-show_entries", "stream=codec_type,duration:format=duration", "-of", "json", file,
     ]);
-    const probeOutput = probeRes.stdout.trim().toLowerCase();
-    hasSourceAudio = probeOutput.includes("audio");
-
-    // Extract duration from probe output lines
-    const lines = probeRes.stdout.trim().split("\n");
-    for (const line of lines) {
-      const parsed = parseFloat(line.trim());
-      if (!isNaN(parsed) && parsed > 0) {
-        sourceDurationSeconds = Math.round(parsed);
-        break;
-      }
+    return parseStockVideoProbe(JSON.parse(result.stdout));
+  };
+  const sourceProbe = await probeVideo(localPath);
+  const hasSourceAudio = sourceProbe.hasAudio;
+  const sourceDurationSeconds = sourceProbe.durationSeconds;
+  const outroProbe = hasOutro && outroRow?.local_path ? await probeVideo(outroRow.local_path) : undefined;
+  if (stockRow.duration_seconds !== sourceDurationSeconds) {
+    try {
+      db.prepare("UPDATE stock_videos SET duration_seconds = ? WHERE id = ?").run(sourceDurationSeconds, stockRow.id);
+    } catch {
+      // Cache metadata updates are best effort, actual file probing is not.
     }
-
-    if (sourceDurationSeconds > 0 && (!stockRow.duration_seconds || stockRow.duration_seconds <= 0)) {
-      try {
-        db.prepare("UPDATE stock_videos SET duration_seconds = ? WHERE id = ?").run(sourceDurationSeconds, stockRow.id);
-      } catch {
-        // ignore db update error
-      }
-    }
-  } catch {
-    hasSourceAudio = false;
   }
 
   // Fetch project brand info for default colors / logo
@@ -161,7 +158,7 @@ export async function renderFramedStockVideo(
   const accentColor = options.accentColor || brand.primaryColor || "#6d5dfc";
   const frameStyle = options.frameStyle || "blur_padding";
   const logoPosition = options.logoPosition || "top_right";
-  const originalVol = typeof options.originalVolume === "number" ? options.originalVolume : 1.0;
+  const originalVol = transientMusicPath ? 1 : typeof options.originalVolume === "number" ? options.originalVolume : 1.0;
   const musicVol = typeof options.musicVolume === "number" ? options.musicVolume : 0.5;
 
   // Frame Style Geometry & Shadows to match Remotion preview
@@ -467,7 +464,7 @@ export async function renderFramedStockVideo(
 
   // Audio configuration
   let musicAudioPath = "";
-  if (options.musicTrack && options.musicTrack !== "none") {
+  if (!transientMusicPath && options.musicTrack && options.musicTrack !== "none") {
     let resolved = options.musicTrack;
     if (resolved.startsWith("/")) {
       resolved = path.join(projectDir, "public", resolved);
@@ -482,25 +479,16 @@ export async function renderFramedStockVideo(
     }
   }
 
-  // 1b. Video Trimming (baştan ve sondan kesme) calculations
-  const rawTrimStart = typeof options.trimStartSeconds === "number" ? Math.max(0, options.trimStartSeconds) : 0;
-  const rawTrimEnd = typeof options.trimEndSeconds === "number" ? Math.max(0, options.trimEndSeconds) : 0;
-
-  let trimStart = rawTrimStart;
-  let trimDuration: number | null = null;
-
-  if (sourceDurationSeconds > 0) {
-    const maxTrim = Math.max(0, sourceDurationSeconds - 1);
-    if (trimStart > maxTrim) trimStart = maxTrim;
-
-    const remainingAfterStart = Math.max(1, sourceDurationSeconds - trimStart);
-    const validTrimEnd = Math.min(rawTrimEnd, remainingAfterStart - 1);
-    const calculatedDuration = remainingAfterStart - validTrimEnd;
-
-    if (calculatedDuration > 0 && (trimStart > 0 || validTrimEnd > 0)) {
-      trimDuration = Math.round(calculatedDuration);
-    }
-  }
+  // The preview and renderer share the same whole-frame trim boundaries.
+  const rawTrimEnd = options.trimEndSeconds ?? 0;
+  const timeline = getStockTimeline({
+    sourceDurationSeconds, trimStartSeconds: options.trimStartSeconds,
+    trimEndSeconds: options.trimEndSeconds, hasOutro,
+    outroDurationSeconds: outroProbe?.durationSeconds,
+  });
+  if (!timeline) throw new Error("Video zaman çizelgesi belirlenemedi.");
+  const trimStart = timeline.trimStartSeconds;
+  const trimDuration = timeline.mainDurationSeconds;
 
   // Build FFmpeg inputs and filter complex
   const inputs: string[] = [];
@@ -609,26 +597,23 @@ export async function renderFramedStockVideo(
       filterParts.push(`[${musicInputIdx}:a]volume=${musicVol}[out_a]`);
       audioMapArgs.push("-map", "[out_a]");
     }
-  } else if (hasSourceAudio && originalVol > 0) {
-    audioMapArgs.push("-map", "0:a");
+  } else if (hasSourceAudio) {
+    filterParts.push(`[0:a:0]volume=${originalVol},apad[out_a]`);
+    audioMapArgs.push("-map", "[out_a]");
   }
 
-  const baseDuration = trimDuration !== null && trimDuration > 0
-    ? trimDuration
-    : (sourceDurationSeconds > 0 ? sourceDurationSeconds : 0);
+  const maxDuration = options.maxDurationSeconds;
+  const effectiveDuration = typeof maxDuration === "number" && Number.isFinite(maxDuration) && maxDuration > 0
+    ? Math.min(trimDuration, Math.max(1, Math.floor(maxDuration * timeline.fps)) / timeline.fps)
+    : trimDuration;
 
-  const effectiveDuration = (typeof options.maxDurationSeconds === "number" && options.maxDurationSeconds > 0)
-    ? Math.min(options.maxDurationSeconds, baseDuration > 0 ? baseDuration : options.maxDurationSeconds)
-    : baseDuration;
-
-  if (hasOutro) {
+  if (hasOutro && audioMapArgs.length === 0) {
     const silentAudioIdx = filterStreamIdx++;
-    inputs.push("-f", "lavfi", "-t", String(effectiveDuration > 0 ? effectiveDuration : 300), "-i", "anullsrc=r=44100:cl=stereo");
-    audioMapArgs.push("-map", `${silentAudioIdx}:a`);
+    inputs.push("-f", "lavfi", "-t", String(effectiveDuration), "-i", "anullsrc=r=44100:cl=stereo");
+    audioMapArgs.push("-map", `${silentAudioIdx}:a:0`);
   }
 
-  const durationArgs = effectiveDuration > 0 && trimDuration === null ? ["-t", String(effectiveDuration)] : [];
-  const durationLimit = effectiveDuration > 0 ? effectiveDuration : (sourceDurationSeconds || 30);
+  const durationArgs = ["-t", String(effectiveDuration), "-r", String(timeline.fps)];
 
   const ffmpegArgs: string[] = [
     "-y",
@@ -702,52 +687,26 @@ export async function renderFramedStockVideo(
     // If outro exists, concatenate main video with outro
     if (hasOutro && outroRow?.local_path) {
       const outroPath = outroRow.local_path;
+      const outroDuration = timeline.outroDurationInFrames / timeline.fps;
       try {
+        const concatInputs = ["-i", mainStageOutput, "-i", outroPath];
+        if (!outroProbe?.hasAudio) {
+          concatInputs.push("-f", "lavfi", "-t", String(outroDuration), "-i", "anullsrc=r=44100:cl=stereo");
+        }
+        const videoFilter = (index: number, duration: number) =>
+          `[${index}:v:0]trim=duration=${duration},setpts=PTS-STARTPTS,scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=${timeline.fps},setsar=1[v${index}]`;
+        const audioFilter = (input: number, output: number, duration: number) =>
+          `[${input}:a:0]aformat=sample_rates=44100:channel_layouts=stereo,apad,atrim=duration=${duration},asetpts=PTS-STARTPTS[a${output}]`;
         const concatArgs = [
-          "-y",
-          "-i", mainStageOutput,
-          "-i", outroPath,
-          "-filter_complex",
-          "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=30,setsar=1[v0];" +
-          "[1:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=30,setsar=1[v1];" +
-          "[0:a]aformat=sample_rates=44100:channel_layouts=stereo[a0];" +
-          "[1:a]aformat=sample_rates=44100:channel_layouts=stereo[a1];" +
-          "[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a]",
-          "-map", "[v]",
-          "-map", "[a]",
-          "-c:v", "libx264",
-          "-preset", "veryfast",
-          "-crf", "22",
-          "-c:a", "aac",
-          "-b:a", "192k",
-          "-movflags", "+faststart",
-          outputLocation,
+          "-y", ...concatInputs, "-filter_complex",
+          [videoFilter(0, effectiveDuration), videoFilter(1, outroDuration),
+            audioFilter(0, 0, effectiveDuration), audioFilter(outroProbe?.hasAudio ? 1 : 2, 1, outroDuration),
+            "[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a]"].join(";"),
+          "-map", "[v]", "-map", "[a]", "-t", String(effectiveDuration + outroDuration),
+          "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p",
+          "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", outputLocation,
         ];
         await execFileAsync("/usr/bin/ffmpeg", concatArgs, { cwd: projectDir, timeout: 180000 });
-      } catch {
-        // Fallback with silent audio for outro if it lacks an audio stream
-        const fallbackArgs = [
-          "-y",
-          "-i", mainStageOutput,
-          "-i", outroPath,
-          "-f", "lavfi", "-t", "30", "-i", "anullsrc=r=44100:cl=stereo",
-          "-filter_complex",
-          "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=30,setsar=1[v0];" +
-          "[1:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=30,setsar=1[v1];" +
-          "[0:a]aformat=sample_rates=44100:channel_layouts=stereo[a0];" +
-          "[2:a]aformat=sample_rates=44100:channel_layouts=stereo[a1];" +
-          "[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a]",
-          "-map", "[v]",
-          "-map", "[a]",
-          "-c:v", "libx264",
-          "-preset", "veryfast",
-          "-crf", "22",
-          "-c:a", "aac",
-          "-b:a", "192k",
-          "-movflags", "+faststart",
-          outputLocation,
-        ];
-        await execFileAsync("/usr/bin/ffmpeg", fallbackArgs, { cwd: projectDir, timeout: 180000 });
       } finally {
         if (fs.existsSync(mainStageOutput)) {
           fs.rmSync(mainStageOutput, { force: true });
@@ -755,12 +714,25 @@ export async function renderFramedStockVideo(
       }
     }
 
+    if (transientMusicPath && options.musicSelection) {
+      await mixMusicIntoVideo({
+        videoPath: outputLocation,
+        musicPath: transientMusicPath,
+        offsetSeconds: options.musicSelection.offsetSeconds,
+        musicVolume: musicVol,
+        originalVolume: typeof options.originalVolume === "number" ? options.originalVolume : 1,
+        outroIncluded: hasOutro,
+      });
+    }
+    const finalDuration = (await probeVideo(outputLocation)).durationSeconds;
+    if (!Number.isFinite(finalDuration) || finalDuration <= 0) throw new Error("Üretilen videonun süresi doğrulanamadı.");
     const finalUrl = `/api/videos/${renderId}`;
     const resultMetadata = {
       ...sourceMetadata,
       headline: titleText,
       subtitle: subText,
       sourceStockVideoId: stockRow.id,
+      ...(options.musicSelection ? { music: { provider: options.musicSelection.track.provider, trackId: options.musicSelection.track.id, title: options.musicSelection.track.title, offsetSeconds: options.musicSelection.offsetSeconds, attribution: options.musicSelection.track.attribution || "", storage: "transient" } } : {}),
     };
 
     db.prepare(`
@@ -771,7 +743,7 @@ export async function renderFramedStockVideo(
       JSON.stringify({
         url: finalUrl,
         title: videoTitle,
-        durationSeconds: durationLimit,
+        durationSeconds: finalDuration,
         frameStyle,
         metadata: resultMetadata,
       }),
@@ -783,7 +755,7 @@ export async function renderFramedStockVideo(
       id: renderId,
       url: finalUrl,
       title: videoTitle,
-      durationSeconds: durationLimit,
+      durationSeconds: finalDuration,
       frameStyle,
       metadata: resultMetadata,
       createdAt: new Date().toISOString(),

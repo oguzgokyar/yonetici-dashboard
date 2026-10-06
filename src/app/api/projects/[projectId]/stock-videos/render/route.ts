@@ -1,4 +1,7 @@
 import { renderFramedStockVideo, type FrameStyle } from "@/lib/server/stock-video-renderer";
+import type { MusicSelection } from "@/lib/music-discovery";
+import { validateMusicSelection } from "@/lib/music-discovery";
+import { MusicDiscoveryError } from "@/lib/server/music-discovery";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -29,6 +32,7 @@ export async function POST(
     customOverlayId?: string;
     outroId?: string;
     musicTrack?: string;
+    musicSelection?: MusicSelection;
     originalVolume?: number;
     musicVolume?: number;
     maxDurationSeconds?: number;
@@ -44,6 +48,10 @@ export async function POST(
   }
 
   try {
+    if (body.musicSelection) {
+      try { validateMusicSelection(body.musicSelection); }
+      catch { return Response.json({ ok: false, message: "Geçersiz müzik seçimi veya başlangıç noktası." }, { status: 400 }); }
+    }
     const result = await renderFramedStockVideo({
       projectId,
       stockVideoId: body.stockVideoId,
@@ -66,6 +74,7 @@ export async function POST(
       customOverlayId: body.customOverlayId,
       outroId: body.outroId,
       musicTrack: body.musicTrack,
+      musicSelection: body.musicSelection,
       originalVolume: body.originalVolume,
       musicVolume: body.musicVolume,
       maxDurationSeconds: typeof body.maxDurationSeconds === "number" && body.maxDurationSeconds > 0 ? body.maxDurationSeconds : undefined,
@@ -76,6 +85,6 @@ export async function POST(
     return Response.json({ ok: true, video: result });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, message: msg }, { status: 500 });
+    return Response.json({ ok: false, message: msg }, { status: err instanceof MusicDiscoveryError ? err.statusCode : 500 });
   }
 }

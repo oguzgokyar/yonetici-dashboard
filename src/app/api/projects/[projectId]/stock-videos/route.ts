@@ -97,7 +97,7 @@ export async function GET(
         name: r.name,
         sizeBytes: r.size_bytes,
         mimeType: r.mime_type,
-        thumbnailUrl: r.thumbnail_url || undefined,
+        thumbnailUrl: `/api/projects/${encodeURIComponent(projectId)}/stock-videos/${encodeURIComponent(r.id)}/poster?v=${encodeURIComponent(r.updated_at)}`,
         durationSeconds: r.duration_seconds || 0,
         width: r.width || 0,
         height: r.height || 0,

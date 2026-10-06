@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -26,7 +26,7 @@ import {
   Trash2,
   Type,
   Video,
-  Volume2,
+
   X,
 } from "lucide-react";
 import { useProjects } from "@/features/projects/projects-context";
@@ -35,6 +35,9 @@ import { DriveSettingsModal } from "./drive-settings-modal";
 import { OutroLibraryModal } from "./outro-library-modal";
 import { OverlayLibraryModal } from "./overlay-library-modal";
 import { StockAccordionSection } from "./stock-accordion-section";
+import { MusicDiscoveryModal } from "./music-discovery-modal";
+import { getStockTimeline } from "@/lib/stock-timeline";
+import type { MusicSelection } from "@/lib/music-discovery";
 import type { DriveConfig, OutroItem, OverlayItem } from "./types";
 
 type StockVideoItem = {
@@ -92,6 +95,37 @@ const frameStyles: { id: StockFrameStyle; name: string; desc: string }[] = [
 ];
 
 
+// Native metadata probe; a detached element never starts playback or paints a frame.
+function useMediaDuration(src: string | undefined, knownDuration: number | undefined) {
+  const [measurement, setMeasurement] = useState<{ src: string; duration?: number; failed?: boolean } | null>(null);
+  const known = typeof knownDuration === "number" && Number.isFinite(knownDuration) && knownDuration > 0 ? knownDuration : undefined;
+  useEffect(() => {
+    if (!src || known) return;
+    let active = true;
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.muted = true;
+    const finish = () => {
+      if (!active) return;
+      const duration = video.duration;
+      setMeasurement({ src, duration: Number.isFinite(duration) && duration > 0 ? duration : undefined, failed: !Number.isFinite(duration) || duration <= 0 });
+    };
+    video.addEventListener("loadedmetadata", finish);
+    const fail = () => { if (active) setMeasurement({ src, failed: true }); };
+    video.addEventListener("error", fail);
+    video.src = src;
+    video.load();
+    return () => {
+      active = false;
+      video.removeEventListener("loadedmetadata", finish);
+      video.removeEventListener("error", fail);
+      video.removeAttribute("src");
+      video.load();
+    };
+  }, [src, known]);
+  return { duration: known ?? (measurement?.src === src ? measurement?.duration : undefined), failed: !known && measurement?.src === src && measurement?.failed };
+}
+
 export function StockVideosStudio({ projectId }: { projectId: string }) {
   const { getProject } = useProjects();
   const project = getProject(projectId);
@@ -127,7 +161,9 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
     "top_left" | "top_right" | "bottom_left" | "bottom_right" | "bottom_center" | "none"
   >("top_right");
   const [logoSize, setLogoSize] = useState<number>(130);
-  const [musicTrack, setMusicTrack] = useState<string>("/audio/ambient_track.mp3");
+  const [musicTrack, setMusicTrack] = useState<string>("none");
+  const [musicSelection, setMusicSelection] = useState<MusicSelection | null>(null);
+  const [musicModalOpen, setMusicModalOpen] = useState(false);
   const [originalVolume, setOriginalVolume] = useState<number>(1);
   const [musicVolume, setMusicVolume] = useState<number>(0.4);
 
@@ -162,12 +198,28 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
   const [driveAccountLabel, setDriveAccountLabel] = useState("Drive hesabı");
   const [outroModalOpen, setOutroModalOpen] = useState(false);
   const [overlayModalOpen, setOverlayModalOpen] = useState(false);
-  const [openCustomizerSection, setOpenCustomizerSection] = useState("frame");
+  const [openCustomizerSection, setOpenCustomizerSection] = useState("");
 
   const brandColor = project?.brand.primaryColor || "#6d5dfc";
   const brandLogo = project?.brand.logo || "";
 
+  const loadRequestRef = useRef(0);
+  const hydratedProjectRef = useRef<string | null>(null);
+  const selectedVideoRef = useRef("");
+  const selectVideo = useCallback((id: string) => {
+    if (selectedVideoRef.current === id) return;
+    selectedVideoRef.current = id;
+    setSelectedVideoId(id);
+    setTrimStartSeconds(0);
+    setTrimEndSeconds(0);
+    setMusicSelection(null);
+    setOpenCustomizerSection("");
+  }, []);
+  const [failedThumbnails, setFailedThumbnails] = useState<Record<string, string>>({});
+
   const loadData = useCallback(async () => {
+    const request = ++loadRequestRef.current;
+    const hydrateSettings = hydratedProjectRef.current !== projectId;
     try {
       const [stockRes, vidRes, settingsRes, driveRes] = await Promise.all([
         fetch(`/api/projects/${projectId}/stock-videos`, { cache: "no-store" }),
@@ -176,25 +228,30 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
         fetch(`/api/projects/${projectId}/stock-videos/drive-accounts`, { cache: "no-store" }),
       ]);
 
+      if (request !== loadRequestRef.current) return;
       if (stockRes.ok) {
         const stockData = await stockRes.json();
+        if (request !== loadRequestRef.current) return;
         setVideos(stockData.videos || []);
         setConfig(stockData.config);
-        if (stockData.videos?.length > 0 && !selectedVideoId) {
-          setSelectedVideoId(stockData.videos[0].id);
+        if (!stockData.videos?.some((video: StockVideoItem) => video.id === selectedVideoRef.current)) {
+          selectVideo(stockData.videos?.[0]?.id || "");
         }
       }
 
       if (vidRes.ok) {
         const vidData = await vidRes.json();
+        if (request !== loadRequestRef.current) return;
         setRenderedVideos(vidData.videos || []);
       }
 
       if (settingsRes.ok) {
         const sData = await settingsRes.json();
+        if (request !== loadRequestRef.current) return;
         if (sData.outros) setOutros(sData.outros);
         if (sData.overlays) setOverlays(sData.overlays);
-        if (sData.settings) {
+        if (hydrateSettings && sData.settings) {
+          hydratedProjectRef.current = projectId;
           const s = sData.settings;
           if (s.frameStyle) setFrameStyle(s.frameStyle);
           if (s.headlineColor) setHeadlineColor(s.headlineColor);
@@ -218,17 +275,19 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
 
       if (driveRes.ok) {
         const driveData = await driveRes.json();
+        if (request !== loadRequestRef.current) return;
         const selected = (driveData.accounts || []).find(
           (account: { selectedForProject?: boolean }) => account.selectedForProject,
         );
         setDriveAccountLabel(selected?.label || driveData.systemAccount?.displayName || "Drive hesabı");
       }
     } catch {
+      if (request !== loadRequestRef.current) return;
       setFeedback("Stok videolar ve ayarlar yüklenirken bir hata oluştu.");
     } finally {
-      setLoading(false);
+      if (request === loadRequestRef.current) setLoading(false);
     }
-  }, [projectId, selectedVideoId]);
+  }, [projectId, selectVideo]);
 
   async function handleSaveSettings() {
     setSavingSettings(true);
@@ -366,7 +425,8 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadData();
+    void loadData();
+    return () => { loadRequestRef.current += 1; };
   }, [loadData]);
 
   useEffect(() => {
@@ -381,9 +441,19 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
 
   // Selected video object
   const selectedVideo = useMemo(
-    () => videos.find((v) => v.id === selectedVideoId) || videos[0] || null,
+    () => videos.find((v) => v.id === selectedVideoId) || null,
     [videos, selectedVideoId]
   );
+
+  const selectedOutro = outros.find((outro) => outro.id === selectedOutroId);
+  const sourceMetadata = useMediaDuration(selectedVideo?.streamUrl, selectedVideo?.durationSeconds);
+  const outroMetadata = useMediaDuration(selectedOutro?.videoUrl, selectedOutro?.durationSeconds);
+  const mainTimeline = getStockTimeline({ sourceDurationSeconds: sourceMetadata.duration, trimStartSeconds, trimEndSeconds });
+  const timeline = selectedOutroId && !selectedOutro ? null : getStockTimeline({
+    sourceDurationSeconds: sourceMetadata.duration, trimStartSeconds, trimEndSeconds,
+    hasOutro: Boolean(selectedOutroId), outroDurationSeconds: outroMetadata.duration,
+  });
+  const durationLabel = (duration: number | undefined) => duration === undefined ? "Süre bekleniyor" : `${duration.toFixed(2)}s`;
 
   // Filtered videos
   const filteredVideos = useMemo(() => {
@@ -425,7 +495,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
 
   // Render framed video
   async function handleRender() {
-    if (!selectedVideo) return;
+    if (!selectedVideo || !timeline) return;
     setRendering(true);
     setFeedback(null);
     try {
@@ -453,11 +523,12 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
           customOverlayId: selectedOverlayId || undefined,
           outroId: selectedOutroId || undefined,
           musicTrack: musicTrack !== "none" ? musicTrack : undefined,
+          musicSelection: musicSelection || undefined,
           originalVolume,
-          musicVolume: musicTrack !== "none" ? musicVolume : 0,
-          trimStartSeconds: trimStartSeconds > 0 ? trimStartSeconds : 0,
-          trimEndSeconds: trimEndSeconds > 0 ? trimEndSeconds : 0,
-          maxDurationSeconds: selectedVideo.durationSeconds && selectedVideo.durationSeconds > 0 ? selectedVideo.durationSeconds : undefined,
+          musicVolume: musicSelection || musicTrack !== "none" ? musicVolume : 0,
+          trimStartSeconds: timeline.trimStartSeconds,
+          trimEndSeconds: timeline.trimEndSeconds,
+          maxDurationSeconds: timeline.mainDurationSeconds,
         }),
       });
 
@@ -646,21 +717,23 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                       const isSelected = selectedVideo?.id === item.id;
                       const mins = Math.floor(item.durationSeconds / 60);
                       const secs = item.durationSeconds % 60;
-                      const durationLabel = `${mins > 0 ? `${mins}m ` : ""}${secs}s`;
+                      const durationLabel = item.durationSeconds > 0 ? `${mins > 0 ? `${mins}m ` : ""}${secs.toFixed(1)}s` : "Süre bilinmiyor";
 
                       return (
                         <article
                           key={item.id}
                           className={`stock-video-card ${isSelected ? "selected" : ""}`}
-                          onClick={() => setSelectedVideoId(item.id)}
+                          onClick={() => selectVideo(item.id)}
                         >
                           <div className="stock-thumb-wrap">
-                            {item.thumbnailUrl ? (
+                            {item.thumbnailUrl && failedThumbnails[item.id] !== item.thumbnailUrl ? (
                               <Image
                                 src={item.thumbnailUrl}
                                 alt={item.name}
                                 fill
                                 sizes="(max-width: 768px) 50vw, 240px"
+                                loading="lazy"
+                                onError={() => setFailedThumbnails((current) => ({ ...current, [item.id]: item.thumbnailUrl! }))}
                                 unoptimized
                               />
                             ) : (
@@ -703,7 +776,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                                 className={`stock-btn-edit ${isSelected ? "active" : ""}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setSelectedVideoId(item.id);
+                                  selectVideo(item.id);
                                 }}
                               >
                                 <Sparkles size={12} />
@@ -819,10 +892,13 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
               {/* Live Remotion Preview */}
               <div className="remotion-stage-wrap">
                 <div className="remotion-player-box">
-                  <Player
+                  {timeline ? <Player
+                    key={`${projectId}:${selectedVideo.id}:${selectedVideo.streamUrl}:${selectedOutroId}:${timeline.trimStartFrames}:${timeline.trimEndFrames}`}
                     component={StockFramedVideo}
                     inputProps={{
                       videoSrc: selectedVideo.streamUrl,
+                      sourceDurationSeconds: sourceMetadata.duration,
+                      outroDurationSeconds: outroMetadata.duration,
                       frameStyle,
                       headline,
                       subtitle,
@@ -841,31 +917,23 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                       brandNameColor,
                       customOverlaySrc: overlays.find((o) => o.id === selectedOverlayId)?.imageUrl,
                       outroSrc: outros.find((o) => o.id === selectedOutroId)?.videoUrl,
-                      musicSrc: musicTrack !== "none" ? musicTrack : undefined,
+                      musicSrc: musicSelection?.track.previewUrl || (musicTrack !== "none" ? musicTrack : undefined),
+                      musicOffsetSeconds: musicSelection?.offsetSeconds || 0,
                       originalVolume,
-                      musicVolume: musicTrack !== "none" ? musicVolume : 0,
-                      trimStartSeconds,
-                      trimEndSeconds,
+                      musicVolume: musicSelection || musicTrack !== "none" ? musicVolume : 0,
+                      trimStartSeconds: timeline.trimStartSeconds,
+                      trimEndSeconds: timeline.trimEndSeconds,
                     }}
-                    durationInFrames={
-                      Math.max(
-                        60,
-                        Math.min(
-                          Math.max(
-                            3,
-                            (selectedVideo.durationSeconds || 30) - trimStartSeconds - trimEndSeconds
-                          ) * 30,
-                          5400
-                        )
-                      ) + (selectedOutroId ? 90 : 0)
-                    }
+                    durationInFrames={timeline.durationInFrames}
                     compositionWidth={1080}
                     compositionHeight={1920}
                     fps={30}
                     controls
                     loop
                     style={{ width: "100%", height: "100%" }}
-                  />
+                  /> : <div role="status" className="history-empty">
+                    {sourceMetadata.failed || outroMetadata.failed ? "Video süresi okunamadı. Kaynağı kontrol edin veya yeniden seçin." : "Video süresi ölçülüyor… Önizleme ve render süre doğrulandığında açılacak."}
+                  </div>}
                 </div>
                 <div className="remotion-meta-bar">
                   <span>9:16 Dikey Format</span>
@@ -909,7 +977,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                   title="Videoyu Kes"
                   summary={
                     trimStartSeconds > 0 || trimEndSeconds > 0
-                      ? `Baş: ${trimStartSeconds}s · Son: ${trimEndSeconds}s (Net: ${Math.max(1, Math.round((selectedVideo.durationSeconds || 30) - trimStartSeconds - trimEndSeconds))}s)`
+                      ? `Baş: ${trimStartSeconds}s · Son: ${trimEndSeconds}s (Net: ${durationLabel(mainTimeline?.mainDurationSeconds)})`
                       : "Kesme uygulanmadı (Orijinal)"
                   }
                   icon={<Scissors size={15} />}
@@ -930,14 +998,15 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                         <input
                           type="number"
                           min="0"
-                          max={Math.max(0, (selectedVideo.durationSeconds || 30) - trimEndSeconds - 1)}
-                          step="0.5"
+                          disabled={!mainTimeline}
+                          max={mainTimeline ? (mainTimeline.sourceDurationInFrames - mainTimeline.trimEndFrames - 1) / 30 : 0}
+                          step={1 / 30}
                           value={trimStartSeconds || ""}
                           placeholder="0"
                           onChange={(e) => {
-                            const val = Math.max(0, parseFloat(e.target.value) || 0);
-                            const maxLimit = Math.max(0, (selectedVideo.durationSeconds || 30) - trimEndSeconds - 1);
-                            setTrimStartSeconds(Math.min(val, maxLimit));
+                            const val = Math.min(Math.max(0, parseFloat(e.target.value) || 0), mainTimeline ? (mainTimeline.sourceDurationInFrames - mainTimeline.trimEndFrames - 1) / 30 : 0);
+                            const next = getStockTimeline({ sourceDurationSeconds: sourceMetadata.duration, trimStartSeconds: val, trimEndSeconds });
+                            if (next) setTrimStartSeconds(next.trimStartSeconds);
                           }}
                           className="custom-input stock-trim-input"
                         />
@@ -958,14 +1027,15 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                         <input
                           type="number"
                           min="0"
-                          max={Math.max(0, (selectedVideo.durationSeconds || 30) - trimStartSeconds - 1)}
-                          step="0.5"
+                          disabled={!mainTimeline}
+                          max={mainTimeline ? (mainTimeline.sourceDurationInFrames - mainTimeline.trimStartFrames - 1) / 30 : 0}
+                          step={1 / 30}
                           value={trimEndSeconds || ""}
                           placeholder="0"
                           onChange={(e) => {
                             const val = Math.max(0, parseFloat(e.target.value) || 0);
-                            const maxLimit = Math.max(0, (selectedVideo.durationSeconds || 30) - trimStartSeconds - 1);
-                            setTrimEndSeconds(Math.min(val, maxLimit));
+                            const next = getStockTimeline({ sourceDurationSeconds: sourceMetadata.duration, trimStartSeconds, trimEndSeconds: val });
+                            if (next) setTrimEndSeconds(next.trimEndSeconds);
                           }}
                           className="custom-input stock-trim-input"
                         />
@@ -976,11 +1046,11 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
 
                   <div className="stock-trim-info-bar">
                     <span>
-                      Orijinal: <strong>{Math.round(selectedVideo.durationSeconds || 30)}s</strong>
+                      Orijinal: <strong>{durationLabel(sourceMetadata.duration)}</strong>
                     </span>
                     <span>→</span>
                     <span>
-                      Kalan Süre: <strong>{Math.max(1, Math.round((selectedVideo.durationSeconds || 30) - trimStartSeconds - trimEndSeconds))}s</strong>
+                      Kalan Süre: <strong>{durationLabel(mainTimeline?.mainDurationSeconds)}</strong>
                     </span>
                     {selectedOutroId && (
                       <span className="stock-trim-outro-note">
@@ -1142,18 +1212,19 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                 <StockAccordionSection
                   id="audio"
                   title="Ses"
-                  summary={`Video %${Math.round(originalVolume * 100)} · Müzik ${musicTrack === "none" ? "Kapalı" : `%${Math.round(musicVolume * 100)}`}`}
+                  summary={musicSelection?.track.title || `Video %${Math.round(originalVolume * 100)} · Müzik ${musicTrack === "none" ? "Kapalı" : `%${Math.round(musicVolume * 100)}`}`}
                   icon={<Music size={15} />}
                   openSection={openCustomizerSection}
                   onToggle={(id) => setOpenCustomizerSection((current) => current === id ? "" : id)}
                 >
                   <div className="audio-select-row">
-                    <button type="button" className={`audio-option-btn ${musicTrack !== "none" ? "active" : ""}`} onClick={() => setMusicTrack("/audio/ambient_track.mp3")}><Volume2 size={13} /> Ambient</button>
-                    <button type="button" className={`audio-option-btn ${musicTrack === "none" ? "active" : ""}`} onClick={() => setMusicTrack("none")}><X size={13} /> Müzik yok</button>
+                    <button type="button" className={`audio-option-btn ${musicSelection ? "active" : ""}`} onClick={() => setMusicModalOpen(true)}><Music size={13} /> Müzik keşfet</button>
+                    <button type="button" className={`audio-option-btn ${!musicSelection && musicTrack === "none" ? "active" : ""}`} onClick={() => { setMusicTrack("none"); setMusicSelection(null); }}><X size={13} /> Müzik yok</button>
                   </div>
+                  {musicSelection && <p>{musicSelection.track.title} · Başlangıç {musicSelection.offsetSeconds.toFixed(1)} sn · Geçici render</p>}
                   <div className="slider-row">
                     <div className="slider-item"><small>Video sesi %{Math.round(originalVolume * 100)}</small><input type="range" min="0" max="1" step="0.05" value={originalVolume} onChange={(event) => setOriginalVolume(Number(event.target.value))} /></div>
-                    {musicTrack !== "none" && <div className="slider-item"><small>Müzik %{Math.round(musicVolume * 100)}</small><input type="range" min="0" max="1" step="0.05" value={musicVolume} onChange={(event) => setMusicVolume(Number(event.target.value))} /></div>}
+                    {(musicSelection || musicTrack !== "none") && <div className="slider-item"><small>Müzik %{Math.round(musicVolume * 100)}</small><input type="range" min="0" max="1" step="0.05" value={musicVolume} onChange={(event) => setMusicVolume(Number(event.target.value))} /></div>}
                   </div>
                 </StockAccordionSection>
 
@@ -1200,7 +1271,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                   type="button"
                   className="button primary render-action-btn"
                   onClick={handleRender}
-                  disabled={rendering}
+                  disabled={rendering || !timeline}
                 >
                   {rendering ? (
                     <LoaderCircle className="spin" size={17} />
@@ -1248,6 +1319,8 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
           )}
         </section>
       </div>
+
+      {musicModalOpen && <MusicDiscoveryModal projectId={projectId} onClose={() => setMusicModalOpen(false)} onSelect={(selection) => { setMusicSelection(selection); setMusicTrack("none"); setMusicModalOpen(false); }} />}
 
       {driveModalOpen && (
         <DriveSettingsModal

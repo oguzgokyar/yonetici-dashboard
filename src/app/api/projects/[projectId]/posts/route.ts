@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { appendMusicAttribution, resolveMusicAttribution } from "@/lib/music-attribution";
 import { getDatabase } from "@/lib/server/database";
 import { resolvePackageItemsForPublishing } from "@/lib/server/canva-package-service";
 import {
@@ -434,6 +435,13 @@ export async function POST(request: Request, context: Context) {
   }
 
   const resolvedContentType = mimeType.startsWith("video/") || filename.endsWith(".mp4") ? "video" : "image";
+  // Keep the source render reference: media_url becomes a Postiz URL after upload.
+  // PATCH must re-read license evidence from the project-scoped job, never client text.
+  const sourceMediaUrl = candidateId && mimeType.startsWith("video/")
+    ? `/api/videos/${candidateId}` : body.mediaUrl || "";
+  const musicAttribution = resolveMusicAttribution(database, projectId, {
+    assetId: candidateId, mediaUrl: body.mediaUrl,
+  });
 
   // Upload to Postiz once
   let postizMedia: { id: string; path: string };
@@ -451,7 +459,9 @@ export async function POST(request: Request, context: Context) {
     const targetScheduledAt = target.scheduledAt || body.scheduledAt;
     const targetPostType = target.postType || defaultPostType;
     const targetTitle = target.title || body.title || "İsimsiz Gönderi";
-    const targetCaption = target.caption !== undefined ? target.caption.trim() : defaultCaption;
+    const targetCaption = appendMusicAttribution(
+      target.caption !== undefined ? target.caption.trim() : defaultCaption, musicAttribution,
+    );
     const targetHashtags = target.hashtags !== undefined ? target.hashtags.trim() : defaultHashtags;
 
     let fullCaption = targetCaption;
@@ -502,8 +512,8 @@ export async function POST(request: Request, context: Context) {
           INSERT INTO content_posts (
             id, project_id, title, content_type, media_url, caption, hashtags,
             status, schedule_type, scheduled_at, integration_id, post_type,
-            postiz_post_id, postiz_media_id, media_json, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            postiz_post_id, postiz_media_id, media_json, local_path, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `)
         .run(
           postId,
@@ -521,6 +531,7 @@ export async function POST(request: Request, context: Context) {
           createdPostId,
           postizMedia.id,
           JSON.stringify(postizMedia ? [{ id: postizMedia.id, path: postizMedia.path }] : []),
+          sourceMediaUrl,
           now,
           now
         );
@@ -539,8 +550,8 @@ export async function POST(request: Request, context: Context) {
           INSERT INTO content_posts (
             id, project_id, title, content_type, media_url, caption, hashtags,
             status, schedule_type, scheduled_at, integration_id, post_type,
-            postiz_media_id, error_message, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'failed', ?, ?, ?, ?, ?, ?, ?, ?)
+            postiz_media_id, local_path, error_message, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'failed', ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `)
         .run(
           postId,
@@ -555,6 +566,7 @@ export async function POST(request: Request, context: Context) {
           target.integrationId,
           targetPostType,
           postizMedia.id,
+          sourceMediaUrl,
           `Postiz Gönderi Hatası: ${errMsg}`,
           now,
           now
@@ -604,7 +616,12 @@ export async function PATCH(request: Request, context: Context) {
   }
 
   const title = body.title !== undefined ? body.title : (existing.title as string);
-  const caption = body.caption !== undefined ? body.caption : (existing.caption as string);
+  const musicAttribution = resolveMusicAttribution(database, projectId, {
+    mediaUrl: (existing.local_path as string) || (existing.media_url as string),
+  });
+  const caption = appendMusicAttribution(
+    body.caption !== undefined ? body.caption : (existing.caption as string) || "", musicAttribution,
+  );
   const hashtags = body.hashtags !== undefined ? body.hashtags : (existing.hashtags as string);
   const status = body.status !== undefined ? body.status : (existing.status as string);
   const scheduleType = body.scheduleType !== undefined ? body.scheduleType : (existing.schedule_type as string);
@@ -686,10 +703,10 @@ export async function PATCH(request: Request, context: Context) {
       database
         .prepare(`
           UPDATE content_posts
-          SET status = 'failed', error_message = ?, updated_at = ?
+          SET status = 'failed', caption = ?, error_message = ?, updated_at = ?
           WHERE id = ? AND project_id = ?
         `)
-        .run(errorMessage, now, body.id, projectId);
+        .run(caption, errorMessage, now, body.id, projectId);
 
       return Response.json(
         { ok: false, message: `Postiz'de zamanlanamadı: ${errMsg}` },

@@ -1,10 +1,13 @@
 import React from "react";
+import { getStockTimeline } from "../lib/stock-timeline";
 import { AbsoluteFill, Audio, Img, Sequence, spring, useCurrentFrame, useVideoConfig, Video } from "remotion";
 
 export type StockFrameStyle = "none" | "blur_padding" | "modern_card" | "split_screen" | "minimal_glow";
 
 export type StockFramedVideoProps = {
   videoSrc?: string;
+  sourceDurationSeconds?: number;
+  outroDurationSeconds?: number;
   frameStyle?: StockFrameStyle;
   headline?: string;
   subtitle?: string;
@@ -24,6 +27,7 @@ export type StockFramedVideoProps = {
   customOverlaySrc?: string;
   outroSrc?: string;
   musicSrc?: string;
+  musicOffsetSeconds?: number;
   originalVolume?: number;
   musicVolume?: number;
   trimStartSeconds?: number;
@@ -53,6 +57,8 @@ export const defaultStockFramedProps: StockFramedVideoProps = {
 
 export function StockFramedVideo({
   videoSrc,
+  sourceDurationSeconds,
+  outroDurationSeconds,
   frameStyle = "blur_padding",
   headline = "",
   subtitle = "",
@@ -72,17 +78,19 @@ export function StockFramedVideo({
   customOverlaySrc,
   outroSrc,
   musicSrc,
+  musicOffsetSeconds = 0,
   originalVolume = 1,
   musicVolume = 0.5,
   trimStartSeconds = 0,
   trimEndSeconds = 0,
 }: StockFramedVideoProps) {
   const frame = useCurrentFrame();
-  const { fps, durationInFrames } = useVideoConfig();
+  const { fps } = useVideoConfig();
 
-  const startFromFrames = Math.max(0, Math.round(trimStartSeconds * fps));
-  const outroDurationFrames = outroSrc ? 90 : 0;
-  const mainDuration = Math.max(30, durationInFrames - outroDurationFrames);
+  const timeline = getStockTimeline({ sourceDurationSeconds, fps, trimStartSeconds, trimEndSeconds, hasOutro: Boolean(outroSrc), outroDurationSeconds });
+  const startFromFrames = timeline?.trimStartFrames ?? 0;
+  const outroDurationFrames = timeline?.outroDurationInFrames ?? 0;
+  const mainDuration = timeline?.mainDurationInFrames ?? 0;
 
   // Entrance spring for headline
   const headlineSpring = spring({
@@ -150,6 +158,8 @@ export function StockFramedVideo({
         return { display: "none" };
     }
   };
+
+  if (!timeline) return <AbsoluteFill style={{ backgroundColor: "#090a10" }} />;
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#090a10", overflow: "hidden" }}>
@@ -372,11 +382,9 @@ export function StockFramedVideo({
           </div>
         )}
 
-        {/* Background Music Audio track */}
-        {musicSrc && (
-          <Audio src={musicSrc} volume={musicVolume} loop />
-        )}
       </Sequence>
+
+      {musicSrc && <Audio src={musicSrc} startFrom={Math.max(0, Math.round(musicOffsetSeconds * fps))} volume={musicVolume} loop />}
 
       {/* Outro Video Sequence at the end */}
       {outroSrc && (
