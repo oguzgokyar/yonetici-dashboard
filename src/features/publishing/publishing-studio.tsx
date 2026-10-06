@@ -456,7 +456,6 @@ export function PublishingStudio({
     }
     setCopyFeedback(null);
 
-    const isStockOrStockRender = asset.category === "stock" || asset.category === "stock_render";
     const brandName = currentProject?.brand.brandName || currentProject?.name;
 
     const fallbackTitle =
@@ -479,10 +478,6 @@ export function PublishingStudio({
 
     if (extracted.hashtags) {
       setGlobalHashtags(extracted.hashtags);
-    }
-
-    if (isStockOrStockRender || (asset.metadata && Object.keys(asset.metadata).length > 0)) {
-      void generateAiCopy(asset);
     }
   }
 
