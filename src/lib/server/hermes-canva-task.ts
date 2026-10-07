@@ -350,7 +350,7 @@ Bu bir Yönetici Dashboard Canva görsel/video üretim makine görevidir.
 6. Sayfa/sahne sayısı birebir ${payload.slideCount} olmalıdır.
 7. Kilitli içerik: Metinleri harfiyen koru, paraphrase yapma, bullet point atlama.
 8. Güvenli alanlar: 100px yatay, 140px dikey marjin. Max 2 font ailesi. Bounding box çakışması yok.
-${isVideoFormat ? "9. VİDEO İÇERİK KURALI: Bu bir video formatıdır. Tasarım oluştuktan sonra otomatik olarak 'Sihirli Animasyon' (Magic Animate) işlenecek ve MP4 video olarak arşive kaydedilecektir.\n" : ""}
+${payload.contentType === "instagram_story" ? "9. INSTAGRAM STORY GÜVENLİ ALAN KURALI: 1080x1920 (9:16) Story formatıdır. Üstten 250px (profil adı/kapatma) ve alttan 250px (DM kutusu) boş bırak. Ana soru/mesajı üst-orta alana yerleştir; ortada Instagram interaktif çıkartması (Anket/Soru Kutusu) için temiz, metinsiz alan bırak.\n" : ""}${isVideoFormat ? "10. VİDEO İÇERİK KURALI: Bu bir video formatıdır. Tasarım oluştuktan sonra otomatik olarak 'Sihirli Animasyon' (Magic Animate) işlenecek ve MP4 video olarak arşive kaydedilecektir.\n" : ""}
 CANVA TASARIM KURALLARI (canva-carousel-director v2):
 - Format: Doğrudan ${meta.canvaFormat} = ${meta.width}×${meta.height}px (${meta.aspectRatio}).
 - Boyut: ${meta.width}x${meta.height}px, ${payload.slideCount} sayfa.

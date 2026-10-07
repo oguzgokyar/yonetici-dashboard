@@ -148,6 +148,9 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
   // Specific topic idea generation loading
   const [topicLoading, setTopicLoading] = useState<string | null>(null);
 
+  // Selected story step index per engagement card
+  const [selectedStoryIndex, setSelectedStoryIndex] = useState<Record<string, number>>({});
+
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copiedHashtags, setCopiedHashtags] = useState(false);
 
@@ -389,8 +392,43 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
     }
   }
 
+  function buildEngagementStoryPrompt(idea: StrategyIdea, selectedStepText: string) {
+    const cleanHook = (idea.hook || "").replace(/^["'“”]+|["'“”]+$/g, "");
+    const isInteractive = /anket|poll|soru|quiz|ikilem|test|seçenek|doğru mu|yanlış mı/i.test(selectedStepText);
+
+    const storyGuidelines = isInteractive
+      ? `[INSTAGRAM STORY İNTERAKTİF ÇIKARTMA (STICKER) YERLEŞİM KURALI]:
+- Format: 1080×1920 (9:16), TEK SAYFA Instagram Story görseli.
+- ÜST GÜVENLİ ALAN: Üstten 250px boşluk bırak (profil adı, kapatma ikonu ve hikaye çizgileri için).
+- ALT GÜVENLİ ALAN: Alttan 250px boşluk bırak (Instagram DM mesaj yazma çubuğu ve yanıt butonları için).
+- METİN VE BAŞLIK ALANI: Ana soru ve kancayı sadece üst-orta bölgeye (y: 260px - 650px) büyük, okunaklı ve vurucu yerleştir.
+- ÇIKARTMA (STICKER) ALANI: Ekranın orta ve orta-alt bölgesinde (y: 650px - 1400px) Instagram'da Anket / Soru Kutusu çıkartması yapıştırılabilmesi için EN AZ 450px yüksekliğinde temiz, metinsiz boşluk (Sticker Safe Zone) bırak! Çıkartma seçeneklerini görselin üstüne düz metin olarak yazma, çıkartma için ferah alan aç.`
+      : `[INSTAGRAM STORY YERLEŞİM KURALI]:
+- Format: 1080×1920 (9:16), TEK SAYFA Instagram Story görseli.
+- ÜST & ALT GÜVENLİ ALAN: Üstten 250px ve alttan 250px boşluk bırak.
+- ODAK NOKTASI: Ana mesajı ve yönlendirici DM aksiyonunu ekranın merkezinde temiz, yüksek kontrastlı ve okunaklı bir odak kutusuyla vurgula.`;
+
+    return [
+      `Başlık: ${idea.title}`,
+      `Seçilen Story Kurgusu: ${selectedStepText}`,
+      cleanHook ? `Kanca / Giriş: "${cleanHook}"` : "",
+      idea.description ? `Genel Konu Özeti: ${idea.description}` : "",
+      `\n${storyGuidelines}`,
+    ].filter(Boolean).join("\n\n").trim();
+  }
+
   async function handleSendToCanva(idea: StrategyIdea) {
-    const confirmMsg = `"${idea.title}" fikri Canva Tasarım Stüdyosu'na aktarılacak ve 'Gizlenmiş' sekmesine taşınacak.\n\nOnaylıyor musunuz?`;
+    const cardKey = idea.id || idea.title;
+    const isEngagement = idea.columnType === "engagement";
+    const selectedStepIndex = selectedStoryIndex[cardKey] ?? 0;
+    const selectedStepText = isEngagement && idea.structure && idea.structure.length > 0
+      ? idea.structure[selectedStepIndex] || idea.description
+      : "";
+
+    const confirmMsg = isEngagement && selectedStepText
+      ? `"${idea.title}" kartındaki Seçili Story (${selectedStepIndex + 1}. Adım) tekil 9:16 Story tasarımı olarak Canva Stüdyosu'na aktarılacak ve kart 'Gizlenmiş' sekmesine taşınacak.\n\nOnaylıyor musunuz?`
+      : `"${idea.title}" fikri Canva Tasarım Stüdyosu'na aktarılacak ve 'Gizlenmiş' sekmesine taşınacak.\n\nOnaylıyor musunuz?`;
+
     if (!window.confirm(confirmMsg)) {
       return;
     }
@@ -401,35 +439,38 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
     }
 
     // 2. Build full rich creative brief / prompt from card details
-    const cleanHook = (idea.hook || "").replace(/^["'“”]+|["'“”]+$/g, "");
-    const structureText = idea.structure && idea.structure.length > 0
-      ? `\nAkış ve Slayt Planı:\n${idea.structure.map((s, idx) => `${idx + 1}. ${s}`).join("\n")}`
-      : "";
-
-    const fullPrompt = [
-      `Başlık: ${idea.title}`,
-      idea.targetChannel ? `Hedef Kanal: ${idea.targetChannel}` : "",
-      cleanHook ? `\nKanca (Hook):\n"${cleanHook}"` : "",
-      idea.description ? `\nKonu & İçerik Özeti:\n${idea.description}` : "",
-      structureText,
-    ].filter(Boolean).join("\n").trim();
-
-    // Determine target Canva content type
+    let fullPrompt = "";
     let targetContentType = "instagram_post";
-    let targetSlideCount = 5;
+    let targetSlideCount = 1;
 
-    if (idea.columnType === "vertical_video") {
-      targetContentType = "reels_video";
-      targetSlideCount = 6;
-    } else if (idea.columnType === "carousel") {
-      targetContentType = "instagram_carousel";
-      targetSlideCount = Math.max(3, Math.min(10, idea.structure?.length || 5));
-    } else if (idea.columnType === "engagement") {
+    if (isEngagement) {
       targetContentType = "instagram_story";
-      targetSlideCount = 3;
+      targetSlideCount = 1; // Exactly 1 single 9:16 story
+      fullPrompt = buildEngagementStoryPrompt(idea, selectedStepText || idea.description);
     } else {
-      targetContentType = "instagram_post";
-      targetSlideCount = 1;
+      const cleanHook = (idea.hook || "").replace(/^["'“”]+|["'“”]+$/g, "");
+      const structureText = idea.structure && idea.structure.length > 0
+        ? `\nAkış ve Slayt Planı:\n${idea.structure.map((s, idx) => `${idx + 1}. ${s}`).join("\n")}`
+        : "";
+
+      fullPrompt = [
+        `Başlık: ${idea.title}`,
+        idea.targetChannel ? `Hedef Kanal: ${idea.targetChannel}` : "",
+        cleanHook ? `\nKanca (Hook):\n"${cleanHook}"` : "",
+        idea.description ? `\nKonu & İçerik Özeti:\n${idea.description}` : "",
+        structureText,
+      ].filter(Boolean).join("\n").trim();
+
+      if (idea.columnType === "vertical_video") {
+        targetContentType = "reels_video";
+        targetSlideCount = 6;
+      } else if (idea.columnType === "carousel") {
+        targetContentType = "instagram_carousel";
+        targetSlideCount = Math.max(3, Math.min(10, idea.structure?.length || 5));
+      } else {
+        targetContentType = "instagram_post";
+        targetSlideCount = 1;
+      }
     }
 
     try {
@@ -451,7 +492,18 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
   }
 
   function copyIdeaText(idea: StrategyIdea) {
-    const text = `📌 ${idea.title}\n⚡ Kanca: ${idea.hook}\n📝 Açıklama: ${idea.description}\n🎯 Hedef: ${idea.targetChannel}`;
+    let text = "";
+    if (idea.columnType === "engagement") {
+      const cardKey = idea.id || idea.title;
+      const selectedStepIndex = selectedStoryIndex[cardKey] ?? 0;
+      const selectedStepText = idea.structure && idea.structure.length > 0
+        ? idea.structure[selectedStepIndex] || idea.description
+        : idea.description;
+      text = buildEngagementStoryPrompt(idea, selectedStepText);
+    } else {
+      text = `📌 ${idea.title}\n⚡ Kanca: ${idea.hook}\n📝 Açıklama: ${idea.description}\n🎯 Hedef: ${idea.targetChannel}`;
+    }
+
     navigator.clipboard.writeText(text);
     setCopiedId(idea.id || idea.title);
     setTimeout(() => setCopiedId(null), 2000);
@@ -1175,18 +1227,46 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                             {/* Açıklama */}
                             <p className="kanban-card-desc">{idea.description}</p>
 
-                            {/* 4 Adımlı İskelet (Accordion) */}
+                            {/* Akış İskeleti: Etkileşim & Story için Seçilebilir Radio Liste, Diğerleri için Accordion */}
                             {idea.structure && idea.structure.length > 0 && (
-                              <details className="kanban-steps-details">
-                                <summary className="kanban-steps-summary">
-                                  <span>Akış İskeleti ({idea.structure.length} Adım)</span>
-                                </summary>
-                                <ul className="kanban-steps-list">
-                                  {idea.structure.map((st, sIdx) => (
-                                    <li key={sIdx}>{st}</li>
-                                  ))}
-                                </ul>
-                              </details>
+                              colType === "engagement" ? (
+                                <div className="story-picker-wrap">
+                                  <div className="story-picker-label">
+                                    <span>Üretilecek Story (1 Adet 9:16)</span>
+                                    <span style={{ fontSize: "9px", color: "#64748b", textTransform: "none", fontWeight: "normal" }}>
+                                      Seçili olan Canva&apos;ya aktarılır
+                                    </span>
+                                  </div>
+                                  <div className="story-picker-list">
+                                    {idea.structure.map((storyStep, sIdx) => {
+                                      const cardKey = idea.id || idea.title;
+                                      const isSelected = (selectedStoryIndex[cardKey] ?? 0) === sIdx;
+                                      return (
+                                        <button
+                                          key={sIdx}
+                                          type="button"
+                                          onClick={() => setSelectedStoryIndex((prev) => ({ ...prev, [cardKey]: sIdx }))}
+                                          className={`story-picker-option ${isSelected ? "selected" : ""}`}
+                                        >
+                                          <div className="story-picker-radio" />
+                                          <span className="story-picker-text">{storyStep}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ) : (
+                                <details className="kanban-steps-details">
+                                  <summary className="kanban-steps-summary">
+                                    <span>Akış İskeleti ({idea.structure.length} Adım)</span>
+                                  </summary>
+                                  <ul className="kanban-steps-list">
+                                    {idea.structure.map((st, sIdx) => (
+                                      <li key={sIdx}>{st}</li>
+                                    ))}
+                                  </ul>
+                                </details>
+                              )
                             )}
 
                             {/* Alt Çubuk: Hedef Kanal & Aksiyon Butonları (PLANLA KALDIRILDI) */}
