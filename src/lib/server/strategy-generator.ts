@@ -29,6 +29,16 @@ export type StrategyOverview = {
     weeklyPostingPlan: string;
     channelPriorities: string[];
     conversionFunnel: string;
+    hashtagBank?: {
+      broad: string[];
+      niche: string[];
+      brand: string[];
+    };
+    dailySchedule?: Array<{
+      day: string;
+      format: string;
+      focus: string;
+    }>;
   };
 };
 
@@ -234,6 +244,7 @@ export async function generateNewIdeasForColumn(input: {
   brandDescription: string;
   columnType: ColumnType;
   existingTitles: string[];
+  focusTopic?: string;
   strategyContext?: StrategyOverview;
 }): Promise<StrategyIdea[]> {
   const columnLabels: Record<ColumnType, string> = {
@@ -243,8 +254,13 @@ export async function generateNewIdeasForColumn(input: {
     engagement: "Etkileşim & Topluluk (Story, Anket, Soru-Cevap)",
   };
 
+  const topicInstruction = input.focusTopic
+    ? `ÖZEL ODAK / AÇI: Üreteceğin fikirler doğrudan şu rakip açığına veya müşteri acı noktasına çözüm getirmeli: "${input.focusTopic}".`
+    : "";
+
   const systemPrompt = `Sen sosyal medya içerik stratejisi uzmanısın (ScrapeCreators outlier & hook metodolojisi).
 Kullanıcı senden sadece '${columnLabels[input.columnType]}' kolonu için 3 YENİ ve TAZE içerik fikri istiyor.
+${topicInstruction}
 Önemli Kurallar:
 - Önceden üretilmiş şu başlıklardan ve konulardan KESİNLİKLE farklı, tekrara düşmeyen yepyeni kancalar üret:
 ${input.existingTitles.map((t) => `- ${t}`).join("\n")}
@@ -253,6 +269,7 @@ ${input.existingTitles.map((t) => `- ${t}`).join("\n")}
   const userPrompt = `Marka Adı: ${input.brandName}
 Marka Açıklaması: ${input.brandDescription}
 İçerik Türü Kolonu: ${columnLabels[input.columnType]}
+${input.focusTopic ? `Özel Odak Konusu: ${input.focusTopic}` : ""}
 Hedef Kitle & Strateji Özeti: ${input.strategyContext ? JSON.stringify(input.strategyContext.audienceVoc) : "Belirtilmedi"}
 
 Lütfen 3 yeni fikir içeren JSON formatını üret:

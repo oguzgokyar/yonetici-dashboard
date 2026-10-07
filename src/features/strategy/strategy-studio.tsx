@@ -13,7 +13,6 @@ import {
   Eye,
   EyeOff,
   Plus,
-  Send,
   Palette,
   CheckCircle2,
   Copy,
@@ -24,10 +23,8 @@ import {
   TrendingUp,
   HelpCircle,
   Zap,
-  Trash2,
-  Bot,
-  Wrench,
-  Clock,
+  CalendarDays,
+  Hash,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type {
@@ -107,6 +104,7 @@ const COLUMN_CONFIG: Record<
   },
 };
 
+type MainTab = "cockpit" | "content_ideas";
 type CockpitTabId = "brand_input" | "brand_identity" | "competitor_analysis" | "target_audience" | "growth_plan";
 
 export function StrategyStudio({ projectId }: { projectId: string }) {
@@ -125,7 +123,10 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
   ]);
   const [competitorsText, setCompetitorsText] = useState("");
 
-  // Tier 1 Active Tab (5 tabs max 2 words each)
+  // Primary 2-Tab Navigation: "Strateji Kokpiti" vs "İçerik Önerileri"
+  const [mainTab, setMainTab] = useState<MainTab>("cockpit");
+
+  // Cockpit Subtab: 5 tabs (max 2 words each)
   const [activeTab, setActiveTab] = useState<CockpitTabId>("brand_input");
 
   // Column Subtabs: 'suggested' or 'hidden' per column
@@ -144,8 +145,11 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
     engagement: false,
   });
 
+  // Specific topic idea generation loading
+  const [topicLoading, setTopicLoading] = useState<string | null>(null);
+
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [resetting, setResetting] = useState(false);
+  const [copiedHashtags, setCopiedHashtags] = useState(false);
 
   async function loadStrategy() {
     try {
@@ -159,11 +163,6 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
         setBrandDescription(json.strategy.brandDescription || "");
         setSocialChannels(json.strategy.socialChannels || ["Instagram", "TikTok", "YouTube"]);
         setCompetitorsText((json.strategy.competitors || []).join(", "));
-        if (json.strategy.generationStatus === "generating") {
-          setGenerating(true);
-        } else {
-          setGenerating(false);
-        }
       } else if (json.initialData) {
         setBrandName(json.initialData.brandName || "");
         setBrandDescription(json.initialData.brandDescription || "");
@@ -171,44 +170,6 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
       }
     } catch (e) {
       console.error("Load strategy error:", e);
-    }
-  }
-
-  // Poll while generating is true
-  useEffect(() => {
-    if (!generating) return;
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/projects/${projectId}/strategy`, { cache: "no-store" });
-        const json: StrategyResponse = await res.json();
-        if (json.hasStrategy && json.strategy) {
-          if (json.strategy.generationStatus !== "generating") {
-            setData(json);
-            setGenerating(false);
-          }
-        }
-      } catch {}
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [generating, projectId]);
-
-  async function handleResetStrategy() {
-    if (!confirm("Mevcut strateji ve üretilmiş tüm içerik fikirleri tamamen sıfırlanacak. Emin misiniz?")) {
-      return;
-    }
-    setResetting(true);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/strategy`, { method: "DELETE" });
-      const json = await res.json();
-      if (json.success) {
-        await loadStrategy();
-      } else {
-        alert("Sıfırlama hatası: " + (json.error || "Bilinmeyen hata"));
-      }
-    } catch (e: any) {
-      alert("Hata: " + e.message);
-    } finally {
-      setResetting(false);
     }
   }
 
@@ -224,11 +185,6 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
           setBrandDescription(json.strategy.brandDescription || "");
           setSocialChannels(json.strategy.socialChannels || ["Instagram", "TikTok", "YouTube"]);
           setCompetitorsText((json.strategy.competitors || []).join(", "));
-          if (json.strategy.generationStatus === "generating") {
-            setGenerating(true);
-          } else {
-            setGenerating(false);
-          }
         } else if (json.initialData) {
           setBrandName(json.initialData.brandName || "");
           setBrandDescription(json.initialData.brandDescription || "");
@@ -246,24 +202,13 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
 
   async function handleGenerateFullStrategy(e?: React.FormEvent) {
     if (e) e.preventDefault();
-    if (generating) return; // Prevent double-triggering
+    if (generating) return;
     if (!brandName.trim()) {
       alert("Lütfen bir marka / proje adı girin.");
       return;
     }
 
     setGenerating(true);
-    // Optimistically update local data status so button and UI lock immediately
-    setData((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        strategy: prev.strategy
-          ? { ...prev.strategy, generationStatus: "generating" }
-          : undefined,
-      };
-    });
-
     try {
       const competitors = competitorsText
         .split(",")
@@ -349,32 +294,33 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
   }
 
   async function handleToggleHideIdea(ideaId: string) {
+    // 1. Optimistic instant local state update
+    setData((prev) => {
+      if (!prev) return prev;
+      const nextCols = { ...prev.columns };
+      for (const key of Object.keys(nextCols) as ColumnType[]) {
+        const col = { ...nextCols[key] };
+        const foundSug = col.suggested.find((i) => i.id === ideaId);
+        const foundHid = col.hidden.find((i) => i.id === ideaId);
+        if (foundSug) {
+          col.suggested = col.suggested.filter((i) => i.id !== ideaId);
+          col.hidden = [{ ...foundSug, status: "hidden" }, ...col.hidden];
+        } else if (foundHid) {
+          col.hidden = col.hidden.filter((i) => i.id !== ideaId);
+          col.suggested = [{ ...foundHid, status: "suggested" }, ...col.suggested];
+        }
+        nextCols[key] = col;
+      }
+      return { ...prev, columns: nextCols };
+    });
+
+    // 2. Persist to server via PATCH
     try {
-      const res = await fetch(`/api/projects/${projectId}/strategy/ideas`, {
+      await fetch(`/api/projects/${projectId}/strategy/ideas`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ideaId, action: "toggle_hide" }),
       });
-      const json = await res.json();
-      if (json.success) {
-        setData((prev) => {
-          if (!prev) return prev;
-          const nextCols = { ...prev.columns };
-          for (const key of Object.keys(nextCols) as ColumnType[]) {
-            const col = { ...nextCols[key] };
-            const foundSug = col.suggested.find((i) => i.id === ideaId);
-            const foundHid = col.hidden.find((i) => i.id === ideaId);
-            if (foundSug) {
-              col.suggested = col.suggested.filter((i) => i.id !== ideaId);
-              col.hidden = [{ ...foundSug, status: "hidden" }, ...col.hidden];
-            } else if (foundHid) {
-              col.hidden = col.hidden.filter((i) => i.id !== ideaId);
-              col.suggested = [{ ...foundHid, status: "suggested" }, ...col.suggested];
-            }
-          }
-          return { ...prev, columns: nextCols };
-        });
-      }
     } catch (e) {
       console.error("Toggle hide idea error:", e);
     }
@@ -407,6 +353,39 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
       alert("Hata: " + (e instanceof Error ? e.message : String(e)));
     } finally {
       setColLoading((prev) => ({ ...prev, [columnType]: false }));
+    }
+  }
+
+  // Generate targeted ideas directly from a specific gap/pain point in Strateji Kokpiti
+  async function handleGenerateFromTopic(topic: string, targetCol: ColumnType = "vertical_video") {
+    setTopicLoading(topic);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/strategy/ideas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ columnType: targetCol, focusTopic: topic }),
+      });
+      const json = await res.json();
+      if (json.success && json.ideas) {
+        setData((prev) => {
+          if (!prev) return prev;
+          const nextCols = { ...prev.columns };
+          nextCols[targetCol].suggested = [
+            ...json.ideas,
+            ...nextCols[targetCol].suggested,
+          ];
+          return { ...prev, columns: nextCols };
+        });
+        // Switch to "İçerik Önerileri" so the user directly sees the newly generated cards!
+        setMainTab("content_ideas");
+        setColTabs((prev) => ({ ...prev, [targetCol]: "suggested" }));
+      } else {
+        alert("Hata: " + (json.error || "Fikir üretilemedi."));
+      }
+    } catch (e: unknown) {
+      alert("Hata: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setTopicLoading(null);
     }
   }
 
@@ -454,7 +433,6 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
     }
 
     try {
-      // Clear previous text completely and prefill with card brief
       const formPayload = {
         prompt: fullPrompt,
         contentType: targetContentType,
@@ -466,20 +444,9 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
       localStorage.setItem(`canva_form_${projectId}`, JSON.stringify(formPayload));
       localStorage.setItem(`canva_prefill_${projectId}`, JSON.stringify(formPayload));
 
-      // Direct transition to Image Generation page with Canva studio active tab
       router.push(`/projects/${projectId}/image-generation?studio=canva`);
     } catch {
       router.push(`/projects/${projectId}/image-generation?studio=canva`);
-    }
-  }
-
-  function handleSendToPublishing(idea: StrategyIdea) {
-    try {
-      const caption = `🎯 ${idea.title}\n\n${idea.hook}\n\n${idea.description}\n\n#${idea.targetChannel.replace(/\s+/g, "")} #strateji #içerik`;
-      localStorage.setItem(`publishing_prefill_${projectId}`, JSON.stringify({ caption }));
-      router.push(`/projects/${projectId}/publishing`);
-    } catch {
-      router.push(`/projects/${projectId}/publishing`);
     }
   }
 
@@ -493,6 +460,11 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
   const overview = data?.strategy;
   const columns = data?.columns;
 
+  // Total count of active suggested ideas across all 4 columns
+  const totalSuggestedIdeas = columns
+    ? Object.values(columns).reduce((acc, col) => acc + (col.suggested?.length || 0), 0)
+    : 0;
+
   const tabsConfig: Array<{ id: CockpitTabId; label: string; icon: LucideIcon; badge?: string }> = [
     { id: "brand_input", label: "Marka & Girdi", icon: Building2 },
     { id: "brand_identity", label: "Marka Kimliği", icon: Tag, badge: overview?.brandIdentity?.tone ? "Aktif" : undefined },
@@ -501,484 +473,604 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
     { id: "growth_plan", label: "Büyüme Planı", icon: TrendingUp, badge: overview?.growthStrategy ? "Haftalık" : undefined },
   ];
 
+  // Helper hook categories
+  const hookCategories = [
+    { category: "İkilem / Ters Köşe", color: "#6d28d9", bg: "#f5f3ff", border: "#ddd6fe" },
+    { category: "Sert Gerçek / FOMO", color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
+    { category: "Pratik Çözüm / Taktik", color: "#047857", bg: "#ecfdf5", border: "#a7f3d0" },
+    { category: "Gelecek & Vizyon", color: "#0284c7", bg: "#f0f9ff", border: "#bae6fd" },
+  ];
+
+  // Helper default weekly schedule
+  const defaultWeeklySchedule = [
+    { day: "Pazartesi", format: "🎬 Dikey Video", focus: "Acı Noktası & Ekran Bağımlılığı Kancası (Reels)" },
+    { day: "Salı", format: "💬 Story / Anket", focus: "Ebeveyn İkilemi & Soru-Cevap Etkileşimi" },
+    { day: "Çarşamba", format: "📑 Canva Karosel", focus: "Adım Adım Mini STEM Deneyi (Kaydetmelik Rehber)" },
+    { day: "Perşembe", format: "⚡ Hikâye / DM", focus: "Atölyeden Canlı Üretim Anı & Kayıt Çağrısı" },
+    { day: "Cuma", format: "📢 Tekil / İnfografik", focus: "Yeni Nesil 2030 Becerileri & Sektörel Gerçek" },
+    { day: "Cumartesi", format: "🎬 Kısa Video", focus: "Öğrenci / Proje Başarısı (Sosyal Kanıt)" },
+    { day: "Pazar", format: "🧭 İlham & Vizyon", focus: "Haftalık Özet & Ebeveyne İlham Verici Mesaj" },
+  ];
+
+  // Helper hashtag groups
+  const brandSlug = (brandName || "marka").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const hashtagGroups = [
+    {
+      title: "Geniş Kitle (Keşfet)",
+      tags: ["#robotikkodlama", "#stemturkiye", "#cocukgelisimi", "#yapayzeka", "#egitim"],
+    },
+    {
+      title: "Niş & Topluluk (Hedef Anne-Baba)",
+      tags: ["#ekransızetkinlik", "#yaraticicocuk", "#oyunlatasarim", "#kodlayanminikler", "#montessoriturkiye"],
+    },
+    {
+      title: "Marka & Seri Etiketleri",
+      tags: [`#${brandSlug}`, `#${brandSlug}atolyesi`, `#geleceginbecerileri`],
+    },
+  ];
+
+  function copyAllHashtags() {
+    const allTags = hashtagGroups.flatMap((g) => g.tags).join(" ");
+    navigator.clipboard.writeText(allTags);
+    setCopiedHashtags(true);
+    setTimeout(() => setCopiedHashtags(false), 2000);
+  }
+
   return (
     <div className="strategy-container w-full">
-      {/* HERMES & SCRAPECREATORS ŞEFFAFLIK ROZETİ */}
-      {overview && (
-        <div
-          style={{
-            background: "white",
-            border: "1px solid #e9eaf0",
-            borderRadius: "14px",
-            padding: "10px 16px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: "10px",
-            fontSize: "11px",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "5px",
-                padding: "3px 8px",
-                background: "#f5f3ff",
-                color: "#6d28d9",
-                borderRadius: "6px",
-                fontWeight: "700",
-              }}
-            >
-              <Bot size={13} />
-              <span>Motor: {overview.engineType || "Hermes Agent"}</span>
-            </span>
+      {/* ========================================================
+          ANA 2 SEKME: 1. STRATEJİ KOKPİTİ | 2. İÇERİK ÖNERİLERİ
+      ======================================================== */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px", borderBottom: "1px solid #e2e8f0", paddingBottom: "12px" }}>
+        <div className="strategy-main-nav-bar">
+          <button
+            type="button"
+            onClick={() => setMainTab("cockpit")}
+            className={`strategy-main-nav-btn ${mainTab === "cockpit" ? "active" : ""}`}
+          >
+            <Compass size={17} />
+            <span>Strateji Kokpiti</span>
+          </button>
 
-            {overview.currentRunId && (
-              <span style={{ color: "#64748b", fontFamily: "monospace", fontSize: "10.5px" }}>
-                Görev ID: {overview.currentRunId}
-              </span>
-            )}
-          </div>
-
-          {/* Kullanılan ScrapeCreators Becerileri */}
-          <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
-            <span style={{ color: "#64748b", display: "flex", alignItems: "center", gap: "4px", fontWeight: "600" }}>
-              <Wrench size={12} />
-              <span>Kullanılan Beceriler:</span>
+          <button
+            type="button"
+            onClick={() => setMainTab("content_ideas")}
+            className={`strategy-main-nav-btn ${mainTab === "content_ideas" ? "active" : ""}`}
+          >
+            <Sparkles size={17} />
+            <span>İçerik Önerileri</span>
+            <span className="strategy-main-nav-badge">
+              {totalSuggestedIdeas}
             </span>
-            {(overview.skillsUsed && overview.skillsUsed.length > 0
-              ? overview.skillsUsed
-              : [
-                  { skill: "competitor-social-research", role: "Rakip Analizi" },
-                  { skill: "audience-research", role: "Kitle VOC" },
-                  { skill: "outlier-post-finder", role: "Viral Kancalar" },
-                ]
-            ).map((s, idx) => (
-              <span
-                key={idx}
-                title={s.role}
-                style={{
-                  background: "#f0fdf4",
-                  color: "#166534",
-                  border: "1px solid #bbf7d0",
-                  padding: "2px 6px",
-                  borderRadius: "5px",
-                  fontSize: "9.5px",
-                  fontWeight: "600",
-                }}
-              >
-                ✓ {s.skill}
-              </span>
-            ))}
-          </div>
+          </button>
         </div>
-      )}
 
-      {/* 1. KATMAN: SEKMELİ STRATEJİ KOKPİTİ */}
-      <section style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <div style={{ width: "26px", height: "26px", borderRadius: "8px", background: "var(--primary-light, #f3f0ff)", color: "var(--primary)", display: "grid", placeItems: "center" }}>
-              <Compass size={16} />
-            </div>
-            <div>
-              <strong style={{ font: "700 14px 'Manrope'", color: "var(--text)" }}>Katman 1: Strateji Kokpiti</strong>
-              <small style={{ color: "var(--muted)", fontSize: "11px", marginLeft: "8px" }}>
-                · Marka girdileri, kitle acı noktaları ve büyüme haritası
-              </small>
+        {/* Bilgilendirme Rozeti */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", color: "var(--muted)" }}>
+          {mainTab === "cockpit" ? (
+            <span>Marka girdileri, rakip açıkları ve haftalık büyüme rehberi</span>
+          ) : (
+            <span>4 formatlık içerik fikirleri matrisi (Reels, Karosel, Tekil, Story)</span>
+          )}
+        </div>
+      </div>
+
+      {/* ========================================================
+          1. ANA SEKME: STRATEJİ KOKPİTİ
+      ======================================================== */}
+      {mainTab === "cockpit" && (
+        <section style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {/* Kokpit Alt Sekmeler (Maksimum 2 Kelime) */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+            <div className="cockpit-tabs-bar">
+              {tabsConfig.map((tab) => {
+                const TabIcon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`cockpit-tab-btn ${isActive ? "active" : ""}`}
+                  >
+                    <TabIcon size={14} />
+                    <span>{tab.label}</span>
+                    {tab.badge && <span className="cockpit-tab-badge">{tab.badge}</span>}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Sekme Butonları (Maksimum 2 Kelime) */}
-          <div className="cockpit-tabs-bar">
-            {tabsConfig.map((tab) => {
-              const TabIcon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`cockpit-tab-btn ${isActive ? "active" : ""}`}
-                >
-                  <TabIcon size={14} />
-                  <span>{tab.label}</span>
-                  {tab.badge && <span className="cockpit-tab-badge">{tab.badge}</span>}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+          {/* Alt Sekme 1: Marka & Girdi (Form İçeriği) */}
+          {activeTab === "brand_input" && (
+            <div className="cockpit-tab-content-panel">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px", paddingBottom: "14px", borderBottom: "1px solid #f0f0f5" }}>
+                <div>
+                  <h4 style={{ margin: 0, font: "700 14px 'Manrope'", color: "var(--text)" }}>Marka ve Analiz Girdileri</h4>
+                  <p style={{ margin: "2px 0 0", fontSize: "12px", color: "var(--muted)" }}>
+                    Sosyal kanalları, rakipleri ve değer vaadini girin; yapay zeka stratejiyi bu temele göre üretsin.
+                  </p>
+                </div>
 
-        {/* Sekme 1: Marka & Girdi (Form İçeriği) */}
-        {activeTab === "brand_input" && (
-          <div className="cockpit-tab-content-panel">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px", paddingBottom: "14px", borderBottom: "1px solid #f0f0f5" }}>
-              <div>
-                <h4 style={{ margin: 0, font: "700 14px 'Manrope'", color: "var(--text)" }}>Marka ve Analiz Girdileri</h4>
-                <p style={{ margin: "2px 0 0", fontSize: "12px", color: "var(--muted)" }}>
-                  Sosyal kanalları, rakipleri ve değer vaadini girin; yapay zeka stratejiyi bu temele göre üretsin.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={handleSaveBrandOnly}
-                  disabled={savingBrand || generating || !brandName.trim()}
-                  className="button secondary text-xs"
-                  style={{ height: "36px", padding: "0 13px", fontWeight: "700" }}
-                  title="Marka vaadi ve niş özetini kaydeder"
-                >
-                  {savingBrand ? <RefreshCw className="spin" size={13} /> : <CheckCircle2 size={13} style={{ color: "#10b981" }} />}
-                  <span>{savingBrand ? "Kaydediliyor..." : "Bilgileri Kaydet"}</span>
-                </button>
-
-                {overview && (
+                <div className="flex items-center gap-2 flex-wrap">
                   <button
                     type="button"
-                    onClick={handleResetStrategy}
-                    disabled={resetting || generating}
+                    onClick={handleSaveBrandOnly}
+                    disabled={savingBrand || !brandName.trim()}
                     className="button secondary text-xs"
-                    style={{ height: "36px", padding: "0 11px", color: "#e11d48", borderColor: "#fecdd3" }}
-                    title="Mevcut strateji ve fikirleri sıfırlar"
+                    style={{ height: "36px", padding: "0 13px", fontWeight: "700" }}
+                    title="Marka vaadi ve niş özetini kaydeder"
                   >
-                    {resetting ? <RefreshCw className="spin" size={13} /> : <Trash2 size={13} />}
-                    <span>Sıfırla</span>
+                    {savingBrand ? <RefreshCw className="spin" size={13} /> : <CheckCircle2 size={13} style={{ color: "#10b981" }} />}
+                    <span>{savingBrand ? "Kaydediliyor..." : "Bilgileri Kaydet"}</span>
                   </button>
-                )}
 
-                <button
-                  type="button"
-                  onClick={handleGenerateFullStrategy}
-                  disabled={generating || (overview?.generationStatus === "generating") || !brandName.trim()}
-                  className="button primary text-xs"
-                  style={{ height: "36px", padding: "0 14px" }}
-                >
-                  {(generating || overview?.generationStatus === "generating") ? (
-                    <>
-                      <RefreshCw className="spin" size={13} />
-                      <span>Hermes Taraması Sürüyor...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles size={13} />
-                      <span>{overview ? "Stratejiyi Yeniden Üret" : "Stratejiyi Başlat"}</span>
-                    </>
-                  )}
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleGenerateFullStrategy}
+                    disabled={generating || !brandName.trim()}
+                    className="button primary text-xs"
+                    style={{ height: "36px", padding: "0 14px" }}
+                  >
+                    {generating ? (
+                      <>
+                        <RefreshCw className="spin" size={13} />
+                        <span>Strateji Üretiliyor...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={13} />
+                        <span>{overview ? "Stratejiyi Yeniden Üret" : "Stratejiyi Başlat"}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <form onSubmit={handleGenerateFullStrategy}>
-              <div className="strategy-form-grid">
-                <div className="strategy-field">
-                  <label className="strategy-field-label">Marka / Proje Adı *</label>
-                  <input
-                    type="text"
-                    value={brandName}
-                    onChange={(e) => setBrandName(e.target.value)}
-                    placeholder="Örn: Atölye Hanem"
-                    className="strategy-input"
-                    required
-                  />
+              <form onSubmit={handleGenerateFullStrategy}>
+                <div className="strategy-form-grid">
+                  <div className="strategy-field">
+                    <label className="strategy-field-label">Marka / Proje Adı *</label>
+                    <input
+                      type="text"
+                      value={brandName}
+                      onChange={(e) => setBrandName(e.target.value)}
+                      placeholder="Örn: Atölye Hanem"
+                      className="strategy-input"
+                      required
+                    />
+                  </div>
+
+                  <div className="strategy-field">
+                    <label className="strategy-field-label">Hedef Sosyal Kanallar</label>
+                    <div className="channel-tag-group" style={{ height: "40px", alignItems: "center" }}>
+                      {["Instagram", "TikTok", "YouTube"].map((ch) => {
+                        const isActive = socialChannels.includes(ch);
+                        return (
+                          <div
+                            key={ch}
+                            onClick={() => {
+                              if (isActive) setSocialChannels(socialChannels.filter((c) => c !== ch));
+                              else setSocialChannels([...socialChannels, ch]);
+                            }}
+                            className={`channel-tag-chip ${isActive ? "active" : ""}`}
+                          >
+                            {isActive && <CheckCircle2 size={12} />}
+                            <span>{ch}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="strategy-field">
+                    <label className="strategy-field-label">Rakipler / Örnek Hesaplar</label>
+                    <input
+                      type="text"
+                      value={competitorsText}
+                      onChange={(e) => setCompetitorsText(e.target.value)}
+                      placeholder="@rakip1, @rakip2, @sektor_hesabi"
+                      className="strategy-input"
+                    />
+                  </div>
                 </div>
 
-                <div className="strategy-field">
-                  <label className="strategy-field-label">Hedef Sosyal Kanallar</label>
-                  <div className="channel-tag-group" style={{ height: "40px", alignItems: "center" }}>
-                    {["Instagram", "TikTok", "YouTube"].map((ch) => {
-                      const isActive = socialChannels.includes(ch);
-                      return (
-                        <div
-                          key={ch}
-                          onClick={() => {
-                            if (isActive) setSocialChannels(socialChannels.filter((c) => c !== ch));
-                            else setSocialChannels([...socialChannels, ch]);
-                          }}
-                          className={`channel-tag-chip ${isActive ? "active" : ""}`}
-                        >
-                          {isActive && <CheckCircle2 size={12} />}
-                          <span>{ch}</span>
+                <div className="strategy-field" style={{ marginTop: "14px" }}>
+                  <label className="strategy-field-label">Marka Değer Vaadi &amp; Niş Özeti</label>
+                  <textarea
+                    value={brandDescription}
+                    onChange={(e) => setBrandDescription(e.target.value)}
+                    placeholder="Örn: Çocuklar ve gençler için ahşap STEM ve robotik atölyesi. Ebeveynlerin ekran bağımlılığı endişesine pratik üretkenlik çözümü sunuyoruz."
+                    className="strategy-textarea"
+                    rows={3}
+                  />
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Alt Sekme 2: Marka Kimliği */}
+          {activeTab === "brand_identity" && (
+            <div className="cockpit-tab-content-panel">
+              {overview?.brandIdentity ? (
+                <div className="cockpit-detail-grid">
+                  <div className="cockpit-detail-card highlight">
+                    <div className="cockpit-detail-title">
+                      <Tag size={15} style={{ color: "var(--primary)" }} />
+                      <span>İletişim Tonu &amp; Üslup</span>
+                    </div>
+                    <div className="cockpit-detail-body">
+                      <span className="cockpit-pill-tag" style={{ background: "#eef2ff", color: "#4338ca", borderColor: "#c7d2fe", fontWeight: "700" }}>
+                        {overview.brandIdentity.tone}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="cockpit-detail-card">
+                    <div className="cockpit-detail-title">
+                      <span>💡</span>
+                      <span>Temel Değer Vaadi</span>
+                    </div>
+                    <div className="cockpit-detail-body">
+                      {overview.brandIdentity.valueProposition}
+                    </div>
+                  </div>
+
+                  <div className="cockpit-detail-card">
+                    <div className="cockpit-detail-title">
+                      <span>📍</span>
+                      <span>Stratejik Konumlandırma</span>
+                    </div>
+                    <div className="cockpit-detail-body">
+                      {overview.brandIdentity.positioning || "Belirtilmedi"}
+                    </div>
+                  </div>
+
+                  <div className="cockpit-detail-card" style={{ gridColumn: "1 / -1", background: "#f8fafc" }}>
+                    <div className="cockpit-detail-title">
+                      <span>📢</span>
+                      <span>Kilit Mesaj &amp; Slogan</span>
+                    </div>
+                    <div className="cockpit-detail-body" style={{ fontStyle: "italic", fontWeight: "600", color: "#1e293b" }}>
+                      &ldquo;{overview.brandIdentity.keyMessaging}&rdquo;
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-sm text-gray-500">
+                  Henüz strateji üretilmedi. Lütfen <strong>Marka &amp; Girdi</strong> sekmesinden stratejiyi başlatın.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Alt Sekme 3: Rakip Analizi (⚡ Fikir Üret Destekli) */}
+          {activeTab === "competitor_analysis" && (
+            <div className="cockpit-tab-content-panel">
+              {overview?.competitorAnalysis ? (
+                <div className="cockpit-detail-grid">
+                  {/* Rakip Açıkları */}
+                  <div className="cockpit-detail-card">
+                    <div className="cockpit-detail-title">
+                      <Swords size={15} style={{ color: "#7c3aed" }} />
+                      <span>Sektör &amp; Rakip İçerik Açıkları</span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      {(overview.competitorAnalysis.contentGaps || []).map((gap, i) => (
+                        <div key={i} className="cockpit-interactive-item">
+                          <span style={{ fontSize: "11.5px", color: "#334155" }}>• {gap}</span>
+                          <button
+                            type="button"
+                            disabled={topicLoading === gap}
+                            onClick={() => handleGenerateFromTopic(gap, "vertical_video")}
+                            className="btn-topic-generate"
+                            title="Bu rakip açığını hedefleyen 3 yeni video fikri üret"
+                          >
+                            {topicLoading === gap ? <RefreshCw size={10} className="spin" /> : <Zap size={10} />}
+                            <span>{topicLoading === gap ? "Üretiliyor..." : "Fikir Üret"}</span>
+                          </button>
                         </div>
-                      );
-                    })}
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Uyarlanacak Viral Modeller */}
+                  <div className="cockpit-detail-card">
+                    <div className="cockpit-detail-title">
+                      <Zap size={15} style={{ color: "#d97706" }} />
+                      <span>Uyarlanacak Viral Modeller</span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      {(overview.competitorAnalysis.viralPatternsToAdapt || []).length > 0 ? (
+                        overview.competitorAnalysis.viralPatternsToAdapt.map((pat, i) => (
+                          <div key={i} className="cockpit-interactive-item">
+                            <span style={{ fontSize: "11.5px", color: "#334155" }}>✦ {pat}</span>
+                            <button
+                              type="button"
+                              disabled={topicLoading === pat}
+                              onClick={() => handleGenerateFromTopic(pat, "carousel")}
+                              className="btn-topic-generate"
+                              title="Bu viral modeli kullanarak 3 yeni karosel fikri üret"
+                            >
+                              {topicLoading === pat ? <RefreshCw size={10} className="spin" /> : <Zap size={10} />}
+                              <span>{topicLoading === pat ? "Üretiliyor..." : "Fikir Üret"}</span>
+                            </button>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-xs text-gray-500">Ters köşe kancalar ve adım adım dönüşüm formatları.</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Farklılaşma Açısı */}
+                  <div className="cockpit-detail-card highlight" style={{ gridColumn: "1 / -1", background: "#faf5ff", borderColor: "#f3e8ff" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                      <div className="cockpit-detail-title" style={{ color: "#6d28d9" }}>
+                        <span>✦</span>
+                        <span>Markanın Farklılaşma Açısı (Unfair Advantage)</span>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={topicLoading === overview.competitorAnalysis.differentiationAngle}
+                        onClick={() => handleGenerateFromTopic(overview.competitorAnalysis.differentiationAngle, "single_post")}
+                        className="btn-topic-generate"
+                        title="Bu farklılaşma açısıyla yeni içerikler üret"
+                      >
+                        {topicLoading === overview.competitorAnalysis.differentiationAngle ? <RefreshCw size={10} className="spin" /> : <Zap size={10} />}
+                        <span>{topicLoading === overview.competitorAnalysis.differentiationAngle ? "Üretiliyor..." : "Bu Açıyla Fikir Üret"}</span>
+                      </button>
+                    </div>
+                    <div className="cockpit-detail-body" style={{ color: "#5b21b6", fontWeight: "600", fontSize: "13px" }}>
+                      {overview.competitorAnalysis.differentiationAngle}
+                    </div>
                   </div>
                 </div>
-
-                <div className="strategy-field">
-                  <label className="strategy-field-label">Rakipler / Örnek Hesaplar</label>
-                  <input
-                    type="text"
-                    value={competitorsText}
-                    onChange={(e) => setCompetitorsText(e.target.value)}
-                    placeholder="@rakip1, @rakip2, @sektor_hesabi"
-                    className="strategy-input"
-                  />
+              ) : (
+                <div className="text-center py-8 text-sm text-gray-500">
+                  Henüz rakip analizi üretilmedi. Lütfen <strong>Marka &amp; Girdi</strong> sekmesinden stratejiyi başlatın.
                 </div>
-              </div>
-
-              <div className="strategy-field" style={{ marginTop: "14px" }}>
-                <label className="strategy-field-label">Marka Değer Vaadi &amp; Niş Özeti</label>
-                <textarea
-                  value={brandDescription}
-                  onChange={(e) => setBrandDescription(e.target.value)}
-                  placeholder="Örn: Çocuklar ve gençler için ahşap STEM ve robotik atölyesi. Ebeveynlerin ekran bağımlılığı endişesine pratik üretkenlik çözümü sunuyoruz."
-                  className="strategy-textarea"
-                  rows={3}
-                />
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* Sekme 2: Marka Kimliği */}
-        {activeTab === "brand_identity" && (
-          <div className="cockpit-tab-content-panel">
-            {overview?.brandIdentity ? (
-              <div className="cockpit-detail-grid">
-                <div className="cockpit-detail-card highlight">
-                  <div className="cockpit-detail-title">
-                    <Tag size={15} style={{ color: "var(--primary)" }} />
-                    <span>İletişim Tonu &amp; Üslup</span>
-                  </div>
-                  <div className="cockpit-detail-body">
-                    <span className="cockpit-pill-tag" style={{ background: "#eef2ff", color: "#4338ca", borderColor: "#c7d2fe", fontWeight: "700" }}>
-                      {overview.brandIdentity.tone}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="cockpit-detail-card">
-                  <div className="cockpit-detail-title">
-                    <span>💡</span>
-                    <span>Temel Değer Vaadi</span>
-                  </div>
-                  <div className="cockpit-detail-body">
-                    {overview.brandIdentity.valueProposition}
-                  </div>
-                </div>
-
-                <div className="cockpit-detail-card">
-                  <div className="cockpit-detail-title">
-                    <span>📍</span>
-                    <span>Stratejik Konumlandırma</span>
-                  </div>
-                  <div className="cockpit-detail-body">
-                    {overview.brandIdentity.positioning || "Belirtilmedi"}
-                  </div>
-                </div>
-
-                <div className="cockpit-detail-card" style={{ gridColumn: "1 / -1", background: "#f8fafc" }}>
-                  <div className="cockpit-detail-title">
-                    <span>📢</span>
-                    <span>Kilit Mesaj &amp; Slogan</span>
-                  </div>
-                  <div className="cockpit-detail-body" style={{ fontStyle: "italic", fontWeight: "600", color: "#1e293b" }}>
-                    &ldquo;{overview.brandIdentity.keyMessaging}&rdquo;
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-sm text-gray-500">
-                Henüz strateji üretilmedi. Lütfen <strong>Marka &amp; Girdi</strong> sekmesinden stratejiyi başlatın.
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Sekme 3: Rakip Analizi */}
-        {activeTab === "competitor_analysis" && (
-          <div className="cockpit-tab-content-panel">
-            {overview?.competitorAnalysis ? (
-              <div className="cockpit-detail-grid">
-                <div className="cockpit-detail-card">
-                  <div className="cockpit-detail-title">
-                    <Swords size={15} style={{ color: "#7c3aed" }} />
-                    <span>Sektör &amp; Rakip İçerik Açıkları</span>
-                  </div>
-                  <ul className="cockpit-bullet-list">
-                    {(overview.competitorAnalysis.contentGaps || []).map((gap, i) => (
-                      <li key={i}>{gap}</li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="cockpit-detail-card">
-                  <div className="cockpit-detail-title">
-                    <Zap size={15} style={{ color: "#d97706" }} />
-                    <span>Uyarlanacak Viral Modeller</span>
-                  </div>
-                  <ul className="cockpit-bullet-list">
-                    {(overview.competitorAnalysis.viralPatternsToAdapt || []).length > 0 ? (
-                      overview.competitorAnalysis.viralPatternsToAdapt.map((pat, i) => (
-                        <li key={i}>{pat}</li>
-                      ))
-                    ) : (
-                      <li>Ters köşe kancalar ve adım adım dönüşüm formatları.</li>
-                    )}
-                  </ul>
-                </div>
-
-                <div className="cockpit-detail-card highlight" style={{ gridColumn: "1 / -1", background: "#faf5ff", borderColor: "#f3e8ff" }}>
-                  <div className="cockpit-detail-title" style={{ color: "#6d28d9" }}>
-                    <span>✦</span>
-                    <span>Markanın Farklılaşma Açısı (Unfair Advantage)</span>
-                  </div>
-                  <div className="cockpit-detail-body" style={{ color: "#5b21b6", fontWeight: "600", fontSize: "13px" }}>
-                    {overview.competitorAnalysis.differentiationAngle}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-sm text-gray-500">
-                Henüz rakip analizi üretilmedi. Lütfen <strong>Marka &amp; Girdi</strong> sekmesinden stratejiyi başlatın.
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Sekme 4: Hedef Kitle */}
-        {activeTab === "target_audience" && (
-          <div className="cockpit-tab-content-panel">
-            {overview?.audienceVoc ? (
-              <div className="cockpit-detail-grid">
-                <div className="cockpit-detail-card highlight" style={{ background: "#fffdfa", borderColor: "#fef3c7" }}>
-                  <div className="cockpit-detail-title" style={{ color: "#b45309" }}>
-                    <Target size={15} />
-                    <span>Hedef Persona Profili</span>
-                  </div>
-                  <div className="cockpit-detail-body" style={{ color: "#78350f" }}>
-                    {overview.audienceVoc.targetPersona}
-                  </div>
-                </div>
-
-                <div className="cockpit-detail-card">
-                  <div className="cockpit-detail-title">
-                    <span>⚡</span>
-                    <span>Müşteri Acı Noktaları (VOC Pain Points)</span>
-                  </div>
-                  <ul className="cockpit-bullet-list">
-                    {(overview.audienceVoc.painPoints || []).map((pain, i) => (
-                      <li key={i}>{pain}</li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="cockpit-detail-card">
-                  <div className="cockpit-detail-title">
-                    <HelpCircle size={15} style={{ color: "#0284c7" }} />
-                    <span>Sıkça Sorulan Sorular / İtirazlar</span>
-                  </div>
-                  <ul className="cockpit-bullet-list">
-                    {(overview.audienceVoc.frequentQuestions || []).length > 0 ? (
-                      overview.audienceVoc.frequentQuestions.map((q, i) => (
-                        <li key={i}>{q}</li>
-                      ))
-                    ) : (
-                      <li>Eğitim/atölye süresi ve çocuğun yaş grubuna uygunluk endişeleri.</li>
-                    )}
-                  </ul>
-                </div>
-
-                <div className="cockpit-detail-card" style={{ gridColumn: "1 / -1", background: "#f8fafc" }}>
-                  <div className="cockpit-detail-title">
-                    <span>🪝</span>
-                    <span>Kazanan Kanca (Hook) Açıları</span>
-                  </div>
-                  <div className="cockpit-tags-list">
-                    {(overview.audienceVoc.winningHooks || []).map((hook, i) => (
-                      <span key={i} className="cockpit-pill-tag" style={{ background: "#fef2f2", color: "#991b1b", borderColor: "#fee2e2" }}>
-                        &ldquo;{hook}&rdquo;
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-sm text-gray-500">
-                Henüz hedef kitle verisi üretilmedi. Lütfen <strong>Marka &amp; Girdi</strong> sekmesinden stratejiyi başlatın.
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Sekme 5: Büyüme Planı */}
-        {activeTab === "growth_plan" && (
-          <div className="cockpit-tab-content-panel">
-            {overview?.growthStrategy ? (
-              <div className="cockpit-detail-grid">
-                <div className="cockpit-detail-card highlight" style={{ background: "#f0fdf4", borderColor: "#bbf7d0" }}>
-                  <div className="cockpit-detail-title" style={{ color: "#166534" }}>
-                    <TrendingUp size={15} />
-                    <span>Haftalık Paylaşım Rutini</span>
-                  </div>
-                  <div className="cockpit-detail-body" style={{ color: "#14532d", fontWeight: "600" }}>
-                    {overview.growthStrategy.weeklyPostingPlan}
-                  </div>
-                </div>
-
-                <div className="cockpit-detail-card">
-                  <div className="cockpit-detail-title">
-                    <span>🏛️</span>
-                    <span>Ana İçerik Sütunları (Pillars)</span>
-                  </div>
-                  <div className="cockpit-tags-list">
-                    {(overview.growthStrategy.primaryPillars || []).map((pil, idx) => (
-                      <span key={idx} className="cockpit-pill-tag" style={{ background: "#f0fdf4", color: "#166534", borderColor: "#bbf7d0" }}>
-                        #{pil}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="cockpit-detail-card">
-                  <div className="cockpit-detail-title">
-                    <span>📱</span>
-                    <span>Kanal Öncelikleri</span>
-                  </div>
-                  <div className="cockpit-tags-list">
-                    {(overview.growthStrategy.channelPriorities || socialChannels).map((ch, idx) => (
-                      <span key={idx} className="cockpit-pill-tag" style={{ background: "#eff6ff", color: "#1e40af", borderColor: "#dbeafe" }}>
-                        {idx + 1}. {ch}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="cockpit-detail-card" style={{ gridColumn: "1 / -1", background: "#f8fafc" }}>
-                  <div className="cockpit-detail-title">
-                    <span>🎯</span>
-                    <span>Dönüşüm Hunisi (Funnel)</span>
-                  </div>
-                  <div className="cockpit-detail-body">
-                    {overview.growthStrategy.conversionFunnel || "Farkındalık (Reels) → İlgi (Karosel/Rehber) → Güven (Story/DM) → Kayıt"}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-sm text-gray-500">
-                Henüz büyüme planı üretilmedi. Lütfen <strong>Marka &amp; Girdi</strong> sekmesinden stratejiyi başlatın.
-              </div>
-            )}
-          </div>
-        )}
-      </section>
-
-      {/* 2. KATMAN: İÇERİK TÜRÜNE GÖRE DİKEY KOLON MATRİSİ (KANBAN) */}
-      {columns && (
-        <section style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <strong style={{ font: "700 13px 'Manrope'", color: "var(--text)" }}>Katman 2: İçerik Türü Kolon Matrisi</strong>
-              <small style={{ color: "var(--muted)", fontSize: "11px" }}>· Kolon bazlı yeni fikir üretin veya kullanılanları gizleyin</small>
+              )}
             </div>
-          </div>
+          )}
 
+          {/* Alt Sekme 4: Hedef Kitle (VOC, Acı Noktaları & Kanca Laboratuvarı) */}
+          {activeTab === "target_audience" && (
+            <div className="cockpit-tab-content-panel">
+              {overview?.audienceVoc ? (
+                <div className="cockpit-detail-grid">
+                  {/* Persona */}
+                  <div className="cockpit-detail-card highlight" style={{ background: "#fffdfa", borderColor: "#fef3c7" }}>
+                    <div className="cockpit-detail-title" style={{ color: "#b45309" }}>
+                      <Target size={15} />
+                      <span>Hedef Persona Profili</span>
+                    </div>
+                    <div className="cockpit-detail-body" style={{ color: "#78350f" }}>
+                      {overview.audienceVoc.targetPersona}
+                    </div>
+                  </div>
+
+                  {/* Acı Noktaları (VOC) */}
+                  <div className="cockpit-detail-card">
+                    <div className="cockpit-detail-title">
+                      <span>⚡</span>
+                      <span>Müşteri Acı Noktaları (VOC)</span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      {(overview.audienceVoc.painPoints || []).map((pain, i) => (
+                        <div key={i} className="cockpit-interactive-item">
+                          <span style={{ fontSize: "11.5px", color: "#334155" }}>• {pain}</span>
+                          <button
+                            type="button"
+                            disabled={topicLoading === pain}
+                            onClick={() => handleGenerateFromTopic(pain, "vertical_video")}
+                            className="btn-topic-generate"
+                            title="Bu acı noktasına çözüm getiren video fikirleri üret"
+                          >
+                            {topicLoading === pain ? <RefreshCw size={10} className="spin" /> : <Zap size={10} />}
+                            <span>{topicLoading === pain ? "Üretiliyor..." : "Fikir Üret"}</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Sıkça Sorulan Sorular / İtirazlar */}
+                  <div className="cockpit-detail-card" style={{ gridColumn: "1 / -1" }}>
+                    <div className="cockpit-detail-title">
+                      <HelpCircle size={15} style={{ color: "#0284c7" }} />
+                      <span>Sıkça Sorulan Sorular / İtirazlar</span>
+                    </div>
+                    <ul className="cockpit-bullet-list">
+                      {(overview.audienceVoc.frequentQuestions || []).length > 0 ? (
+                        overview.audienceVoc.frequentQuestions.map((q, i) => (
+                          <li key={i}>{q}</li>
+                        ))
+                      ) : (
+                        <li>Eğitim/atölye süresi ve çocuğun yaş grubuna uygunluk endişeleri.</li>
+                      )}
+                    </ul>
+                  </div>
+
+                  {/* Kanca (Hook) Laboratuvarı */}
+                  <div className="cockpit-detail-card" style={{ gridColumn: "1 / -1", background: "#f8fafc" }}>
+                    <div className="cockpit-detail-title">
+                      <span>🪝</span>
+                      <span>Kazanan Kanca (Hook) Laboratuvarı &amp; Psikolojik Açıları</span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "8px", marginTop: "4px" }}>
+                      {(overview.audienceVoc.winningHooks || []).map((hook, i) => {
+                        const cleanH = hook.replace(/^["'“”]+|["'“”]+$/g, "");
+                        const cat = hookCategories[i % hookCategories.length];
+                        const isCopied = copiedId === cleanH;
+                        return (
+                          <div key={i} className="cockpit-hook-item">
+                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                              <span
+                                className="cockpit-hook-category"
+                                style={{ background: cat.bg, color: cat.color, border: `1px solid ${cat.border}`, width: "fit-content" }}
+                              >
+                                {cat.category}
+                              </span>
+                              <span style={{ fontSize: "11.5px", color: "#1e293b", fontWeight: "600" }}>
+                                &ldquo;{cleanH}&rdquo;
+                              </span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(cleanH);
+                                setCopiedId(cleanH);
+                                setTimeout(() => setCopiedId(null), 2000);
+                              }}
+                              className="btn-card-action icon-only"
+                              title="Kancayı Kopyala"
+                            >
+                              {isCopied ? <CheckCircle2 size={12} style={{ color: "#10b981" }} /> : <Copy size={12} />}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-sm text-gray-500">
+                  Henüz hedef kitle verisi üretilmedi. Lütfen <strong>Marka &amp; Girdi</strong> sekmesinden stratejiyi başlatın.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Alt Sekme 5: Büyüme Planı (Haftalık Şablon & Hashtag Bankası) */}
+          {activeTab === "growth_plan" && (
+            <div className="cockpit-tab-content-panel">
+              {overview?.growthStrategy ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                  <div className="cockpit-detail-grid">
+                    {/* Haftalık Hacim */}
+                    <div className="cockpit-detail-card highlight" style={{ background: "#f0fdf4", borderColor: "#bbf7d0" }}>
+                      <div className="cockpit-detail-title" style={{ color: "#166534" }}>
+                        <TrendingUp size={15} />
+                        <span>Haftalık Paylaşım Hacmi</span>
+                      </div>
+                      <div className="cockpit-detail-body" style={{ color: "#14532d", fontWeight: "600" }}>
+                        {overview.growthStrategy.weeklyPostingPlan}
+                      </div>
+                    </div>
+
+                    {/* İçerik Sütunları */}
+                    <div className="cockpit-detail-card">
+                      <div className="cockpit-detail-title">
+                        <span>🏛️</span>
+                        <span>Ana İçerik Sütunları (Pillars)</span>
+                      </div>
+                      <div className="cockpit-tags-list">
+                        {(overview.growthStrategy.primaryPillars || []).map((pil, idx) => (
+                          <span key={idx} className="cockpit-pill-tag" style={{ background: "#f0fdf4", color: "#166534", borderColor: "#bbf7d0" }}>
+                            #{pil}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Kanal Öncelikleri */}
+                    <div className="cockpit-detail-card">
+                      <div className="cockpit-detail-title">
+                        <span>📱</span>
+                        <span>Kanal Öncelikleri</span>
+                      </div>
+                      <div className="cockpit-tags-list">
+                        {(overview.growthStrategy.channelPriorities || socialChannels).map((ch, idx) => (
+                          <span key={idx} className="cockpit-pill-tag" style={{ background: "#eff6ff", color: "#1e40af", borderColor: "#dbeafe" }}>
+                            {idx + 1}. {ch}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 7 Günlük Paylaşım Rutini Şablonu */}
+                  <div className="cockpit-detail-card" style={{ background: "#fbfbfd" }}>
+                    <div className="cockpit-detail-title">
+                      <CalendarDays size={15} style={{ color: "var(--primary)" }} />
+                      <span>7 Günlük Örnek İçerik Akış Rutini (Pazartesi - Pazar)</span>
+                    </div>
+                    <div className="cockpit-schedule-grid" style={{ marginTop: "6px" }}>
+                      {defaultWeeklySchedule.map((item, idx) => (
+                        <div key={idx} className="cockpit-schedule-card">
+                          <div className="cockpit-schedule-day">
+                            <span>{item.day}</span>
+                          </div>
+                          <span className="cockpit-schedule-format">{item.format}</span>
+                          <p className="cockpit-schedule-focus">{item.focus}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Hashtag Bankası */}
+                  <div className="cockpit-detail-card" style={{ background: "#fbfbfd" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                      <div className="cockpit-detail-title">
+                        <Hash size={15} style={{ color: "#0284c7" }} />
+                        <span>Sektörel Niş &amp; Keşfet Hashtag Bankası</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={copyAllHashtags}
+                        className="btn-card-action primary"
+                        title="Tüm hashtagleri tek tıkla kopyala"
+                      >
+                        {copiedHashtags ? <CheckCircle2 size={12} style={{ color: "#10b981" }} /> : <Copy size={12} />}
+                        <span>{copiedHashtags ? "Kopyalandı!" : "Tüm Etiketleri Kopyala"}</span>
+                      </button>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "10px", marginTop: "8px" }}>
+                      {hashtagGroups.map((group, gIdx) => (
+                        <div key={gIdx} className="cockpit-hashtag-group">
+                          <span className="cockpit-hashtag-group-title">{group.title}</span>
+                          <div className="cockpit-hashtag-pills">
+                            {group.tags.map((tag, tIdx) => (
+                              <span key={tIdx} className="cockpit-hashtag-pill">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Dönüşüm Hunisi */}
+                  <div className="cockpit-detail-card" style={{ background: "#f8fafc" }}>
+                    <div className="cockpit-detail-title">
+                      <span>🎯</span>
+                      <span>Dönüşüm Hunisi (Conversion Funnel)</span>
+                    </div>
+                    <div className="cockpit-detail-body">
+                      {overview.growthStrategy.conversionFunnel || "Farkındalık (Reels) → İlgi (Karosel/Rehber) → Güven (Story/DM) → Kayıt"}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-sm text-gray-500">
+                  Henüz büyüme planı üretilmedi. Lütfen <strong>Marka &amp; Girdi</strong> sekmesinden stratejiyi başlatın.
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ========================================================
+          2. ANA SEKME: İÇERİK ÖNERİLERİ (İÇERİK TÜRÜ KOLON MATRİSİ)
+      ======================================================== */}
+      {mainTab === "content_ideas" && columns && (
+        <section style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           <div className="kanban-grid">
             {(Object.keys(COLUMN_CONFIG) as ColumnType[]).map((colType) => {
               const conf = COLUMN_CONFIG[colType];
@@ -1063,34 +1155,14 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                       displayList.map((idea) => {
                         const isHidden = idea.status === "hidden";
                         const isCopied = copiedId === (idea.id || idea.title);
-                        // Clean any leading quotation marks to avoid double-quote rendering bugs
                         const cleanHook = (idea.hook || "").replace(/^["'“”]+|["'“”]+$/g, "");
                         return (
                           <div
                             key={idea.id || idea.title}
                             className={`kanban-card ${isHidden ? "is-hidden" : ""}`}
                           >
-                            {/* Kart Başlığı ve Zaman/Beceri Rozeti */}
-                            <div className="kanban-card-head flex-col items-start gap-1">
-                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                                  {/* Zaman Etiketi (Yeni vs Eski) */}
-                                  {idea.createdAt && (Date.now() - new Date(idea.createdAt).getTime() < 3600000 * 24) ? (
-                                    <span style={{ fontSize: "9px", fontWeight: "700", background: "#fef3c7", color: "#b45309", padding: "1px 5px", borderRadius: "4px" }}>
-                                      ✨ Yeni
-                                    </span>
-                                  ) : (
-                                    <span style={{ fontSize: "9px", color: "#94a3b8", display: "inline-flex", alignItems: "center", gap: "2px" }}>
-                                      <Clock size={10} /> Eski
-                                    </span>
-                                  )}
-
-                                  {/* ScrapeCreators Beceri Rozeti */}
-                                  <span style={{ fontSize: "9px", color: "#6366f1", background: "#eef2ff", padding: "1px 5px", borderRadius: "4px", fontWeight: "600" }}>
-                                    {idea.skillSource || "outlier-post-finder"}
-                                  </span>
-                                </div>
-                              </div>
+                            {/* Kart Başlığı */}
+                            <div className="kanban-card-head">
                               <h5 className={`kanban-card-title ${isHidden ? "crossed" : ""}`}>{idea.title}</h5>
                             </div>
 
@@ -1117,7 +1189,7 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                               </details>
                             )}
 
-                            {/* Alt Çubuk: Hedef Kanal & Aksiyon Butonları */}
+                            {/* Alt Çubuk: Hedef Kanal & Aksiyon Butonları (PLANLA KALDIRILDI) */}
                             <div className="kanban-card-footer">
                               <span className="kanban-channel-badge" title={idea.targetChannel}>
                                 {idea.targetChannel}
@@ -1150,20 +1222,10 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                                   type="button"
                                   onClick={() => handleSendToCanva(idea)}
                                   className="btn-card-action primary"
-                                  title="Canva Görsel Üretim Stüdyosuna Aktar"
+                                  title="Canva Görsel Üretim Stüdyosuna Aktar (Otomatik Gizlenene Taşınır)"
                                 >
                                   <Palette size={12} />
                                   <span>Canva</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => handleSendToPublishing(idea)}
-                                  className="btn-card-action"
-                                  title="Paylaşım Planına Ekle"
-                                >
-                                  <Send size={12} />
-                                  <span>Planla</span>
                                 </button>
                               </div>
                             </div>

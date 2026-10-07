@@ -8,45 +8,84 @@ import {
 
 export const runtime = "nodejs";
 
-// PUT: Update status of an idea (suggested <-> hidden)
-export async function PUT(
+// PUT / PATCH: Update status of an idea (suggested <-> hidden)
+async function handleUpdateStatus(
   request: NextRequest,
-  { params }: { params: Promise<{ projectId: string }> }
+  params: Promise<{ projectId: string }>
 ) {
   const { projectId } = await params;
   const body = await request.json();
   const ideaId = body.ideaId;
-  const newStatus = body.status; // 'suggested' or 'hidden'
 
-  if (!ideaId || !["suggested", "hidden"].includes(newStatus)) {
-    return NextResponse.json({ success: false, error: "Geçersiz parametre." }, { status: 400 });
+  if (!ideaId) {
+    return NextResponse.json({ success: false, error: "ideaId gereklidir." }, { status: 400 });
   }
 
   const db = getDatabase()!;
+  const row = db.prepare(
+    "SELECT id, status FROM project_strategy_ideas WHERE id = ? AND project_id = ?"
+  ).get(ideaId, projectId) as { id: string; status: string } | undefined;
+
+  let nextStatus: string;
+  if (body.action === "toggle_hide" || !body.status) {
+    nextStatus = row?.status === "hidden" ? "suggested" : "hidden";
+  } else if (["suggested", "hidden"].includes(body.status)) {
+    nextStatus = body.status;
+  } else {
+    return NextResponse.json({ success: false, error: "Geçersiz durum değeri." }, { status: 400 });
+  }
+
+  const now = new Date().toISOString();
   db.prepare(`
     UPDATE project_strategy_ideas 
     SET status = ?, updated_at = ? 
     WHERE id = ? AND project_id = ?
-  `).run(newStatus, new Date().toISOString(), ideaId, projectId);
+  `).run(nextStatus, now, ideaId, projectId);
 
-  return NextResponse.json({ success: true, message: "Fikir durumu güncellendi." });
+  return NextResponse.json({
+    success: true,
+    status: nextStatus,
+    message: `Fikir durumu '${nextStatus}' olarak güncellendi.`,
+  });
 }
 
-// POST: Generate NEW ideas for a specific column
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ projectId: string }> }
+) {
+  return handleUpdateStatus(request, params);
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ projectId: string }> }
+) {
+  return handleUpdateStatus(request, params);
+}
+
+// POST: Generate NEW ideas for a specific column or based on a focusTopic
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   const { projectId } = await params;
   const body = await request.json();
-  const columnType = body.columnType as ColumnType;
+  const columnType = (body.columnType || "vertical_video") as ColumnType;
+  const focusTopic = (body.focusTopic || "").trim();
 
   if (!["vertical_video", "carousel", "single_post", "engagement"].includes(columnType)) {
     return NextResponse.json({ success: false, error: "Geçersiz kolon tipi." }, { status: 400 });
   }
 
   const db = getDatabase()!;
-  const strategyRow = db.prepare("SELECT * FROM project_brand_strategies WHERE project_id = ?").get(projectId) as any;
+  const strategyRow = db.prepare("SELECT * FROM project_brand_strategies WHERE project_id = ?").get(projectId) as {
+    brand_name: string;
+    brand_description: string;
+    brand_identity_json: string;
+    competitor_analysis_json: string;
+    audience_voc_json: string;
+    growth_strategy_json: string;
+  } | undefined;
   if (!strategyRow) {
     return NextResponse.json({ success: false, error: "Önce marka stratejisi oluşturulmalıdır." }, { status: 400 });
   }
@@ -64,6 +103,7 @@ export async function POST(
       brandDescription: strategyRow.brand_description,
       columnType,
       existingTitles,
+      focusTopic,
       strategyContext: {
         brandIdentity: JSON.parse(strategyRow.brand_identity_json || "{}"),
         competitorAnalysis: JSON.parse(strategyRow.competitor_analysis_json || "{}"),
@@ -94,16 +134,17 @@ export async function POST(
         now,
         now
       );
-      insertedIdeas.push({ ...item, id });
+      insertedIdeas.push({ ...item, id, columnType, status: "suggested" as const });
     }
 
     return NextResponse.json({
       success: true,
       message: `${newIdeas.length} yeni fikir eklendi.`,
       ideas: insertedIdeas,
+      columnType,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[Generate Column Ideas Error]", error);
-    return NextResponse.json({ success: false, error: error.message || "Fikir üretilemedi." }, { status: 500 });
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Fikir üretilemedi." }, { status: 500 });
   }
 }
