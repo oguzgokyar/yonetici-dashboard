@@ -282,8 +282,12 @@ export function CanvaGenerationStudio({
         throw new Error(data.message || "Canva işi başlatılamadı.");
       }
 
-      setMessage("Canva üretim görevi Hermes Agent'a iletildi.");
+      setMessage("✓ Canva üretim görevi sıraya alındı.");
       await loadJobs();
+      // Notify production queue drawer to refresh and open
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("production-queue-updated", { detail: { openDrawer: true } }));
+      }
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Görev oluşturulamadı.");
     } finally {
@@ -634,14 +638,14 @@ export function CanvaGenerationStudio({
           type="button"
           className="generate-button"
           onClick={handleCreateJob}
-          disabled={isProducing}
+          disabled={producing}
         >
-          {isProducing ? (
+          {producing ? (
             <LoaderCircle className="spin" size={18} />
           ) : (
             <Sparkles size={18} />
           )}
-          {isProducing ? "Canva üretimi devam ediyor" : "Canva ile üret"}
+          {producing ? "Sıraya ekleniyor..." : (isProducing ? "Sıraya Yeni Üretim Ekle" : "Canva ile üret")}
           <span>
             {CANVA_CONTENT_TYPES[contentType]?.packageType === "carousel"
               ? `${slideCount} ${CANVA_CONTENT_TYPES[contentType]?.category === "video" ? "sahne video" : "slayt carousel"}`

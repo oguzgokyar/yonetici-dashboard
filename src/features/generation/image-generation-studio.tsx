@@ -216,6 +216,9 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
       const body = await response.json() as { ok: boolean; message?: string; model?: string; assets?: { id: string; url: string; mimeType: string }[] };
       if (!response.ok || !body.ok || !body.assets?.length) { setMessage(body.message || "Görsel üretilemedi."); return; }
       setResults(body.assets); setUsedModel(body.model || ""); await loadHistory();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("production-queue-updated", { detail: { openDrawer: true } }));
+      }
     } catch { setMessage("Görsel üretim isteği tamamlanamadı."); }
     finally { setGenerating(false); }
   }
@@ -300,7 +303,7 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
         </div>
 
         {message && <div className="generation-notice"><Info size={15} /><span>{message}</span></div>}
-        <button type="button" className="generate-button" onClick={generate} disabled={isProducing}>{isProducing ? <LoaderCircle className="spin" size={18} /> : <Sparkles size={18} />}{isProducing ? "Üretim devam ediyor" : "Görsel üret"}<span>{isProducing ? `${activeJob?.progress.completed || 0}/${activeJob?.progress.total || count}` : `${count} varyasyon`}</span></button>
+        <button type="button" className="generate-button" onClick={generate} disabled={generating}>{generating ? <LoaderCircle className="spin" size={18} /> : <Sparkles size={18} />}{generating ? "Sıraya alınıyor..." : (runningJobs.length > 0 ? "Sıraya Yeni Görsel Ekle" : "Görsel üret")}<span>{count} varyasyon</span></button>
       </section>
 
       <section className="generation-results">

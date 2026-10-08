@@ -2877,3 +2877,462 @@ button { cursor:pointer; }
   border-color: #c4b5fd;
 }
 
+/* ========================================================
+   PRODUCTION QUEUE SLIDE-OVER DRAWER (Right Sidebar)
+======================================================== */
+.queue-button {
+  position: relative;
+}
+
+.queue-button.has-active-jobs {
+  border-color: #c4b5fd;
+  background: #f5f3ff;
+  color: #6d28d9;
+}
+
+.queue-indicator {
+  display: none;
+}
+
+.queue-indicator.active {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #6d5dfc;
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(109, 93, 252, 0.35);
+}
+
+.prod-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 16, 26, 0.28);
+  backdrop-filter: blur(2px);
+  z-index: 90;
+  animation: fadeIn 0.18s ease;
+}
+
+.prod-drawer-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 390px;
+  max-width: 92vw;
+  background: white;
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 32px rgba(20, 21, 38, 0.12);
+  z-index: 95;
+  display: flex;
+  flex-direction: column;
+  animation: slideInRight 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.prod-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid #f0f0f5;
+}
+
+.prod-drawer-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.prod-drawer-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: #f3f0ff;
+  color: var(--primary);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.prod-drawer-title-group h3 {
+  margin: 0;
+  font: 700 15px "Manrope", sans-serif;
+  color: var(--text);
+}
+
+.prod-drawer-title-group p {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.prod-drawer-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 12px 20px;
+  background: #fbfbfd;
+  border-bottom: 1px solid #f0f0f5;
+}
+
+.prod-drawer-tab-btn {
+  height: 36px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: #f1f2f6;
+  color: #64748b;
+  font: 700 12px "Manrope", sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.prod-drawer-tab-btn:hover {
+  color: var(--text);
+}
+
+.prod-drawer-tab-btn.active {
+  background: white;
+  color: var(--primary);
+  border-color: #dcd8ff;
+  box-shadow: 0 2px 6px rgba(109, 93, 252, 0.08);
+}
+
+.prod-drawer-badge {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.prod-drawer-tab-btn.active .prod-drawer-badge {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.prod-drawer-badge.pulse {
+  background: #6d5dfc;
+  color: white;
+}
+
+.prod-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.prod-drawer-empty {
+  margin: auto 0;
+  text-align: center;
+  padding: 36px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.prod-empty-circle {
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  display: grid;
+  place-items: center;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.prod-drawer-empty strong {
+  font: 700 13px "Manrope", sans-serif;
+  color: var(--text);
+}
+
+.prod-drawer-empty p {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  max-width: 260px;
+}
+
+.prod-drawer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.prod-queue-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
+  transition: border-color 0.15s ease;
+}
+
+.prod-queue-card.active-job {
+  border-color: #c7d2fe;
+  background: #fdfcff;
+}
+
+.prod-queue-card.failed-job {
+  border-color: #fecaca;
+  background: #fffafa;
+}
+
+.prod-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.prod-type-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.prod-type-pill.canva {
+  background: #f5f3ff;
+  color: #6d28d9;
+}
+
+.prod-type-pill.image {
+  background: #ecfeff;
+  color: #0891b2;
+}
+
+.prod-type-pill.video,
+.prod-type-pill.video-layer {
+  background: #fdf2f8;
+  color: #db2777;
+}
+
+.prod-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.prod-order-tag {
+  font-size: 10px;
+  font-weight: 800;
+  color: #6366f1;
+  background: #eef2ff;
+  padding: 1px 6px;
+  border-radius: 5px;
+}
+
+.prod-time-ago {
+  font-size: 10px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.prod-cancel-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.prod-cancel-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.prod-card-prompt {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.prod-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.prod-progress-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10.5px;
+}
+
+.prod-progress-detail {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #5b21b6;
+  font-weight: 600;
+}
+
+.prod-progress-pct {
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.prod-progress-track {
+  width: 100%;
+  height: 6px;
+  background: #ede9fe;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.prod-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6d5dfc, #9b8afb);
+  border-radius: 999px;
+  transition: width 0.35s ease;
+}
+
+.prod-done-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.prod-thumb-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  flex: none;
+  cursor: pointer;
+}
+
+.prod-thumb-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.prod-done-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.prod-success-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #059669;
+}
+
+.prod-error-line {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #dc2626;
+  line-height: 1.3;
+}
+
+.prod-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.prod-action-btn {
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  color: #475569;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.12s ease;
+}
+
+.prod-action-btn:hover {
+  background: #f8fafc;
+  color: var(--text);
+}
+
+.prod-action-btn.primary {
+  background: #f5f3ff;
+  border-color: #ddd6fe;
+  color: #6d28d9;
+}
+
+.prod-action-btn.primary:hover {
+  background: #ede9fe;
+}
+
+.prod-drawer-footer {
+  padding: 12px 20px;
+  background: #fbfbfd;
+  border-top: 1px solid #f0f0f5;
+  text-align: center;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+

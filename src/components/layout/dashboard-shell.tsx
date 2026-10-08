@@ -6,8 +6,10 @@ import { useState } from "react";
 import {
   Bell, ChevronDown, Clapperboard, Compass, Film, FolderKanban, Image, LayoutDashboard, PanelsTopLeft,
   Menu, Palette, PanelLeftClose, PanelLeftOpen, Pin, Plus, Search, Send, Settings, Share2, Sparkles, X,
+  Layers,
 } from "lucide-react";
 import { useProjects } from "@/features/projects/projects-context";
+import { ProductionQueueDrawer } from "./production-queue-drawer";
 
 type DashboardShellProps = {
   children: React.ReactNode;
@@ -35,6 +37,8 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const [queueDrawerOpen, setQueueDrawerOpen] = useState(false);
+  const [activeQueueCount, setActiveQueueCount] = useState(0);
   const activeProject = projectId ? projects.find((project) => project.id === projectId) : undefined;
 
   function projectHref(suffix = "") {
@@ -128,11 +132,38 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
               </div>
             )}
             <button className="search-button"><Search size={18} /><span>İçerik ara...</span><kbd>⌘ K</kbd></button>
+
+            {/* Üretim Listesi & Kuyruk Butonu */}
+            {projectId && (
+              <button
+                type="button"
+                className={`icon-button queue-button ${activeQueueCount > 0 ? "has-active-jobs" : ""}`}
+                onClick={() => setQueueDrawerOpen(true)}
+                title={activeQueueCount > 0 ? `Üretim Listesi (${activeQueueCount} sırada)` : "Üretim Listesi"}
+                aria-label="Üretim listesini aç"
+              >
+                <Layers size={19} />
+                {activeQueueCount > 0 ? (
+                  <span className="queue-indicator active">{activeQueueCount}</span>
+                ) : (
+                  <span className="queue-indicator" />
+                )}
+              </button>
+            )}
+
             <button className="icon-button notification-button"><Bell size={19} /><span /></button>
           </div>
         </header>
         <main className="content-area">{children}</main>
       </div>
+
+      {/* Slide-over Production Queue Drawer */}
+      <ProductionQueueDrawer
+        projectId={projectId}
+        isOpen={queueDrawerOpen}
+        onClose={() => setQueueDrawerOpen(false)}
+        onActiveCountChange={(count) => setActiveQueueCount(count)}
+      />
     </div>
   );
 }
