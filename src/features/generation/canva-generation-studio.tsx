@@ -703,9 +703,13 @@ export function CanvaGenerationStudio({
                   Üretim Başarısız Oldu
                 </h4>
                 <p style={{ margin: 0, fontSize: "12px", color: "#b91c1c", lineHeight: 1.45 }}>
-                  {(latestFailedJob.progress?.detail || latestFailedJob.error || "").includes("quota_exceeded")
-                    ? "Canva hesabı (ai.deneyleri@gmail.com) yapay zeka tasarım üretme kotasını (AI design generation quota) doldurdu. Canva Free hesaplarında sınırlı sayıda tasarım hakkı bulunur. Mevcut şablonlar üzerinden devam edebilir veya kotanın sıfırlanmasını bekleyebilirsiniz."
-                    : latestFailedJob.progress?.detail || latestFailedJob.error || "Canva üretimi sırasında bir hata oluştu."}
+                  {(() => {
+                    const detail = latestFailedJob.progress?.detail || latestFailedJob.error || "";
+                    if (detail.includes("quota_cooldown") || detail.includes("quota_exceeded")) {
+                      return "Canva hesabı yapay zeka tasarım üretme kredisini (%100) doldurdu veya kısa süreli bekleme (cooldown) modunda. Canva AI üretimi için kota periyodunun sıfırlanmasını bekleyebilir veya Canva panelinden kredinizi kontrol edebilirsiniz.";
+                    }
+                    return detail || "Canva üretimi sırasında bir hata oluştu.";
+                  })()}
                 </p>
                 <div style={{ marginTop: "6px", fontSize: "11px", color: "#7f1d1d" }}>
                   Prompt: &quot;{latestFailedJob.prompt.slice(0, 80)}...&quot;
