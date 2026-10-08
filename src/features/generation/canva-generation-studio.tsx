@@ -118,7 +118,7 @@ export function CanvaGenerationStudio({
   const [loadingPackages, setLoadingPackages] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
-  const [dismissedFailedJobId, setDismissedFailedJobId] = useState<string | null>(null);
+  const [dismissedFailedJobIds, setDismissedFailedJobIds] = useState<Set<string>>(new Set());
   const [archiveTab, setArchiveTab] = useState<"packages" | "videos">("packages");
 
   // Video conversion and playback state
@@ -135,6 +135,37 @@ export function CanvaGenerationStudio({
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
 
   const available = useMemo(() => project.brand || {}, [project]);
+
+  // Form persistence in localStorage & Pre-fill from Strategy Studio
+  useEffect(() => {
+    try {
+      const storedDismissed = localStorage.getItem(`canva_dismissed_failed_${projectId}`);
+      if (storedDismissed) {
+        const parsed = JSON.parse(storedDismissed);
+        if (Array.isArray(parsed)) {
+          setDismissedFailedJobIds(new Set(parsed));
+        }
+      }
+    } catch {}
+  }, [projectId]);
+
+  function handleDismissFailedJob(jobId: string) {
+    setDismissedFailedJobIds((prev) => {
+      const updated = new Set(prev).add(jobId);
+      try {
+        localStorage.setItem(`canva_dismissed_failed_${projectId}`, JSON.stringify(Array.from(updated)));
+      } catch {}
+      return updated;
+    });
+
+    // Also delete/remove the failed record from backend so it never resurfaces in jobs or queue
+    setJobs((prev) => prev.filter((j) => j.id !== jobId));
+    void fetch(`/api/projects/${encodeURIComponent(projectId)}/canva/jobs`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId }),
+    }).catch(() => {});
+  }
 
   // Form persistence in localStorage & Pre-fill from Strategy Studio
   useEffect(() => {
@@ -179,7 +210,7 @@ export function CanvaGenerationStudio({
   const activeRenderingPackage = packages.find((p) => p.videoStatus === "rendering" || p.id === syncingPkgId);
 
   const latestFailedJob = jobs.find(
-    (j) => j.status === "failed" && j.id !== dismissedFailedJobId
+    (j) => j.status === "failed" && !dismissedFailedJobIds.has(j.id)
   );
   const isProducing = producing || Boolean(activeJob) || Boolean(activeRenderingPackage);
 
@@ -718,7 +749,7 @@ export function CanvaGenerationStudio({
             </div>
             <button
               type="button"
-              onClick={() => setDismissedFailedJobId(latestFailedJob.id)}
+              onClick={() => handleDismissFailedJob(latestFailedJob.id)}
               style={{
                 background: "none",
                 border: "none",

@@ -228,7 +228,8 @@ export async function DELETE(request: Request, context: Context) {
     }
 
     if (["complete", "failed"].includes(job.status)) {
-      return Response.json({ ok: true, message: "İş zaten tamamlanmış veya sonlanmış." });
+      database.prepare("DELETE FROM generation_jobs WHERE id=? AND project_id=?").run(jobId, projectId);
+      return Response.json({ ok: true, message: "Tamamlanmış veya başarısız iş kaydı silindi.", jobId });
     }
 
     const cancelProgress = JSON.stringify({
