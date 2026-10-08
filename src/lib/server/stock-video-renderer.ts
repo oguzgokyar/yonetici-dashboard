@@ -17,6 +17,7 @@ const execFileAsync = promisify(execFile);
 export type FrameStyle = "none" | "blur_padding" | "modern_card" | "split_screen" | "minimal_glow";
 
 export type RenderStockVideoOptions = {
+  jobId?: string;
   projectId: string;
   stockVideoId: string;
   frameStyle: FrameStyle;
@@ -75,7 +76,7 @@ async function renderStockVideoCore(options: RenderStockVideoOptions, transientM
   fs.mkdirSync(outputDir, { recursive: true });
   fs.mkdirSync(tempDir, { recursive: true });
 
-  const renderId = crypto.randomUUID();
+  const renderId = options.jobId || crypto.randomUUID();
   const outputLocation = path.join(outputDir, `${renderId}.mp4`);
 
   // Check if custom overlay PNG is requested
@@ -649,33 +650,49 @@ async function renderStockVideoCore(options: RenderStockVideoOptions, transientM
     sourceMetadata = {};
   }
 
-  // Log job in generation_jobs table
-  db.prepare(`
-    INSERT INTO generation_jobs (id, project_id, type, provider, model, status, prompt, request_json, created_at)
-    VALUES (?, ?, 'video', 'local', 'ffmpeg-frame-engine', 'rendering', ?, ?, ?)
-  `).run(
-    renderId,
-    options.projectId,
-    `Stok videoya özel çerçeve ve başlık ekleme: ${videoTitle}`,
-    JSON.stringify({
-      sourceStockVideoId: stockRow.id,
-      frameStyle,
+  // Log job in generation_jobs table (upsert if pre-registered)
+  const existingJob = db.prepare("SELECT id FROM generation_jobs WHERE id = ?").get(renderId);
+  const jobRequestJson = JSON.stringify({
+    sourceStockVideoId: stockRow.id,
+    frameStyle,
+    headline: titleText,
+    subtitle: subText,
+    metadata: {
+      ...sourceMetadata,
       headline: titleText,
       subtitle: subText,
-      metadata: {
-        ...sourceMetadata,
-        headline: titleText,
-        subtitle: subText,
-        sourceStockVideoId: stockRow.id,
-      },
-      musicTrack: options.musicTrack,
-      outroId: options.outroId,
-      trimStartSeconds: trimStart,
-      trimEndSeconds: rawTrimEnd,
-      renderer: "ffmpeg-frame-engine",
-    }),
-    now
-  );
+      sourceStockVideoId: stockRow.id,
+    },
+    musicTrack: options.musicTrack,
+    outroId: options.outroId,
+    trimStartSeconds: trimStart,
+    trimEndSeconds: rawTrimEnd,
+    renderer: "ffmpeg-frame-engine",
+  });
+
+  if (existingJob) {
+    db.prepare(`
+      UPDATE generation_jobs
+      SET status = 'rendering', progress_json = ?, request_json = ?
+      WHERE id = ?
+    `).run(
+      JSON.stringify({ percent: 30, phase: "rendering", detail: "FFmpeg ile video çerçevesi ve efektler işleniyor..." }),
+      jobRequestJson,
+      renderId
+    );
+  } else {
+    db.prepare(`
+      INSERT INTO generation_jobs (id, project_id, type, provider, model, status, prompt, request_json, progress_json, created_at)
+      VALUES (?, ?, 'video', 'local', 'ffmpeg-frame-engine', 'rendering', ?, ?, ?, ?)
+    `).run(
+      renderId,
+      options.projectId,
+      `Stok videoya özel çerçeve ve başlık ekleme: ${videoTitle}`,
+      jobRequestJson,
+      JSON.stringify({ percent: 30, phase: "rendering", detail: "FFmpeg ile video çerçevesi ve efektler işleniyor..." }),
+      now
+    );
+  }
 
   try {
     await execFileAsync("/usr/bin/ffmpeg", ffmpegArgs, {
@@ -686,6 +703,14 @@ async function renderStockVideoCore(options: RenderStockVideoOptions, transientM
 
     // If outro exists, concatenate main video with outro
     if (hasOutro && outroRow?.local_path) {
+      db.prepare(`
+        UPDATE generation_jobs
+        SET progress_json = ?
+        WHERE id = ?
+      `).run(
+        JSON.stringify({ percent: 75, phase: "outro_concatenating", detail: "Bitiş videosu (outro) ana videoya ekleniyor..." }),
+        renderId
+      );
       const outroPath = outroRow.local_path;
       const outroDuration = timeline.outroDurationInFrames / timeline.fps;
       try {
@@ -715,6 +740,14 @@ async function renderStockVideoCore(options: RenderStockVideoOptions, transientM
     }
 
     if (transientMusicPath && options.musicSelection) {
+      db.prepare(`
+        UPDATE generation_jobs
+        SET progress_json = ?
+        WHERE id = ?
+      `).run(
+        JSON.stringify({ percent: 85, phase: "music_mixing", detail: "Arka plan müziği miksleniyor..." }),
+        renderId
+      );
       await mixMusicIntoVideo({
         videoPath: outputLocation,
         musicPath: transientMusicPath,
@@ -737,7 +770,7 @@ async function renderStockVideoCore(options: RenderStockVideoOptions, transientM
 
     db.prepare(`
       UPDATE generation_jobs
-      SET status = 'complete', response_json = ?, completed_at = ?
+      SET status = 'complete', response_json = ?, progress_json = ?, completed_at = ?
       WHERE id = ?
     `).run(
       JSON.stringify({
@@ -747,6 +780,7 @@ async function renderStockVideoCore(options: RenderStockVideoOptions, transientM
         frameStyle,
         metadata: resultMetadata,
       }),
+      JSON.stringify({ percent: 100, phase: "complete", detail: "Tamamlandı" }),
       new Date().toISOString(),
       renderId
     );

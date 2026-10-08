@@ -1,5 +1,6 @@
 import { createJobCallbackToken, getCanvaConfig, verifyCallbackToken } from "@/lib/server/canva-config";
 import { getDatabase } from "@/lib/server/database";
+import { triggerProductionWorker } from "@/lib/server/production-worker";
 
 export const runtime = "nodejs";
 
@@ -42,6 +43,11 @@ export async function POST(request: Request, context: Context) {
   database
     .prepare("UPDATE generation_jobs SET status='failed', error=?, progress_json=? WHERE id=?")
     .run(errorMsg, progressJson, jobId);
+
+  // Trigger FIFO worker for next job in line
+  setTimeout(() => {
+    triggerProductionWorker();
+  }, 100);
 
   return Response.json({ ok: true });
 }

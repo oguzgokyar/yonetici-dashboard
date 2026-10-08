@@ -22,8 +22,8 @@ export interface ProductionQueueItem {
   itemCount?: number;
 }
 
-type RequestData = { contentType?: string; prompt?: string };
-type ResponseData = { assets?: Array<{ url?: string }>; videoUrl?: string };
+type RequestData = { contentType?: string; prompt?: string; renderer?: string; sourceStockVideoId?: string };
+type ResponseData = { assets?: Array<{ url?: string }>; videoUrl?: string; url?: string };
 type PackageData = {
   id?: string;
   generation_job_id?: string;
@@ -59,12 +59,17 @@ function resolveTypeLabel(type: string, requestData: RequestData): string {
     return "Canva Tasarım";
   }
   if (type === "image") return "AI Görsel";
-  if (type === "video") return "Motion Video";
+  if (type === "video") {
+    if (requestData?.renderer === "ffmpeg-frame-engine" || requestData?.sourceStockVideoId) {
+      return "Stok Video Render";
+    }
+    return "Motion Video";
+  }
   if (type === "video-layer") return "Video Katmanı";
   return "İçerik Üretimi";
 }
 
-function extractPreviewUrl(type: string, responseData: ResponseData, packageRow?: PackageData): string | null {
+function extractPreviewUrl(type: string, responseData: ResponseData, packageRow?: PackageData, jobId?: string): string | null {
   if (type === "canva" && packageRow) {
     if (packageRow.cover_asset_id) return `/api/assets/${packageRow.cover_asset_id}`;
     if (packageRow.video_url) return packageRow.video_url;
@@ -72,8 +77,9 @@ function extractPreviewUrl(type: string, responseData: ResponseData, packageRow?
   if (type === "image" && Array.isArray(responseData?.assets) && responseData.assets.length > 0) {
     return responseData.assets[0]?.url || null;
   }
-  if (type === "video" && responseData?.videoUrl) {
-    return responseData.videoUrl;
+  if (type === "video") {
+    if (jobId) return `/api/videos/${jobId}?thumb=1`;
+    return responseData?.videoUrl || responseData?.url || null;
   }
   return null;
 }
@@ -148,7 +154,7 @@ export async function GET(
       createdAt: row.created_at,
       completedAt: row.completed_at,
       error: row.error,
-      previewUrl: extractPreviewUrl(row.type, res, pkg),
+      previewUrl: extractPreviewUrl(row.type, res, pkg, row.id),
       canvaEditUrl: pkg?.canva_edit_url || null,
       itemCount: pkg?.item_count || (res.assets?.length ?? 1),
     };

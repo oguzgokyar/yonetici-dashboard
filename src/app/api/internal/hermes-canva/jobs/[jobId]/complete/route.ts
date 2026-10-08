@@ -9,6 +9,7 @@ import {
 import { getDatabase } from "@/lib/server/database";
 import { validateManifestAgainstJob } from "@/lib/server/hermes-canva-task";
 import { exportPackageVideoHelper } from "@/lib/server/canva-video-service";
+import { triggerProductionWorker } from "@/lib/server/production-worker";
 
 export const runtime = "nodejs";
 
@@ -142,6 +143,11 @@ export async function POST(request: Request, context: Context) {
         });
       }, 500);
     }
+
+    // Trigger FIFO worker for the next queued job in line
+    setTimeout(() => {
+      triggerProductionWorker();
+    }, 100);
 
     return Response.json({ ok: true, packageId });
   } catch (err) {

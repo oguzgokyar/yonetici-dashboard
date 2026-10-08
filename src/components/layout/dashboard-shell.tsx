@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Bell, ChevronDown, Clapperboard, Compass, Film, FolderKanban, Image, LayoutDashboard, PanelsTopLeft,
   Menu, Palette, PanelLeftClose, PanelLeftOpen, Pin, Plus, Search, Send, Settings, Share2, Sparkles, X,
@@ -39,6 +39,18 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [queueDrawerOpen, setQueueDrawerOpen] = useState(false);
   const [activeQueueCount, setActiveQueueCount] = useState(0);
+
+  useEffect(() => {
+    function handleQueueUpdate(e: Event) {
+      const customEvent = e as CustomEvent<{ openDrawer?: boolean }>;
+      if (customEvent.detail?.openDrawer) {
+        setQueueDrawerOpen(true);
+      }
+    }
+    window.addEventListener("production-queue-updated", handleQueueUpdate);
+    return () => window.removeEventListener("production-queue-updated", handleQueueUpdate);
+  }, []);
+
   const activeProject = projectId ? projects.find((project) => project.id === projectId) : undefined;
 
   function projectHref(suffix = "") {

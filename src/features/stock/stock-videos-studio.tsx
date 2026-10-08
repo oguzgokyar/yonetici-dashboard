@@ -448,10 +448,12 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
   const selectedOutro = outros.find((outro) => outro.id === selectedOutroId);
   const sourceMetadata = useMediaDuration(selectedVideo?.streamUrl, selectedVideo?.durationSeconds);
   const outroMetadata = useMediaDuration(selectedOutro?.videoUrl, selectedOutro?.durationSeconds);
-  const mainTimeline = getStockTimeline({ sourceDurationSeconds: sourceMetadata.duration, trimStartSeconds, trimEndSeconds });
-  const timeline = selectedOutroId && !selectedOutro ? null : getStockTimeline({
-    sourceDurationSeconds: sourceMetadata.duration, trimStartSeconds, trimEndSeconds,
-    hasOutro: Boolean(selectedOutroId), outroDurationSeconds: outroMetadata.duration,
+  const effectiveSourceDuration = sourceMetadata.duration || selectedVideo?.durationSeconds || 15;
+  const effectiveOutroDuration = outroMetadata.duration || selectedOutro?.durationSeconds || (selectedOutro ? 3.5 : 0);
+  const mainTimeline = getStockTimeline({ sourceDurationSeconds: effectiveSourceDuration, trimStartSeconds, trimEndSeconds });
+  const timeline = getStockTimeline({
+    sourceDurationSeconds: effectiveSourceDuration, trimStartSeconds, trimEndSeconds,
+    hasOutro: Boolean(selectedOutroId && selectedOutro), outroDurationSeconds: effectiveOutroDuration,
   });
   const durationLabel = (duration: number | undefined) => duration === undefined ? "Süre bekleniyor" : `${duration.toFixed(2)}s`;
 
@@ -493,9 +495,9 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
     setDriveModalOpen(true);
   }
 
-  // Render framed video
+  // Render framed video (Supports instant background queueing)
   async function handleRender() {
-    if (!selectedVideo || !timeline) return;
+    if (!selectedVideo) return;
     setRendering(true);
     setFeedback(null);
     try {
@@ -503,6 +505,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          async: true, // Non-blocking: queue immediately and free user
           stockVideoId: selectedVideo.id,
           frameStyle,
           headline: headline.trim(),
@@ -526,20 +529,26 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
           musicSelection: musicSelection || undefined,
           originalVolume,
           musicVolume: musicSelection || musicTrack !== "none" ? musicVolume : 0,
-          trimStartSeconds: timeline.trimStartSeconds,
-          trimEndSeconds: timeline.trimEndSeconds,
-          maxDurationSeconds: timeline.mainDurationSeconds,
+          trimStartSeconds: timeline?.trimStartSeconds || 0,
+          trimEndSeconds: timeline?.trimEndSeconds || 0,
+          maxDurationSeconds: timeline?.mainDurationSeconds,
         }),
       });
 
       const data = await res.json();
-      if (!res.ok || !data.ok || !data.video) {
-        throw new Error(data.message || "Render işlemi tamamlanamadı.");
+      if (!res.ok || !data.ok) {
+        throw new Error(data.message || "Render işlemi başlatılamadı.");
       }
 
-      setLastRendered(data.video);
-      setRenderedVideos((prev) => [data.video, ...prev]);
-      setFeedback("Özel çerçeveli video başarıyla üretildi! Şimdi paylaşım planına ekleyebilirsiniz.");
+      setFeedback("✓ Video render görevi üretim sırasına eklendi! Sağ üstteki panelden izleyebilir ve hemen yeni bir video seçebilirsiniz.");
+
+      // Open Production Queue Drawer immediately
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("production-queue-updated", { detail: { openDrawer: true } }));
+      }
+
+      // Refresh rendered videos list after a few seconds
+      setTimeout(() => { void loadData(); }, 3500);
     } catch (err) {
       setFeedback(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1271,7 +1280,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                   type="button"
                   className="button primary render-action-btn"
                   onClick={handleRender}
-                  disabled={rendering || !timeline}
+                  disabled={rendering}
                 >
                   {rendering ? (
                     <LoaderCircle className="spin" size={17} />
@@ -1280,7 +1289,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                   )}
                   <span>
                     {rendering
-                      ? "Video Render Ediliyor..."
+                      ? "Sıraya Ekleniyor..."
                       : selectedOutroId
                       ? "Çerçeveli Video + Outro Üret"
                       : "Özel Çerçeveli Videoyu Üret"}

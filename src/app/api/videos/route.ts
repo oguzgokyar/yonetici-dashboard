@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { getDatabase } from "@/lib/server/database";
 import { renderAnimatedCreative } from "@/lib/server/local-remotion-renderer";
+import { runInFifoQueue } from "@/lib/server/production-worker";
 import type { AnimatedCreativeProps, MotionStyle } from "@/remotion/types";
 
 export const runtime = "nodejs";
@@ -108,18 +109,21 @@ export async function POST(request: Request) {
   }
 
   const requestState = { sourceAssetId: asset.id, packageId: input.packageId, durationSeconds, motionStyle, renderer: "local-remotion", composition: "AnimatedCreative", idea, sourceTopic };
-  database.prepare("INSERT INTO generation_jobs (id, project_id, type, provider, model, status, prompt, request_json, created_at) VALUES (?, ?, 'video', 'local', 'remotion-4.0.484', 'rendering', ?, ?, ?)").run(id, input.projectId, `Kreatifi ${durationSeconds} saniyelik ${motionStyle} motion postere dönüştür`, JSON.stringify(requestState), now);
+  database.prepare("INSERT INTO generation_jobs (id, project_id, type, provider, model, status, prompt, request_json, created_at) VALUES (?, ?, 'video', 'local', 'remotion-4.0.484', 'queued', ?, ?, ?)").run(id, input.projectId, `Kreatifi ${durationSeconds} saniyelik ${motionStyle} motion postere dönüştür`, JSON.stringify(requestState), now);
 
-  try {
-    const savedSpec = (JSON.parse(layerJob.response_json) as { spec: AnimatedCreativeProps }).spec;
-    const props: AnimatedCreativeProps = { ...savedSpec, imageSrc: assetDataUrl(asset), backgroundSrc: localUrlToDataUrl(savedSpec.backgroundSrc), logoSrc: localUrlToDataUrl(savedSpec.logoSrc), visualLayers: (savedSpec.visualLayers || []).map((layer) => ({ ...layer, src: localUrlToDataUrl(layer.src)! })), durationSeconds, motionStyle, accentColor: brand.primaryColor || savedSpec.accentColor || "#6d5dfc" };
-    await renderAnimatedCreative(id, props);
-    const url = `/api/videos/${id}`;
-    database.prepare("UPDATE generation_jobs SET status='complete', response_json=?, completed_at=? WHERE id=?").run(JSON.stringify({ url }), new Date().toISOString(), id);
-    return Response.json({ ok: true, video: { id, url, sourceAssetId: asset.id, durationSeconds, motionStyle, createdAt: new Date().toISOString() } });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Video render edilemedi.";
-    database.prepare("UPDATE generation_jobs SET status='failed', error=?, completed_at=? WHERE id=?").run(message.slice(0, 1000), new Date().toISOString(), id);
-    return Response.json({ ok: false, message }, { status: 500 });
-  }
+  return await runInFifoQueue(id, async () => {
+    database.prepare("UPDATE generation_jobs SET status='rendering' WHERE id=?").run(id);
+    try {
+      const savedSpec = (JSON.parse(layerJob.response_json) as { spec: AnimatedCreativeProps }).spec;
+      const props: AnimatedCreativeProps = { ...savedSpec, imageSrc: assetDataUrl(asset), backgroundSrc: localUrlToDataUrl(savedSpec.backgroundSrc), logoSrc: localUrlToDataUrl(savedSpec.logoSrc), visualLayers: (savedSpec.visualLayers || []).map((layer) => ({ ...layer, src: localUrlToDataUrl(layer.src)! })), durationSeconds, motionStyle, accentColor: brand.primaryColor || savedSpec.accentColor || "#6d5dfc" };
+      await renderAnimatedCreative(id, props);
+      const url = `/api/videos/${id}`;
+      database.prepare("UPDATE generation_jobs SET status='complete', response_json=?, completed_at=? WHERE id=?").run(JSON.stringify({ url }), new Date().toISOString(), id);
+      return Response.json({ ok: true, video: { id, url, sourceAssetId: asset.id, durationSeconds, motionStyle, createdAt: new Date().toISOString() } });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Video render edilemedi.";
+      database.prepare("UPDATE generation_jobs SET status='failed', error=?, completed_at=? WHERE id=?").run(message.slice(0, 1000), new Date().toISOString(), id);
+      return Response.json({ ok: false, message }, { status: 500 });
+    }
+  });
 }

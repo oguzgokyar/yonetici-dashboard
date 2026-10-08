@@ -3104,6 +3104,12 @@ button { cursor:pointer; }
   background: #fdfcff;
 }
 
+.prod-queue-card.waiting-job {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  opacity: 0.88;
+}
+
 .prod-queue-card.failed-job {
   border-color: #fecaca;
   background: #fffafa;

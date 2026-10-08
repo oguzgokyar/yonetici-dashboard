@@ -116,6 +116,8 @@ export function ProductionQueueDrawer({
     onClose();
     if (item.type === "canva") {
       router.push(`/projects/${projectId}/image-generation?studio=canva`);
+    } else if (item.typeLabel === "Stok Video Render") {
+      router.push(`/projects/${projectId}/stock-videos`);
     } else if (item.type === "video" || item.type === "video-layer") {
       router.push(`/projects/${projectId}/video-generation`);
     } else {
@@ -225,49 +227,65 @@ export function ProductionQueueDrawer({
               </div>
             ) : (
               <div className="prod-drawer-list">
-                {queue.map((item, idx) => (
-                  <div key={item.id} className="prod-queue-card active-job">
-                    <div className="prod-card-top">
-                      <span className={`prod-type-pill ${item.type}`}>
-                        {renderTypeIcon(item.type)}
-                        <span>{item.typeLabel}</span>
-                      </span>
-
-                      <div className="prod-card-meta">
-                        <span className="prod-order-tag">#{idx + 1}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleCancelOrRemove(item.id)}
-                          className="prod-cancel-btn"
-                          title="Üretimi İptal Et"
-                        >
-                          <X size={13} />
-                        </button>
-                      </div>
-                    </div>
-
-                    <p className="prod-card-prompt" title={item.prompt}>
-                      {item.prompt}
-                    </p>
-
-                    {/* Progress bar */}
-                    <div className="prod-progress-wrap">
-                      <div className="prod-progress-info">
-                        <span className="prod-progress-detail">
-                          <RefreshCw className="spin" size={11} />
-                          <span>{item.progressDetail}</span>
+                {queue.map((item, idx) => {
+                  const isWaiting = item.status === "queued" && idx > 0;
+                  return (
+                    <div key={item.id} className={`prod-queue-card ${isWaiting ? "waiting-job" : "active-job"}`}>
+                      <div className="prod-card-top">
+                        <span className={`prod-type-pill ${item.type}`}>
+                          {renderTypeIcon(item.type)}
+                          <span>{item.typeLabel}</span>
                         </span>
-                        <span className="prod-progress-pct">{item.progressPercent}%</span>
+
+                        <div className="prod-card-meta">
+                          <span className="prod-order-tag">#{idx + 1}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleCancelOrRemove(item.id)}
+                            className="prod-cancel-btn"
+                            title="Üretimi İptal Et"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
                       </div>
-                      <div className="prod-progress-track">
-                        <div
-                          className="prod-progress-fill"
-                          style={{ width: `${Math.max(8, Math.min(100, item.progressPercent))}%` }}
-                        />
+
+                      <p className="prod-card-prompt" title={item.prompt}>
+                        {item.prompt}
+                      </p>
+
+                      {/* Progress bar */}
+                      <div className="prod-progress-wrap">
+                        <div className="prod-progress-info">
+                          <span className="prod-progress-detail">
+                            {isWaiting ? (
+                              <>
+                                <Clock size={11} />
+                                <span>FIFO Sırada Bekliyor (#{idx} tamamlanınca başlayacak)</span>
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCw className="spin" size={11} />
+                                <span>{item.progressDetail}</span>
+                              </>
+                            )}
+                          </span>
+                          <span className="prod-progress-pct">
+                            {isWaiting ? "Sırada" : `${item.progressPercent}%`}
+                          </span>
+                        </div>
+                        <div className="prod-progress-track">
+                          <div
+                            className="prod-progress-fill"
+                            style={{
+                              width: isWaiting ? "0%" : `${Math.max(8, Math.min(100, item.progressPercent))}%`,
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )
           ) : completed.length === 0 ? (
@@ -318,7 +336,11 @@ export function ProductionQueueDrawer({
                                 ? `${item.previewUrl}?thumb=1`
                                 : item.previewUrl
                             }
-                            alt="Önizleme"
+                            alt=""
+                            onError={(e) => {
+                              const parent = e.currentTarget.parentElement;
+                              if (parent) parent.style.display = "none";
+                            }}
                           />
                         </div>
                       )}

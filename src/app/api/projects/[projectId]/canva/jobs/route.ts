@@ -1,6 +1,6 @@
 import { createJobCallbackToken, getCanvaConfig, isCanvaStudioEnabled } from "@/lib/server/canva-config";
 import { getDatabase } from "@/lib/server/database";
-import { dispatchHermesCanvaTask } from "@/lib/server/hermes-agent-client";
+import { triggerProductionWorker } from "@/lib/server/production-worker";
 import {
   HERMES_CANVA_PIPELINE_VERSION,
   buildHermesCanvaTaskPrompt,
@@ -192,87 +192,14 @@ export async function POST(request: Request, context: Context) {
     `)
     .run(jobId, projectId, validatedInput.prompt, requestJson, progressJson, now);
 
-  // Compute callback base URL from request headers
-  const callbackBaseUrl = (process.env.CANVA_CALLBACK_BASE_URL || "").trim().replace(/\/+$/, "");
-  if (!callbackBaseUrl) {
-    database.prepare("UPDATE generation_jobs SET status='failed', error=? WHERE id=?").run(
-      "CANVA_CALLBACK_BASE_URL yapılandırılmamış.",
-      jobId,
-    );
-    return Response.json(
-      { ok: false, message: "Canva callback adresi yapılandırılmamış.", jobId },
-      { status: 503 },
-    );
-  }
+  // Trigger FIFO background worker to process sequentially
+  triggerProductionWorker();
 
-  const taskPrompt = buildHermesCanvaTaskPrompt({
+  return Response.json({
+    ok: true,
     jobId,
-    projectId,
-    prompt: validatedInput.prompt,
-    contentType: validatedInput.contentType,
-    slideCount: validatedInput.slideCount,
-    style: validatedInput.style,
-    brandSnapshot,
-    callbackBaseUrl,
-    callbackToken: createJobCallbackToken(canvaConfig.callbackToken, jobId),
-  });
-
-  // Update status to dispatching
-  database
-    .prepare("UPDATE generation_jobs SET status='dispatching', progress_json=? WHERE id=?")
-    .run(
-      JSON.stringify({
-        phase: "dispatching",
-        percent: 5,
-        detail: "Hermes Agent'a görev gönderiliyor",
-        updatedAt: new Date().toISOString(),
-      }),
-      jobId
-    );
-
-  // Dispatch to Hermes API Server
-  try {
-    const dispatchResult = await dispatchHermesCanvaTask({
-      baseUrl: canvaConfig.baseUrl,
-      apiKey: canvaConfig.apiKey,
-      taskPrompt,
-      timeoutMs: 8000,
-    });
-
-    if (dispatchResult.dispatched) {
-      console.log(`[Canva Job] Dispatched job ${jobId} to Hermes (runId: ${dispatchResult.runId || 'unknown'})`);
-      database
-        .prepare("UPDATE generation_jobs SET status='running', progress_json=? WHERE id=?")
-        .run(
-          JSON.stringify({
-            phase: "running",
-            percent: 10,
-            detail: "Hermes üretimi başlattı",
-            runId: dispatchResult.runId || null,
-            updatedAt: new Date().toISOString(),
-          }),
-          jobId
-        );
-      return Response.json({ ok: true, jobId, runId: dispatchResult.runId }, { status: 202 });
-    }
-
-    // Failed dispatch
-    database
-      .prepare("UPDATE generation_jobs SET status='failed', error=? WHERE id=?")
-      .run(dispatchResult.error || "Hermes görev kabul etmedi", jobId);
-
-    return Response.json(
-      { ok: false, message: dispatchResult.error || "Hermes görev kabul etmedi", jobId },
-      { status: 502 }
-    );
-  } catch (dispatchErr) {
-    const errMsg = dispatchErr instanceof Error ? dispatchErr.message : String(dispatchErr);
-    database
-      .prepare("UPDATE generation_jobs SET status='failed', error=? WHERE id=?")
-      .run(errMsg, jobId);
-
-    return Response.json({ ok: false, message: errMsg, jobId }, { status: 502 });
-  }
+    message: "Canva üretim görevi sıraya alındı (FIFO).",
+  }, { status: 202 });
 }
 
 export async function DELETE(request: Request, context: Context) {
