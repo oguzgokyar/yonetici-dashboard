@@ -5,6 +5,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { DatabaseSync } from "node:sqlite";
 import { getCanvaConfig } from "@/lib/server/canva-config";
+import { acquireHeavyJob, releaseHeavyJob } from "@/lib/server/heavy-job-coordinator";
 
 const execFileAsync = promisify(execFile);
 
@@ -16,6 +17,7 @@ export interface ExportPackageVideoParams {
   slideCount?: number;
   durationPerSlide?: number;
   useMagicAnimate?: boolean;
+  coordinationJobId?: string;
 }
 
 export interface ExportPackageVideoResult {
@@ -29,6 +31,22 @@ export interface ExportPackageVideoResult {
 
 export async function exportPackageVideoHelper(
   params: ExportPackageVideoParams
+): Promise<ExportPackageVideoResult> {
+  const jobId = params.coordinationJobId || `canva-video:${params.packageId}`;
+  const claimId = `dashboard-export:${crypto.randomUUID()}`;
+  await acquireHeavyJob(jobId, claimId);
+  const phase = { remoteMayBeRunning: false };
+  try {
+    return await exportPackageVideoUnderClaim({...params, coordinationJobId: jobId}, phase);
+  } finally {
+    // Release local failures, but never guess that a dispatched run has stopped.
+    if (!phase.remoteMayBeRunning) await releaseHeavyJob(jobId, claimId);
+  }
+}
+
+async function exportPackageVideoUnderClaim(
+  params: ExportPackageVideoParams,
+  phase: { remoteMayBeRunning: boolean },
 ): Promise<ExportPackageVideoResult> {
   const { database, packageId, projectId } = params;
 
@@ -68,7 +86,7 @@ export async function exportPackageVideoHelper(
   let prompt = "";
   if (params.useMagicAnimate) {
     prompt = `1. Apply Canva Magic Animation (Sihirli Animasyon) to all pages of design_id='${designId}' by executing:
-/opt/hermes/.venv/bin/python /opt/data/scripts/canva_magic_animate_cdp.py ${designId}
+${params.coordinationJobId ? `HEAVY_JOB_ID=${params.coordinationJobId} ` : ''}/opt/hermes/.venv/bin/python /opt/data/scripts/canva_magic_animate_cdp.py ${designId}
 Make sure Magic Animation is applied and saved before exporting video.
 2. Call mcp__canva__export_design on design_id='${designId}' with format={'type':'mp4', 'quality':'horizontal_1080p'}.
 3. Return the exact download URL of the exported MP4 file.`;
@@ -80,19 +98,24 @@ Return the exact download URL of the exported MP4 file.`;
 
   try {
     // 1. Dispatch export to Hermes Agent
-    const runResponse = await fetch(`${baseUrl}/v1/runs`, {
+    const runUrl = `${baseUrl}/v1/runs`;
+    // Validate request construction before crossing the dispatch boundary.
+    const parsedRunUrl = new URL(runUrl);
+    if (!['http:', 'https:'].includes(parsedRunUrl.protocol)) {
+      throw new Error("Hermes video export URL must use HTTP or HTTPS.");
+    }
+    const runOptions = {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
         ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       },
-      body: JSON.stringify({
-        model: "hermes-agent",
-        input: prompt,
-      }),
+      body: JSON.stringify({ model: "hermes-agent", input: prompt }),
       signal: AbortSignal.timeout(15000),
-    });
+    };
+    phase.remoteMayBeRunning = true;
+    const runResponse = await fetch(runUrl, runOptions);
 
     if (!runResponse.ok && runResponse.status !== 202) {
       throw new Error(`Hermes video export başlatılamadı (HTTP ${runResponse.status})`);
@@ -125,7 +148,11 @@ Return the exact download URL of the exported MP4 file.`;
         error?: string;
       };
 
-      if (runStatus.status === "failed") {
+      if (['failed', 'cancelled', 'canceled', 'completed'].includes(runStatus.status || '')) {
+        phase.remoteMayBeRunning = false;
+      }
+
+      if (['failed', 'cancelled', 'canceled'].includes(runStatus.status || '')) {
         throw new Error(runStatus.error || "Canva video export başarısız oldu.");
       }
 

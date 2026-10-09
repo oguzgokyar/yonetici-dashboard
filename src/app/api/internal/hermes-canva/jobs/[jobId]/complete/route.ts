@@ -9,9 +9,10 @@ import {
 import { getDatabase } from "@/lib/server/database";
 import { validateManifestAgainstJob } from "@/lib/server/hermes-canva-task";
 import { exportPackageVideoHelper } from "@/lib/server/canva-video-service";
-import { triggerProductionWorker } from "@/lib/server/production-worker";
+import { finishCanvaCoordination } from "@/lib/server/production-worker";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 type Context = { params: Promise<{ jobId: string }> };
 
@@ -34,7 +35,12 @@ export async function POST(request: Request, context: Context) {
   }
 
   if (job.status === "complete") {
+    await finishCanvaCoordination(jobId);
     return Response.json({ ok: true, alreadyCompleted: true });
+  }
+
+  if (['video_exporting', 'coordination_uncertain'].includes(job.status)) {
+    return Response.json({ok: false, message: 'Export still active or unconfirmed; do not redispatch.'}, {status: 409});
   }
 
   // Guard against oversize payloads before reading formData
@@ -119,6 +125,22 @@ export async function POST(request: Request, context: Context) {
       savedAssets.push(saved);
     }
 
+    // Asset decoding awaits above can overlap another callback's export. Re-read
+    // immediately before the synchronous transaction/status transition.
+    const current = database.prepare('SELECT status FROM generation_jobs WHERE id=?').get(jobId) as { status: string } | undefined;
+    if (current && ['complete', 'video_exporting', 'coordination_uncertain'].includes(current.status)) {
+      for (const asset of savedAssets) {
+        for (const suffix of [`.${asset.extension}`, '.json', '_thumb.webp', '_preview.webp']) {
+          try { fs.unlinkSync(path.join(assetsDir, `${asset.assetId}${suffix}`)); } catch {}
+        }
+      }
+      if (current.status === 'complete') {
+        await finishCanvaCoordination(jobId);
+        return Response.json({ ok: true, alreadyCompleted: true });
+      }
+      return Response.json({ ok: false, message: 'Export still active or unconfirmed; do not redispatch.' }, { status: 409 });
+    }
+
     const { packageId } = recordPackageCompletionTransaction({
       database,
       jobId,
@@ -129,8 +151,8 @@ export async function POST(request: Request, context: Context) {
 
     // If contentType is a video format, automatically trigger Canva cloud video export in background
     if (manifest.contentType.includes("video")) {
-      setTimeout(() => {
-        void exportPackageVideoHelper({
+      database.prepare("UPDATE generation_jobs SET status='video_exporting' WHERE id=?").run(jobId);
+      const videoResult = await exportPackageVideoHelper({
           database,
           packageId,
           projectId: job.project_id,
@@ -138,19 +160,22 @@ export async function POST(request: Request, context: Context) {
           slideCount: manifest.pageCount,
           durationPerSlide: 3.5,
           useMagicAnimate: true,
-        }).catch((err) => {
-          console.error(`[Auto Video Export] Failed for package ${packageId}:`, err);
-        });
-      }, 500);
+          coordinationJobId: `canva:${jobId}`,
+        }).catch((err) => ({ok: false, message: String(err)}));
+      if (!videoResult.ok) {
+        // A transport/poll timeout does not prove Hermes/browser has stopped.
+        database.prepare("UPDATE generation_jobs SET status='coordination_uncertain', error=? WHERE id=?").run(videoResult.message || 'Export completion unconfirmed', jobId);
+        return Response.json({ok: false, message: 'Video export completion unconfirmed; coordination retained for verified recovery.'}, {status: 503});
+      }
+      database.prepare("UPDATE generation_jobs SET status='complete' WHERE id=?").run(jobId);
     }
 
-    // Trigger FIFO worker for the next queued job in line
-    setTimeout(() => {
-      triggerProductionWorker();
-    }, 100);
+    await finishCanvaCoordination(jobId);
 
     return Response.json({ ok: true, packageId });
   } catch (err) {
+    const state = database.prepare('SELECT status FROM generation_jobs WHERE id=?').get(jobId) as {status: string} | undefined;
+    if (state?.status === 'complete') return Response.json({ok: false, message: 'Assets saved; coordinator release unconfirmed. Retry callback.'}, {status: 503});
     for (const asset of savedAssets) {
       for (const suffix of [`.${asset.extension}`, ".json", "_thumb.webp"]) {
         try {
@@ -166,6 +191,7 @@ export async function POST(request: Request, context: Context) {
       .prepare("UPDATE generation_jobs SET status='failed', error=? WHERE id=?")
       .run(`Paket kaydetme hatası: ${errMsg}`, jobId);
 
+    await finishCanvaCoordination(jobId);
     return Response.json({ ok: false, message: errMsg }, { status: 500 });
   }
 }

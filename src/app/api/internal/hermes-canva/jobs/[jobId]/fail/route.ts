@@ -1,6 +1,6 @@
 import { createJobCallbackToken, getCanvaConfig, verifyCallbackToken } from "@/lib/server/canva-config";
 import { getDatabase } from "@/lib/server/database";
-import { triggerProductionWorker } from "@/lib/server/production-worker";
+import { finishCanvaCoordination } from "@/lib/server/production-worker";
 
 export const runtime = "nodejs";
 
@@ -27,6 +27,10 @@ export async function POST(request: Request, context: Context) {
     return Response.json({ ok: true, message: "Tamamlanmış iş hata durumuna çevrilmedi." });
   }
 
+  if (['video_exporting', 'coordination_uncertain'].includes(job.status)) {
+    return Response.json({ok: false, message: 'Export may still be running; verified operator recovery required.'}, {status: 409});
+  }
+
   const body = (await request.json().catch(() => ({}))) as {
     error?: string;
   };
@@ -44,10 +48,7 @@ export async function POST(request: Request, context: Context) {
     .prepare("UPDATE generation_jobs SET status='failed', error=?, progress_json=? WHERE id=?")
     .run(errorMsg, progressJson, jobId);
 
-  // Trigger FIFO worker for next job in line
-  setTimeout(() => {
-    triggerProductionWorker();
-  }, 100);
+  await finishCanvaCoordination(jobId);
 
   return Response.json({ ok: true });
 }

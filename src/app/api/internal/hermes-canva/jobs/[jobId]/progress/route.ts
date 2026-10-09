@@ -23,7 +23,7 @@ export async function POST(request: Request, context: Context) {
     return Response.json({ ok: false, message: "İş bulunamadı." }, { status: 404 });
   }
 
-  if (job.status === "complete") {
+  if (["complete", "failed", "video_exporting", "coordination_uncertain"].includes(job.status)) {
     return Response.json({ ok: true, message: "İş zaten tamamlandı." });
   }
 

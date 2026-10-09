@@ -341,6 +341,8 @@ export function buildHermesCanvaTaskPrompt(payload: CanvaTaskPayload): string {
   return `[HERMES_CANVA_MACHINE_TASK v${HERMES_CANVA_PIPELINE_VERSION}]
 Bu bir Yönetici Dashboard Canva görsel/video üretim makine görevidir.
 
+KOORDİNASYON: Bu işin tüm tarayıcı komutlarını HEAVY_JOB_ID=canva:${payload.jobId} ortam değişkeniyle çalıştır.
+Bu aynı iş kimliğiyle mevcut dashboard claim'ine katılır; yeni/farklı iş kimliği kullanma.
 ÖNEMLİ KURALLAR:
 1. Kullanıcıyla sohbet ETME, clarification sorusu SORMA. Görevi doğrudan yerine getir.
 2. Kesinlikle harici Telegram bildirimi GÖNDERME ('send_tg.py' yasaktır).
