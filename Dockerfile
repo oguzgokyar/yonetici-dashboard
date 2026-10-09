@@ -5,7 +5,8 @@ RUN npm ci
 
 FROM node:22-alpine AS builder
 WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    NODE_OPTIONS="--max-old-space-size=768"
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
