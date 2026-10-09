@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/server/database";
+import { triggerProductionWorker } from "@/lib/server/production-worker";
 
 export const runtime = "nodejs";
 
@@ -92,6 +93,11 @@ export async function GET(
 ) {
   const { projectId } = await context.params;
   const db = getDatabase()!;
+
+  // Her kuyruk sorgusunda bekleyen işleri canlandırmak için arka plan işçisini tetikle
+  try {
+    triggerProductionWorker();
+  } catch {}
 
   // 1. Fetch in-flight (active/queued) jobs
   const inFlightRows = db.prepare(`

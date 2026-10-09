@@ -75,6 +75,93 @@ export async function processGoogleVidsJob(job: {
   const callbackUrl = `${callbackBaseUrl}/api/internal/google-vids/jobs/${job.id}/complete`;
   const callbackToken = createJobCallbackToken(canvaConfig.callbackToken, job.id);
 
+  // Directly spawn the script on server or dispatch via Hermes
+  let automationSucceeded = false;
+  try {
+    const { spawn } = await import("node:child_process");
+    const { createInterface } = await import("node:readline");
+
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn("/opt/hermes/.venv/bin/python", [
+        "/opt/data/scripts/google_vids_automation.py",
+        "--job-id", job.id,
+        "--title", title,
+        "--aspect-ratio", aspectRatio,
+        "--scenes-json", scenesTempFile,
+        "--output-mp4", finalMp4Path,
+      ], {
+        env: {
+          ...process.env,
+          DISPLAY: ":97",
+          LD_LIBRARY_PATH: `/opt/data/lib:${process.env.LD_LIBRARY_PATH || ""}`,
+        },
+      });
+
+      const rl = createInterface({ input: proc.stdout });
+      rl.on("line", (line) => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("__PROGRESS__")) {
+          try {
+            const progressData = JSON.parse(trimmed.slice("__PROGRESS__".length));
+            db.prepare("UPDATE generation_jobs SET progress_json = ? WHERE id = ?").run(
+              JSON.stringify({
+                phase: progressData.phase,
+                percent: progressData.percent,
+                detail: progressData.detail,
+                updatedAt: new Date().toISOString(),
+              }),
+              job.id
+            );
+          } catch {}
+        }
+      });
+
+      let errBuf = "";
+      proc.stderr.on("data", (c) => { errBuf += c.toString(); });
+      proc.on("error", (err) => reject(err));
+      proc.on("close", (code) => {
+        if (code === 0 && fs.existsSync(finalMp4Path) && fs.statSync(finalMp4Path).size > 1000) {
+          automationSucceeded = true;
+          resolve();
+        } else {
+          reject(new Error(errBuf || `Python script exit code ${code}`));
+        }
+      });
+    });
+  } catch (localErr) {
+    // If local execution fails (e.g. running inside container without host access), fallback to Hermes run dispatch
+    console.warn("[Google Vids] Local execution fallback to Hermes Agent:", localErr);
+  }
+
+  if (automationSucceeded) {
+    const videoUrl = `/api/videos/${job.id}`;
+    const responsePayload = {
+      id: job.id,
+      url: videoUrl,
+      videoUrl: videoUrl,
+      title: title,
+      durationSeconds: req.durationSeconds || 30,
+      aspectRatio: aspectRatio,
+      isGoogleVids: true,
+      completedAt: new Date().toISOString(),
+    };
+
+    db.prepare(`
+      UPDATE generation_jobs
+      SET status = 'complete',
+          response_json = ?,
+          progress_json = ?,
+          completed_at = ?
+      WHERE id = ?
+    `).run(
+      JSON.stringify(responsePayload),
+      JSON.stringify({ phase: "complete", percent: 100, detail: "Tamamlandı" }),
+      new Date().toISOString(),
+      job.id
+    );
+    return;
+  }
+
   const taskPrompt = `Create the Google Vids video for job_id='${job.id}' by executing this exact python command:
 cat << 'EOF' > "${scenesTempFile}"
 ${JSON.stringify(scenes, null, 2)}
