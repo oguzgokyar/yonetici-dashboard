@@ -1,0 +1,681 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import {
+  Camera,
+  Check,
+  ChevronDown,
+  Clapperboard,
+  Clock,
+  Download,
+  Film,
+  Layers,
+  LoaderCircle,
+  Pencil,
+  Play,
+  RefreshCw,
+  Send,
+  Sparkles,
+  Sun,
+  Trash2,
+  WandSparkles,
+} from "lucide-react";
+
+type VisualMoodOption = {
+  key:
+    | "cinematic_photoreal"
+    | "golden_hour"
+    | "moody_chiaroscuro"
+    | "documentary_nature"
+    | "retro_vintage_80s"
+    | "minimal_commercial"
+    | "stylized_3d";
+  label: string;
+  desc: string;
+};
+
+const VISUAL_MOOD_OPTIONS: VisualMoodOption[] = [
+  {
+    key: "cinematic_photoreal",
+    label: "Sinematik & Fotogerçekçi (35mm)",
+    desc: "Doğal derinlik, film greni ve gerçekçi doku",
+  },
+  {
+    key: "golden_hour",
+    label: "Sıcak Altın Saat (Golden Hour)",
+    desc: "Batan güneş ışığı, sıcak amber ve bal tonları",
+  },
+  {
+    key: "moody_chiaroscuro",
+    label: "Dramatik & Kara Film (Moody)",
+    desc: "Derin gölgeler, tek yönlü kontrast ve atmosferik ışık",
+  },
+  {
+    key: "documentary_nature",
+    label: "Belgesel & Doğal Çevre",
+    desc: "NatGeo tarzı gerçekçi doğa, makro/telefoto detaylar",
+  },
+  {
+    key: "retro_vintage_80s",
+    label: "Retro & Vintage 80s Sinematik",
+    desc: "Nostaljik film stoğu, yumuşak ışık halasyonu",
+  },
+  {
+    key: "minimal_commercial",
+    label: "Minimalist & Modern Reklam",
+    desc: "Stüdyo netliği, temiz hatlar ve keskin ürün odağı",
+  },
+  {
+    key: "stylized_3d",
+    label: "Animasyon & Stilize 3D",
+    desc: "Zengin hacimsel ışık ve canlı animasyon paleti",
+  },
+];
+
+type ScriptScenePlan = {
+  sceneIndex: number;
+  shotType: "establishing" | "action_development" | "resolution_climax";
+  durationSeconds: number;
+  actionType: "new_scene" | "extend";
+  cameraSetup: string;
+  lightingSetup: string;
+  summaryTr: string;
+  promptEn: string;
+};
+
+type StoryboardResponse = {
+  title: string;
+  narrativeTr: string;
+  totalDurationSeconds: number;
+  visualMood: VisualMoodOption["key"];
+  aspectRatio: "9:16" | "16:9" | "1:1";
+  scenes: ScriptScenePlan[];
+};
+
+type RenderedVideo = {
+  id: string;
+  url: string;
+  title?: string;
+  isGoogleVids?: boolean;
+  durationSeconds?: number;
+  motionStyle?: string;
+  createdAt: string;
+};
+
+export function GoogleVidsStudio({ projectId }: { projectId: string }) {
+  const [topic, setTopic] = useState("");
+  const [visualMood, setVisualMood] = useState<VisualMoodOption["key"]>("cinematic_photoreal");
+  const [targetDuration, setTargetDuration] = useState<"15s" | "30s" | "60s">("30s");
+  const [aspectRatio, setAspectRatio] = useState<"9:16" | "16:9" | "1:1">("9:16");
+
+  const [planning, setPlanning] = useState(false);
+  const [revising, setRevising] = useState(false);
+  const [enqueueing, setEnqueueing] = useState(false);
+
+  const [storyboard, setStoryboard] = useState<StoryboardResponse | null>(null);
+  const [revisionNote, setRevisionNote] = useState("");
+  const [message, setMessage] = useState("");
+  const [videos, setVideos] = useState<RenderedVideo[]>([]);
+  const [loadingVideos, setLoadingVideos] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const loadVideos = useCallback(async () => {
+    setLoadingVideos(true);
+    try {
+      const res = await fetch(`/api/videos?projectId=${encodeURIComponent(projectId)}`, {
+        cache: "no-store",
+      });
+      const data = (await res.json()) as { ok: boolean; videos?: RenderedVideo[] };
+      if (data.ok && data.videos) {
+        setVideos(data.videos.filter((v) => v.isGoogleVids));
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingVideos(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    void loadVideos();
+  }, [loadVideos]);
+
+  async function handleGenerateStoryboard(isRevision = false) {
+    if (!topic.trim()) {
+      setMessage("Lütfen önce videonun konusunu veya hikayesini yazın.");
+      return;
+    }
+    if (isRevision && !revisionNote.trim()) {
+      setMessage("Lütfen revizyon talebinizi yazın.");
+      return;
+    }
+
+    if (isRevision) {
+      setRevising(true);
+    } else {
+      setPlanning(true);
+    }
+    setMessage(
+      isRevision
+        ? "visual-skills yönetmeni geri bildiriminize göre sahneleri revize ediyor..."
+        : "visual-skills yönetmeni sahne sayısını, süreyi ve sinematik promptları kurguluyor..."
+    );
+
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/google-vids/storyboard`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: topic.trim(),
+          visualMood,
+          targetDuration,
+          aspectRatio,
+          revisionFeedback: isRevision ? revisionNote.trim() : undefined,
+          currentStoryboard: isRevision ? storyboard : undefined,
+        }),
+      });
+      const body = (await res.json()) as {
+        ok: boolean;
+        message?: string;
+        storyboard?: StoryboardResponse;
+      };
+      if (!res.ok || !body.ok || !body.storyboard) {
+        throw new Error(body.message || "Senaryo oluşturulamadı.");
+      }
+
+      setStoryboard(body.storyboard);
+      if (isRevision) setRevisionNote("");
+      setMessage(
+        `Senaryo hazır: ${body.storyboard.scenes.length} sahne, toplam ${body.storyboard.totalDurationSeconds} sn. İnceleyip onaylayabilirsiniz.`
+      );
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Senaryo planlanırken hata oluştu.");
+    } finally {
+      setPlanning(false);
+      setRevising(false);
+    }
+  }
+
+  function updateScenePrompt(index: number, field: "promptEn" | "summaryTr", value: string) {
+    if (!storyboard) return;
+    const nextScenes = storyboard.scenes.map((s, idx) =>
+      idx === index ? { ...s, [field]: value } : s
+    );
+    setStoryboard({ ...storyboard, scenes: nextScenes });
+  }
+
+  async function handleConfirmAndEnqueue() {
+    if (!storyboard || !storyboard.scenes.length) {
+      setMessage("Önce senaryo ve sahne planını oluşturun.");
+      return;
+    }
+
+    setEnqueueing(true);
+    setMessage("Google Vids video üretimi merkezi FIFO sırasına ekleniyor...");
+
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/google-vids`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: topic.trim(),
+          storyboard,
+        }),
+      });
+      const body = (await res.json()) as { ok: boolean; jobId?: string; message?: string };
+      if (!res.ok || !body.ok) {
+        throw new Error(body.message || "Kuyruğa eklenemedi.");
+      }
+
+      setMessage("Video üretim sırasına eklendi! Sağ üstteki Üretim Kuyruğu çekmecesinden canlı takip edebilirsiniz.");
+      window.dispatchEvent(
+        new CustomEvent("production-queue-updated", { detail: { openDrawer: true } })
+      );
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Sıraya eklenirken hata oluştu.");
+    } finally {
+      setEnqueueing(false);
+    }
+  }
+
+  async function handleDeleteVideo(id: string) {
+    if (!window.confirm("Bu videoyu kalıcı olarak silmek istediğinize emin misiniz?")) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/videos/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setVideos((prev) => prev.filter((v) => v.id !== id));
+      }
+    } catch {
+      // ignore
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <div className="generation-studio">
+      {/* Sol Kontrol Paneli */}
+      <section className="generation-controls">
+        <div className="generation-control-header">
+          <div>
+            <span>GOOGLE VIDS OMNI + VISUAL-SKILLS</span>
+            <h2>AI Sinematik Video</h2>
+          </div>
+          <WandSparkles size={21} />
+        </div>
+
+        <div className="brand-concept-status">
+          <span style={{ background: "#612bd3" }}>
+            <Sparkles size={13} />
+          </span>
+          <div>
+            <strong>Sinematik Yönetmen Aktif</strong>
+            <small>
+              Sahne sayısı ve kurgu ritmi seçtiğiniz süreye göre visual-skills dramaturji motoruyla belirlenir.
+            </small>
+          </div>
+        </div>
+
+        {/* Konu / Hikaye Alanı */}
+        <div className="control-section">
+          <label className="control-title" htmlFor="vids-topic-input">
+            <span>Video Konusu / Hikayesi</span>
+          </label>
+          <textarea
+            id="vids-topic-input"
+            className="prompt-area"
+            value={topic}
+            onChange={(e) => {
+              setTopic(e.target.value);
+              setMessage("");
+            }}
+            placeholder="Örn: Çevik bir tavşan ve görkemli bir aslanın gün batımında altın sarısı çayırda karşılaşıp dostça yan yana yürüdüğü sinematik hikaye..."
+          />
+          <div className="prompt-footer">
+            <span>{topic.length}/1500</span>
+            <span>Otomatik İngilizce Sahneleme</span>
+          </div>
+        </div>
+
+        {/* Nitelik Seçiciler */}
+        <div className="attribute-grid">
+          <label className="select-field">
+            <span>Sanat & Görsel Tarzı</span>
+            <div>
+              <select
+                value={visualMood}
+                onChange={(e) => setVisualMood(e.target.value as VisualMoodOption["key"])}
+              >
+                {VISUAL_MOOD_OPTIONS.map((opt) => (
+                  <option key={opt.key} value={opt.key}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={14} />
+            </div>
+          </label>
+
+          <label className="select-field">
+            <span>Ortalama Video Süresi</span>
+            <div>
+              <select
+                value={targetDuration}
+                onChange={(e) => setTargetDuration(e.target.value as "15s" | "30s" | "60s")}
+              >
+                <option value="15s">~10 - 15 sn (Hızlı Giriş / Hook)</option>
+                <option value="30s">~20 - 30 sn (Standart Hikaye)</option>
+                <option value="60s">~45 - 60 sn (Geniş Sinematik Anlatım)</option>
+              </select>
+              <ChevronDown size={14} />
+            </div>
+          </label>
+
+          <label className="select-field">
+            <span>Format / En-Boy Oranı</span>
+            <div>
+              <select
+                value={aspectRatio}
+                onChange={(e) => setAspectRatio(e.target.value as "9:16" | "16:9" | "1:1")}
+              >
+                <option value="9:16">Dikey (9:16 • Reels / Shorts / TikTok)</option>
+                <option value="16:9">Yatay (16:9 • YouTube / Sunum)</option>
+                <option value="1:1">Kare (1:1 • Instagram Akış)</option>
+              </select>
+              <ChevronDown size={14} />
+            </div>
+          </label>
+        </div>
+
+        {message && (
+          <div className="generation-notice">
+            <Sparkles size={15} />
+            <span>{message}</span>
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="generate-button"
+          disabled={planning || revising || enqueueing}
+          onClick={() => void handleGenerateStoryboard(false)}
+        >
+          {planning ? <LoaderCircle className="spin" size={18} /> : <Film size={18} />}
+          {planning ? "Senaryo Kurgulanıyor..." : "Senaryo & Sahneleri Oluştur"}
+          <span>{targetDuration}</span>
+        </button>
+      </section>
+
+      {/* Sağ Panel: Senaryo İnceleme, Düzenleme ve Onay */}
+      <section className="generation-results">
+        <div className="results-toolbar">
+          <div>
+            <h2>Senaryo & Sahne Planı (`visual-skills`)</h2>
+            <span>Üretim öncesi sahneleri inceleyin, düzenleyin veya revizyon isteyin</span>
+          </div>
+          {storyboard && (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  padding: "4px 10px",
+                  borderRadius: "999px",
+                  background: "rgba(97, 43, 211, 0.1)",
+                  color: "#612bd3",
+                }}
+              >
+                {storyboard.scenes.length} Sahne • Toplam {storyboard.totalDurationSeconds} sn
+              </span>
+            </div>
+          )}
+        </div>
+
+        {storyboard ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "4px 0" }}>
+            {/* Hikaye Özeti Kartı */}
+            <div
+              style={{
+                padding: "16px",
+                borderRadius: "14px",
+                border: "1px solid var(--border, #e2e8f0)",
+                background: "var(--surface-subtle, #f8fafc)",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                <strong style={{ fontSize: "15px" }}>{storyboard.title}</strong>
+                <span style={{ fontSize: "12px", color: "#64748b" }}>
+                  {VISUAL_MOOD_OPTIONS.find((m) => m.key === storyboard.visualMood)?.label} • {storyboard.aspectRatio}
+                </span>
+              </div>
+              <p style={{ margin: 0, fontSize: "13px", color: "#475569", lineHeight: 1.5 }}>
+                {storyboard.narrativeTr}
+              </p>
+            </div>
+
+            {/* Sahne Kartları Listesi */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {storyboard.scenes.map((scene, idx) => (
+                <div
+                  key={scene.sceneIndex}
+                  style={{
+                    padding: "16px",
+                    borderRadius: "14px",
+                    border: "1px solid var(--border, #e2e8f0)",
+                    background: "#ffffff",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "10px",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span
+                        style={{
+                          background: "#612bd3",
+                          color: "#fff",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          padding: "3px 9px",
+                          borderRadius: "99px",
+                        }}
+                      >
+                        Sahne {idx + 1}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          color: "#0f172a",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                      >
+                        <Clock size={13} /> {scene.durationSeconds} sn (
+                        {scene.actionType === "extend" ? "Kesintisiz Uzatma" : "Yeni Sahne"})
+                      </span>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "10px", fontSize: "11px", color: "#64748b" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                        <Camera size={12} /> {scene.cameraSetup}
+                      </span>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                        <Sun size={12} /> {scene.lightingSetup}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Türkçe Sahne Açıklaması */}
+                  <div>
+                    <label style={{ fontSize: "11px", fontWeight: 600, color: "#64748b", display: "block", marginBottom: "4px" }}>
+                      Sahne Hikayesi (Türkçe Özet)
+                    </label>
+                    <input
+                      type="text"
+                      value={scene.summaryTr}
+                      onChange={(e) => updateScenePrompt(idx, "summaryTr", e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "8px 10px",
+                        fontSize: "13px",
+                        borderRadius: "8px",
+                        border: "1px solid #cbd5e1",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </div>
+
+                  {/* İngilizce Google Vids Omni Promptu */}
+                  <div>
+                    <label style={{ fontSize: "11px", fontWeight: 600, color: "#64748b", display: "flex", alignItems: "center", gap: "4px", marginBottom: "4px" }}>
+                      <Pencil size={11} /> Google Vids Omni Promptu (İngilizce - Düzenlenebilir)
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={scene.promptEn}
+                      onChange={(e) => updateScenePrompt(idx, "promptEn", e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "8px 10px",
+                        fontSize: "12.5px",
+                        fontFamily: "monospace",
+                        borderRadius: "8px",
+                        border: "1px solid #cbd5e1",
+                        boxSizing: "border-box",
+                        lineHeight: 1.45,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Revizyon İsteme Kutusu */}
+            <div
+              style={{
+                padding: "14px",
+                borderRadius: "12px",
+                border: "1px dashed #cbd5e1",
+                background: "#f8fafc",
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px",
+              }}
+            >
+              <label style={{ fontSize: "12px", fontWeight: 600, color: "#334155" }}>
+                Senaryoda Düzeltme / Revizyon İste (İsteğe Bağlı)
+              </label>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <input
+                  type="text"
+                  value={revisionNote}
+                  onChange={(e) => setRevisionNote(e.target.value)}
+                  placeholder="Örn: 2. sahnede kamera daha yakın çekim olsun, son sahnede nehir kenarı eklensin..."
+                  style={{
+                    flex: 1,
+                    minWidth: "220px",
+                    padding: "9px 12px",
+                    fontSize: "13px",
+                    borderRadius: "8px",
+                    border: "1px solid #cbd5e1",
+                    boxSizing: "border-box",
+                  }}
+                />
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={revising || !revisionNote.trim()}
+                  onClick={() => void handleGenerateStoryboard(true)}
+                >
+                  {revising ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}
+                  {revising ? "Revize Ediliyor..." : "Senaryoyu Güncelle"}
+                </button>
+              </div>
+            </div>
+
+            {/* Onayla ve Kuyruğa Ekle Butonu */}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "4px" }}>
+              <button
+                type="button"
+                className="generate-button"
+                style={{ width: "auto", padding: "0 24px" }}
+                disabled={enqueueing || planning || revising}
+                onClick={() => void handleConfirmAndEnqueue()}
+              >
+                {enqueueing ? <LoaderCircle className="spin" size={18} /> : <Check size={18} />}
+                {enqueueing ? "Sıraya Ekleniyor..." : "Onayla ve Üretim Sırasına Ekle"}
+                <span>{storyboard.totalDurationSeconds} sn</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="results-empty">
+            <div className="empty-canvas">
+              <div className="canvas-glow" style={{ background: "#612bd3" }} />
+              <Clapperboard size={38} />
+              <span>
+                <Sparkles size={13} />
+                VISUAL-SKILLS YÖNETMEN MODU
+              </span>
+            </div>
+            <h3>Önce senaryo ve sahneleri oluşturun</h3>
+            <p>
+              Soldan video konusunu, sanat tarzını ve ortalama süreyi seçip &ldquo;Senaryo &amp; Sahneleri Oluştur&rdquo;
+              butonuna tıklayın. Yönetmen sahne sayısını ve çekim planını burada onayınıza sunacak.
+            </p>
+          </div>
+        )}
+      </section>
+
+      {/* Alt Bölüm: Üretilen Google Vids Videoları Arşivi */}
+      <section className="generation-history">
+        <div className="history-heading">
+          <div>
+            <span>
+              <Clapperboard size={16} />
+            </span>
+            <div>
+              <h2>Üretilen Google Vids Videoları</h2>
+              <p>Tamamlanan AI videoları burada saklanır ve tek tıkla Paylaşım Planına aktarılır.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => void loadVideos()}
+            disabled={loadingVideos}
+          >
+            {loadingVideos ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}
+            Yenile
+          </button>
+        </div>
+
+        {loadingVideos && !videos.length ? (
+          <div className="history-loading">
+            <LoaderCircle className="spin" size={20} />
+            Videolar yükleniyor...
+          </div>
+        ) : videos.length ? (
+          <div className="video-history-grid">
+            {videos.map((video) => (
+              <article key={video.id}>
+                <video src={video.url} controls preload="metadata" />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                  <span>
+                    {video.title || "Google Vids"} • {video.durationSeconds || 30} sn
+                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <a href={video.url} download={`google-vids-${video.id}.mp4`}>
+                      <Download size={14} /> İndir
+                    </a>
+                    <Link
+                      href={`/projects/${projectId}/publishing?assetId=${video.id}`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        color: "var(--accent, #612bd3)",
+                        fontWeight: 600,
+                        fontSize: "11px",
+                      }}
+                    >
+                      <Send size={13} /> Planla
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteVideo(video.id)}
+                      disabled={deletingId === video.id}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "#ef4444",
+                        cursor: "pointer",
+                        padding: "2px",
+                      }}
+                      title="Sil"
+                    >
+                      {deletingId === video.id ? (
+                        <LoaderCircle className="spin" size={14} />
+                      ) : (
+                        <Trash2 size={14} />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="history-empty">
+            <Clapperboard size={23} />
+            <span>Henüz Google Vids ile üretilmiş video bulunmuyor.</span>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}

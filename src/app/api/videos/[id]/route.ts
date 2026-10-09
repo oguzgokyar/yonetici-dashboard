@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   if (!/^[a-f0-9-]{36}$/i.test(id)) return new Response("Not found", { status: 404 });
-  const exists = getDatabase().prepare("SELECT 1 FROM generation_jobs WHERE id=? AND type='video' AND status='complete'").get(id);
+  const exists = getDatabase().prepare("SELECT 1 FROM generation_jobs WHERE id=? AND type IN ('video', 'google-vids') AND status='complete'").get(id);
   if (!exists) return new Response("Not found", { status: 404 });
 
   const url = new URL(_request.url);
@@ -94,7 +94,7 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   if (!/^[a-f0-9-]{36}$/i.test(id)) return Response.json({ ok: false, message: "Geçersiz video ID." }, { status: 400 });
 
   const db = getDatabase();
-  const exists = db.prepare("SELECT id FROM generation_jobs WHERE id=? AND type='video'").get(id);
+  const exists = db.prepare("SELECT id FROM generation_jobs WHERE id=? AND type IN ('video', 'google-vids')").get(id);
   if (!exists) return Response.json({ ok: false, message: "Video bulunamadı." }, { status: 404 });
 
   const filePath = path.join(process.cwd(), ".data", "video-renders", `${id}.mp4`);
@@ -106,6 +106,6 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
     }
   }
 
-  db.prepare("DELETE FROM generation_jobs WHERE id=? AND type='video'").run(id);
+  db.prepare("DELETE FROM generation_jobs WHERE id=? AND type IN ('video', 'google-vids')").run(id);
   return Response.json({ ok: true, message: "Video başarıyla silindi." });
 }

@@ -116,6 +116,8 @@ export function ProductionQueueDrawer({
     onClose();
     if (item.type === "canva") {
       router.push(`/projects/${projectId}/image-generation?studio=canva`);
+    } else if (item.type === "google-vids") {
+      router.push(`/projects/${projectId}/video-generation?studio=vids`);
     } else if (item.typeLabel === "Stok Video Render") {
       router.push(`/projects/${projectId}/stock-videos`);
     } else if (item.type === "video" || item.type === "video-layer") {
@@ -127,7 +129,7 @@ export function ProductionQueueDrawer({
 
   function renderTypeIcon(type: string) {
     if (type === "canva") return <Palette size={14} />;
-    if (type === "video" || type === "video-layer") return <Clapperboard size={14} />;
+    if (type === "video" || type === "video-layer" || type === "google-vids") return <Clapperboard size={14} />;
     return <ImageIcon size={14} />;
   }
 

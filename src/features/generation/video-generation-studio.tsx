@@ -7,7 +7,8 @@ import { Player } from "@remotion/player";
 import { Blend, Check, Clapperboard, Download, ImageOff, Layers3, LoaderCircle, Play, RefreshCw, Send, Sparkles, Type } from "lucide-react";
 import { useProjects } from "@/features/projects/projects-context";
 import { AnimatedCreative } from "@/remotion/AnimatedCreative";
-import type { AnimatedCreativeProps, MotionStyle } from "@/remotion/types";
+import { AnimatedCreativeProps, MotionStyle } from "@/remotion/types";
+import { GoogleVidsStudio } from "./google-vids-studio";
 
 type CreativeAsset = { id: string; url: string; model: string; prompt: string; createdAt: string };
 type RenderedVideo = { id: string; url: string; sourceAssetId?: string; durationSeconds?: number; motionStyle?: string; createdAt: string };
@@ -42,6 +43,21 @@ export function VideoGenerationStudio({ projectId }: { projectId: string }) {
   const [packageId, setPackageId] = useState("");
   const [preparedSpec, setPreparedSpec] = useState<AnimatedCreativeProps | null>(null);
   const [message, setMessage] = useState("");
+  const [activeStudioTab, setActiveStudioTab] = useState<"motion" | "vids">("motion");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("studio") === "vids") {
+      setActiveStudioTab("vids");
+    }
+  }, []);
+
+  function switchStudioTab(tab: "motion" | "vids") {
+    setActiveStudioTab(tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set("studio", tab);
+    window.history.replaceState({}, "", url.toString());
+  }
 
   const loadData = useCallback(async () => {
     try {
@@ -94,7 +110,48 @@ export function VideoGenerationStudio({ projectId }: { projectId: string }) {
   if (!project) return <div className="overview-loading" />;
 
   return (
-    <div className="video-studio">
+    <div style={{ width: "100%" }}>
+      {/* Üst Stüdyo Sekmeleri */}
+      <div
+        role="tablist"
+        aria-label="Video üretim stüdyosu sekmeleri"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          marginBottom: "16px",
+          borderBottom: "1px solid var(--border, #e2e8f0)",
+          paddingBottom: "12px",
+        }}
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeStudioTab === "motion"}
+          onClick={() => switchStudioTab("motion")}
+          className={`button ${activeStudioTab === "motion" ? "primary" : "secondary"}`}
+          style={{ height: "34px", fontSize: "12px", padding: "0 14px", border: "none" }}
+        >
+          <Clapperboard size={14} />
+          Motion Kreatif (Remotion)
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeStudioTab === "vids"}
+          onClick={() => switchStudioTab("vids")}
+          className={`button ${activeStudioTab === "vids" ? "primary" : "secondary"}`}
+          style={{ height: "34px", fontSize: "12px", padding: "0 14px", border: "none" }}
+        >
+          <Sparkles size={14} />
+          Google Vids (Omni AI)
+        </button>
+      </div>
+
+      {activeStudioTab === "vids" ? (
+        <GoogleVidsStudio projectId={projectId} />
+      ) : (
+        <div className="video-studio">
       <section className="video-controls">
         <div className="video-section-heading"><span><Clapperboard size={18} /></span><div><h2>Motion kreatif</h2><p>Tek sahneli, efektli dikey video</p></div></div>
 
@@ -128,6 +185,8 @@ export function VideoGenerationStudio({ projectId }: { projectId: string }) {
         <div className="history-heading"><div><span><Clapperboard size={16} /></span><div><h2>Üretilen videolar</h2><p>Local Remotion çıktıları</p></div></div></div>
         {videos.length ? <div className="video-history-grid">{videos.map((video) => <article key={video.id}><video src={video.url} controls preload="metadata" /><div><span>{video.durationSeconds || 8} sn · {video.motionStyle || "premium"}</span><a href={video.url} download={`motion-kreatif-${video.id}.mp4`}><Download size={14} />İndir</a><Link href={`/projects/${projectId}/publishing?assetId=${video.id}`} style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--accent, #612bd3)", fontWeight: 600, fontSize: "11px" }}><Send size={13} />Planla</Link></div></article>)}</div> : <div className="history-empty"><Clapperboard size={23} /><span>Henüz video üretilmedi.</span></div>}
       </section>
+    </div>
+      )}
     </div>
   );
 }

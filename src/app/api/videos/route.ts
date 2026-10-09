@@ -41,7 +41,7 @@ function localUrlToDataUrl(url: string | undefined) {
 export async function GET(request: Request) {
   const projectId = new URL(request.url).searchParams.get("projectId")?.trim();
   if (!projectId) return Response.json({ ok: false, message: "Proje gerekli." }, { status: 400 });
-  const rows = getDatabase().prepare("SELECT id, request_json, response_json, created_at, completed_at FROM generation_jobs WHERE project_id=? AND type='video' AND status='complete' ORDER BY created_at DESC LIMIT 50").all(projectId) as unknown as VideoJobRow[];
+  const rows = getDatabase().prepare("SELECT id, type, request_json, response_json, created_at, completed_at FROM generation_jobs WHERE project_id=? AND type IN ('video', 'google-vids') AND status='complete' ORDER BY created_at DESC LIMIT 50").all(projectId) as unknown as (VideoJobRow & { type?: string })[];
   const videos = rows.map((row) => {
     let idea: { id?: string; title?: string; concept?: string } | undefined;
     let sourceTopic: string | undefined;
@@ -49,15 +49,16 @@ export async function GET(request: Request) {
     let durationSeconds: number | undefined;
     let motionStyle: string | undefined;
     let isStockRender = false;
+    let isGoogleVids = row.type === "google-vids";
     let metadata: Record<string, unknown> | undefined;
 
     try {
       const requestState = JSON.parse(row.request_json || "{}");
       sourceAssetId = requestState.sourceAssetId;
       durationSeconds = requestState.durationSeconds;
-      motionStyle = requestState.motionStyle;
+      motionStyle = requestState.motionStyle || (isGoogleVids ? requestState.visualMood : undefined);
       idea = requestState.idea;
-      sourceTopic = requestState.sourceTopic;
+      sourceTopic = requestState.sourceTopic || requestState.topic;
       metadata = requestState.metadata;
       isStockRender = Boolean(
         requestState.sourceStockVideoId || requestState.renderer === "ffmpeg-frame-engine"
@@ -68,8 +69,9 @@ export async function GET(request: Request) {
     return {
       id: row.id,
       url: responseState.url || `/api/videos/${row.id}`,
-      title: responseState.title || (isStockRender ? "Stok Üretim Video" : undefined),
+      title: responseState.title || (isGoogleVids ? "Google Vids Video" : isStockRender ? "Stok Üretim Video" : undefined),
       isStockRender,
+      isGoogleVids: isGoogleVids || Boolean(responseState.isGoogleVids),
       sourceAssetId,
       durationSeconds: responseState.durationSeconds || durationSeconds,
       motionStyle,

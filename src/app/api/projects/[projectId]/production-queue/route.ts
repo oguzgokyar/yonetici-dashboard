@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export interface ProductionQueueItem {
   id: string;
   projectId: string;
-  type: "canva" | "image" | "video" | "video-layer" | "other";
+  type: "canva" | "image" | "video" | "video-layer" | "google-vids" | "other";
   typeLabel: string;
   status: "queued" | "dispatching" | "running" | "rendering" | "exporting" | "uploading" | "complete" | "failed";
   prompt: string;
@@ -37,7 +37,7 @@ type PackageData = {
 type DbJobRow = {
   id: string;
   project_id: string;
-  type: "canva" | "image" | "video" | "video-layer" | "other";
+  type: "canva" | "image" | "video" | "video-layer" | "google-vids" | "other";
   provider: string;
   model: string;
   status: "queued" | "dispatching" | "running" | "rendering" | "exporting" | "uploading" | "complete" | "failed";
@@ -58,6 +58,7 @@ function resolveTypeLabel(type: string, requestData: RequestData): string {
     if (cType.includes("video") || cType.includes("reels")) return "Canva Video";
     return "Canva Tasarım";
   }
+  if (type === "google-vids") return "Google Vids AI";
   if (type === "image") return "AI Görsel";
   if (type === "video") {
     if (requestData?.renderer === "ffmpeg-frame-engine" || requestData?.sourceStockVideoId) {
@@ -77,7 +78,7 @@ function extractPreviewUrl(type: string, responseData: ResponseData, packageRow?
   if (type === "image" && Array.isArray(responseData?.assets) && responseData.assets.length > 0) {
     return responseData.assets[0]?.url || null;
   }
-  if (type === "video") {
+  if (type === "video" || type === "google-vids") {
     if (jobId) return `/api/videos/${jobId}?thumb=1`;
     return responseData?.videoUrl || responseData?.url || null;
   }
@@ -97,6 +98,7 @@ export async function GET(
     SELECT id, project_id, type, provider, model, status, prompt, request_json, response_json, progress_json, error, created_at, completed_at
     FROM generation_jobs
     WHERE project_id = ? AND status IN ('queued', 'dispatching', 'running', 'rendering', 'exporting', 'uploading')
+      AND type IN ('canva', 'image', 'video', 'video-layer', 'google-vids')
     ORDER BY created_at ASC
   `).all(projectId) as unknown as DbJobRow[];
 
@@ -105,6 +107,7 @@ export async function GET(
     SELECT id, project_id, type, provider, model, status, prompt, request_json, response_json, progress_json, error, created_at, completed_at
     FROM generation_jobs
     WHERE project_id = ? AND status IN ('complete', 'failed')
+      AND type IN ('canva', 'image', 'video', 'video-layer', 'google-vids')
     ORDER BY COALESCE(completed_at, created_at) DESC
     LIMIT 10
   `).all(projectId) as unknown as DbJobRow[];

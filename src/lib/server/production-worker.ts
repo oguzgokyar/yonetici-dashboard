@@ -1,14 +1,16 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
+import { withHeavyJob, acquireHeavyJob, releaseHeavyJob } from "@/lib/server/heavy-job-coordinator";
 import { getDatabase } from "@/lib/server/database";
 import { renderFramedStockVideo } from "@/lib/server/stock-video-renderer";
 import { getCanvaConfig, createJobCallbackToken } from "@/lib/server/canva-config";
 import { buildHermesCanvaTaskPrompt } from "@/lib/server/hermes-canva-task";
 import { dispatchHermesCanvaTask } from "@/lib/server/hermes-agent-client";
+import { processGoogleVidsJob } from "@/lib/server/google-vids-service";
 
 /**
- * Global FIFO Mutex Lock:
- * Allows ANY production endpoint (AI Image, Motion Video, Stock Video, Canva)
- * to run strictly ONE at a time in First-In, First-Out order.
+ * Process-local FIFO plus mandatory shared host coordinator admission.
+ * This in-memory chain alone is NOT a cross-process/global lock.
  */
 interface FifoQueueState {
   tail: Promise<unknown>;
@@ -31,19 +33,44 @@ if (!globalFifo.__fifoProductionQueue) {
  * If another task is currently running, this waits until all earlier tasks finish,
  * then executes `fn()` and resolves with its result.
  */
-export function runInFifoQueue<T>(jobId: string | undefined, fn: () => Promise<T>): Promise<T> {
+function enqueueLocal<T>(fn: () => Promise<T>): Promise<T> {
   const state = globalFifo.__fifoProductionQueue!;
-
-  const next = state.tail.then(async () => {
-    return await fn();
-  });
-
-  // Ensure errors in `next` don't break the chain for subsequent tasks
-  state.tail = next.catch((err) => {
-    console.error(`[FIFO Queue] Task ${jobId || "unknown"} failed:`, err);
-  });
-
+  const next = state.tail.then(fn);
+  state.tail = next.catch(err => { console.error('[FIFO Queue] Task failed:', err); });
   return next;
+}
+
+export function runInFifoQueue<T>(jobId: string | undefined, fn: () => Promise<T>): Promise<T> {
+  const id = jobId || randomUUID();
+  return enqueueLocal(() => withHeavyJob(`production:${id}`, `dashboard:${randomUUID()}`, fn));
+}
+
+async function waitForCanvaCompletion(jobId: string): Promise<void> {
+  while (true) {
+    const job = getDatabase().prepare('SELECT status FROM generation_jobs WHERE id=?').get(jobId) as {status: string} | undefined;
+    if (job && ['complete', 'failed'].includes(job.status)) return;
+    // No age bypass: missing callback/restart requires verified operator recovery.
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+}
+
+async function runCanvaLifetime(job: Parameters<typeof processCanvaJob>[0], resume = false): Promise<void> {
+  const jobId = `canva:${job.id}`;
+  const claim = `dashboard:${job.id}`;
+  await acquireHeavyJob(jobId, claim);
+  try {
+    if (!resume) await processCanvaJob(job);
+    await waitForCanvaCompletion(job.id);
+  } finally {
+    const status = getDatabase().prepare('SELECT status FROM generation_jobs WHERE id=?').get(job.id) as {status: string} | undefined;
+    if (status && ['complete', 'failed'].includes(status.status)) await releaseHeavyJob(jobId, claim);
+  }
+}
+
+/** Callback routes release this persistent claim only AFTER all work incl video export stops. */
+export async function finishCanvaCoordination(jobId: string): Promise<void> {
+  await releaseHeavyJob(`canva:${jobId}`, `dashboard:${jobId}`);
+  triggerProductionWorker();
 }
 
 /**
@@ -55,32 +82,30 @@ export function triggerProductionWorker(): void {
   if (state.isDrainingDb) return;
   state.isDrainingDb = true;
 
-  void runInFifoQueue("db-drain", async () => {
+  void enqueueLocal(async () => {
     try {
       const db = getDatabase();
       if (!db) return;
 
       while (true) {
-        // Check if a Canva job is already actively running/dispatching in the background (waiting for callback)
-        // Only hold if it was created within the last 10 minutes (avoid deadlocks on stale jobs)
+        // Resume waiting after process restart; active async work has no arbitrary age expiry.
         const activeCanva = db.prepare(`
-          SELECT id FROM generation_jobs
+          SELECT id, project_id, prompt, request_json FROM generation_jobs
           WHERE type = 'canva'
-            AND status IN ('dispatching', 'running')
-            AND datetime(created_at) > datetime('now', '-10 minutes')
-          LIMIT 1
-        `).get() as { id: string } | undefined;
+            AND status IN ('dispatching', 'running', 'exporting', 'uploading', 'video_exporting', 'coordination_uncertain')
+          ORDER BY created_at ASC LIMIT 1
+        `).get() as Parameters<typeof processCanvaJob>[0] | undefined;
 
         if (activeCanva) {
-          // Wait until the active Canva job finishes (complete/fail callback will call triggerProductionWorker again)
-          break;
+          await runCanvaLifetime(activeCanva, true);
+          continue;
         }
 
-        // Fetch the oldest queued background job (Stock Video or Canva)
+        // Fetch the oldest queued background job (Stock Video, Canva, or Google Vids)
         const nextJob = db.prepare(`
           SELECT id, project_id, type, provider, model, prompt, request_json, created_at
           FROM generation_jobs
-          WHERE status = 'queued' AND type IN ('video', 'canva')
+          WHERE status = 'queued' AND type IN ('video', 'canva', 'google-vids')
           ORDER BY created_at ASC
           LIMIT 1
         `).get() as {
@@ -99,17 +124,18 @@ export function triggerProductionWorker(): void {
         }
 
         if (nextJob.type === "video") {
-          await processStockVideoJob(nextJob);
+          await withHeavyJob(`production:${nextJob.id}`, `dashboard:${randomUUID()}`, () => processStockVideoJob(nextJob));
+        } else if (nextJob.type === "google-vids") {
+          await withHeavyJob(`google-vids:${nextJob.id}`, `dashboard:${randomUUID()}`, () => processGoogleVidsJob(nextJob));
         } else if (nextJob.type === "canva") {
-          await processCanvaJob(nextJob);
-          // After dispatching a Canva job, break and wait for its completion callback before starting the next job
-          break;
+          await runCanvaLifetime(nextJob);
+          // Continue only after completion/failure, never after mere dispatch.
         }
       }
     } finally {
       state.isDrainingDb = false;
     }
-  });
+  }).catch(err => { console.error('[Production Worker] Coordination unavailable; jobs remain queued:', err); });
 }
 
 interface StockJobRequest {
@@ -154,11 +180,11 @@ async function processStockVideoJob(job: {
     req = {};
   }
 
-  db.prepare(`
+  const claimed = db.prepare(`
     UPDATE generation_jobs
     SET status = 'rendering',
         progress_json = ?
-    WHERE id = ?
+    WHERE id = ? AND status = 'queued'
   `).run(
     JSON.stringify({
       phase: "rendering",
@@ -168,6 +194,8 @@ async function processStockVideoJob(job: {
     }),
     job.id
   );
+
+  if (!claimed.changes) return;
 
   try {
     await renderFramedStockVideo({
@@ -255,7 +283,7 @@ async function processCanvaJob(job: {
     callbackToken: createJobCallbackToken(canvaConfig.callbackToken, job.id),
   });
 
-  db.prepare("UPDATE generation_jobs SET status='dispatching', progress_json=? WHERE id=?").run(
+  const claimed = db.prepare("UPDATE generation_jobs SET status='dispatching', progress_json=? WHERE id=? AND status='queued'").run(
     JSON.stringify({
       phase: "dispatching",
       percent: 10,
@@ -264,6 +292,8 @@ async function processCanvaJob(job: {
     }),
     job.id
   );
+
+  if (!claimed.changes) return;
 
   try {
     const dispatchResult = await dispatchHermesCanvaTask({
@@ -274,7 +304,7 @@ async function processCanvaJob(job: {
     });
 
     if (dispatchResult.dispatched) {
-      db.prepare("UPDATE generation_jobs SET status='running', progress_json=? WHERE id=?").run(
+      db.prepare("UPDATE generation_jobs SET status='running', progress_json=? WHERE id=? AND status='dispatching'").run(
         JSON.stringify({
           phase: "running",
           percent: 20,
@@ -285,14 +315,16 @@ async function processCanvaJob(job: {
         job.id
       );
     } else {
-      db.prepare("UPDATE generation_jobs SET status='failed', error=? WHERE id=?").run(
+      // No HTTP rejection means transport failure may hide an accepted asynchronous run.
+      const uncertain = !dispatchResult.status;
+      db.prepare(`UPDATE generation_jobs SET status='${uncertain ? 'coordination_uncertain' : 'failed'}', error=? WHERE id=?`).run(
         dispatchResult.error || "Hermes görev kabul etmedi",
         job.id
       );
     }
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    db.prepare("UPDATE generation_jobs SET status='failed', error=? WHERE id=?").run(
+    db.prepare("UPDATE generation_jobs SET status='coordination_uncertain', error=? WHERE id=?").run(
       errMsg.slice(0, 1000),
       job.id
     );
