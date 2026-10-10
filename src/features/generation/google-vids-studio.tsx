@@ -97,13 +97,22 @@ type ScriptScenePlan = {
   sfxCueEn?: string;
 };
 
+type MusicMoodSpec = {
+  moodTr: string;
+  instrumentationTr: string;
+  musicPromptEn: string;
+  tempoBpm?: number;
+};
+
 type StoryboardResponse = {
   title: string;
   narrativeTr: string;
+  narrativeMode?: "voiceover_only" | "dialogue_only" | "hybrid";
   totalDurationSeconds: number;
   visualMood: VisualMoodOption["key"];
   aspectRatio: "9:16" | "16:9" | "1:1";
   characterAnchor?: CharacterAnchorSpec;
+  musicSpec?: MusicMoodSpec;
   scenes: ScriptScenePlan[];
 };
 
@@ -123,6 +132,8 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
   const [visualMood, setVisualMood] = useState<VisualMoodOption["key"]>("cinematic_photoreal");
   const [targetDuration, setTargetDuration] = useState<"15s" | "30s" | "60s">("30s");
   const [aspectRatio, setAspectRatio] = useState<"9:16" | "16:9" | "1:1">("9:16");
+  const [narrativeMode, setNarrativeMode] = useState<"voiceover_only" | "dialogue_only" | "hybrid">("hybrid");
+  const [includeMusic, setIncludeMusic] = useState(true);
 
   const [planning, setPlanning] = useState(false);
   const [revising, setRevising] = useState(false);
@@ -158,6 +169,8 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         if (parsed.visualMood) setVisualMood(parsed.visualMood);
         if (parsed.targetDuration) setTargetDuration(parsed.targetDuration);
         if (parsed.aspectRatio) setAspectRatio(parsed.aspectRatio);
+        if (parsed.narrativeMode) setNarrativeMode(parsed.narrativeMode);
+        if (typeof parsed.includeMusic === "boolean") setIncludeMusic(parsed.includeMusic);
         if (parsed.storyboard && !storyboard) setStoryboard(parsed.storyboard);
       }
     } catch {}
@@ -174,6 +187,8 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
             visualMood,
             targetDuration,
             aspectRatio,
+            narrativeMode,
+            includeMusic,
             storyboard,
           })
         );
@@ -270,6 +285,8 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
           visualMood,
           targetDuration,
           aspectRatio,
+          narrativeMode,
+          includeMusic,
           revisionFeedback: isRevision ? revisionNote.trim() : undefined,
           currentStoryboard: isRevision ? storyboard : undefined,
         }),
@@ -513,6 +530,21 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         {/* Nitelik Seçiciler */}
         <div className="attribute-grid">
           <label className="select-field">
+            <span>Anlatım & Ses Formatı (Audio Mode)</span>
+            <div>
+              <select
+                value={narrativeMode}
+                onChange={(e) => setNarrativeMode(e.target.value as "voiceover_only" | "dialogue_only" | "hybrid")}
+              >
+                <option value="hybrid">🎭 Hibrit (Anlatıcı + Karakter Diyaloğu)</option>
+                <option value="voiceover_only">🎙️ Dış Ses / Masal Anlatıcısı (Sadece Anlatım)</option>
+                <option value="dialogue_only">💬 Karakter Diyalogları (Konuşmalı / Lip-Sync)</option>
+              </select>
+              <ChevronDown size={14} />
+            </div>
+          </label>
+
+          <label className="select-field">
             <span>Sanat & Görsel Tarzı</span>
             <div>
               <select
@@ -554,6 +586,20 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                 <option value="9:16">Dikey (9:16 • Reels / Shorts / TikTok)</option>
                 <option value="16:9">Yatay (16:9 • YouTube / Sunum)</option>
                 <option value="1:1">Kare (1:1 • Instagram Akış)</option>
+              </select>
+              <ChevronDown size={14} />
+            </div>
+          </label>
+
+          <label className="select-field">
+            <span>Arka Plan Müziği (Google Vids Audio)</span>
+            <div>
+              <select
+                value={includeMusic ? "yes" : "no"}
+                onChange={(e) => setIncludeMusic(e.target.value === "yes")}
+              >
+                <option value="yes">🎵 Müzik Aktif (visual-skills Duygu Promptu ile)</option>
+                <option value="no">🔇 Müziksiz (Sadece Ses / Diyalog)</option>
               </select>
               <ChevronDown size={14} />
             </div>
@@ -625,6 +671,48 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                 {storyboard.narrativeTr}
               </p>
             </div>
+
+            {/* Müzik ve Duygu Özeti */}
+            {storyboard.musicSpec && (
+              <div
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: "12px",
+                  border: "1px solid #fed7aa",
+                  background: "#fff7ed",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: "8px",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontSize: "14px" }}>🎵</span>
+                  <div>
+                    <strong style={{ fontSize: "12.5px", color: "#9a3412" }}>
+                      Arka Plan Müziği: {storyboard.musicSpec.moodTr}
+                    </strong>
+                    <div style={{ fontSize: "11px", color: "#c2410c" }}>
+                      {storyboard.musicSpec.instrumentationTr}
+                    </div>
+                  </div>
+                </div>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    background: "#ffedd5",
+                    color: "#9a3412",
+                    padding: "3px 8px",
+                    borderRadius: "6px",
+                    fontWeight: 600,
+                  }}
+                  title={storyboard.musicSpec.musicPromptEn}
+                >
+                  ✓ Google Vids Müzik Promptu Hazır
+                </span>
+              </div>
+            )}
 
             {/* Sabit Karakter / Hero Anchor Özeti */}
             {storyboard.characterAnchor && (
@@ -797,30 +885,52 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
 
                   {/* Google Vids Türkçe Dış Ses (Voiceover) & Diyaloglar */}
                   <div style={{ background: "#f8fafc", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
-                    <label style={{ fontSize: "11px", fontWeight: 700, color: "#0284c7", display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px" }}>
-                      🎙️ Google Vids Yerleşik Türkçe Dış Ses (Voiceover Scripti)
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={scene.voiceoverTr || ""}
-                      onChange={(e) => updateScenePrompt(idx, "voiceoverTr", e.target.value)}
-                      placeholder="Google Vids Voiceover paneline yazılacak etkili Türkçe dış ses metni..."
-                      style={{
-                        width: "100%",
-                        padding: "8px 10px",
-                        fontSize: "12.5px",
-                        borderRadius: "6px",
-                        border: "1px solid #cbd5e1",
-                        boxSizing: "border-box",
-                        lineHeight: 1.45,
-                        background: "#ffffff",
-                      }}
-                    />
-                    {scene.dialogueTr ? (
-                      <div style={{ marginTop: "6px", fontSize: "11px", color: "#475569" }}>
-                        <strong>💬 Sahne Diyaloğu:</strong> <em>{scene.dialogueTr}</em>
+                    {narrativeMode !== "dialogue_only" && (
+                      <div style={{ marginBottom: scene.dialogueTr ? "8px" : "0" }}>
+                        <label style={{ fontSize: "11px", fontWeight: 700, color: "#0284c7", display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px" }}>
+                          🎙️ Google Vids Yerleşik Dış Ses (Voiceover)
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={scene.voiceoverTr || ""}
+                          onChange={(e) => updateScenePrompt(idx, "voiceoverTr", e.target.value)}
+                          placeholder="Google Vids Voiceover paneline yazılacak etkili Türkçe dış ses metni..."
+                          style={{
+                            width: "100%",
+                            padding: "8px 10px",
+                            fontSize: "12.5px",
+                            borderRadius: "6px",
+                            border: "1px solid #cbd5e1",
+                            boxSizing: "border-box",
+                            lineHeight: 1.45,
+                            background: "#ffffff",
+                          }}
+                        />
                       </div>
-                    ) : null}
+                    )}
+
+                    {narrativeMode !== "voiceover_only" && (
+                      <div>
+                        <label style={{ fontSize: "11px", fontWeight: 700, color: "#7c3aed", display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px" }}>
+                          💬 Karakter Repliği / Diyalog (Veo Lip-Sync)
+                        </label>
+                        <input
+                          type="text"
+                          value={scene.dialogueTr || ""}
+                          onChange={(e) => updateScenePrompt(idx, "dialogueTr", e.target.value)}
+                          placeholder="Örn: Hoca: 'Bizim memleketin kazları hep tek ayak üstünde durur!'"
+                          style={{
+                            width: "100%",
+                            padding: "7px 10px",
+                            fontSize: "12px",
+                            borderRadius: "6px",
+                            border: "1px solid #cbd5e1",
+                            boxSizing: "border-box",
+                            background: "#ffffff",
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* İngilizce Google Vids Omni Promptu */}

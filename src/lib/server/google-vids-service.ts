@@ -12,6 +12,8 @@ export interface GoogleVidsJobRequest {
   aspectRatio: "9:16" | "16:9" | "1:1";
   durationSeconds: number;
   visualMood: string;
+  narrativeMode?: string;
+  musicSpec?: Record<string, unknown>;
   scenes: ScriptScenePlan[];
 }
 
@@ -31,6 +33,7 @@ export async function processGoogleVidsJob(job: {
 
   const title = req.title || job.prompt || "Google Vids Video";
   const aspectRatio = req.aspectRatio || "9:16";
+  const musicPrompt = (req.musicSpec as { musicPromptEn?: string })?.musicPromptEn || "";
   const scenes = req.scenes || [];
 
   if (!scenes.length) {
@@ -87,6 +90,7 @@ export async function processGoogleVidsJob(job: {
         "--job-id", job.id,
         "--title", title,
         "--aspect-ratio", aspectRatio,
+        "--music-prompt", musicPrompt,
         "--scenes-json", scenesTempFile,
         "--output-mp4", finalMp4Path,
       ], {
@@ -179,7 +183,7 @@ export async function processGoogleVidsJob(job: {
 cat << 'EOF' > "${scenesTempFile}"
 ${JSON.stringify(scenes, null, 2)}
 EOF
-/opt/hermes/.venv/bin/python /opt/data/scripts/google_vids_automation.py --job-id "${job.id}" --title ${JSON.stringify(title)} --aspect-ratio "${aspectRatio}" --scenes-json "${scenesTempFile}" --output-mp4 "/tmp/vids_out_${job.id}.mp4"
+/opt/hermes/.venv/bin/python /opt/data/scripts/google_vids_automation.py --job-id "${job.id}" --title ${JSON.stringify(title)} --aspect-ratio "${aspectRatio}" --music-prompt ${JSON.stringify(musicPrompt)} --scenes-json "${scenesTempFile}" --output-mp4 "/tmp/vids_out_${job.id}.mp4"
 
 Once "/tmp/vids_out_${job.id}.mp4" is generated:
 Parse the stdout log of the python script for '__PROGRESS__' line containing 'googleVidsUrl' to get the URL if available.

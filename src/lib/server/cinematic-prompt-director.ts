@@ -104,13 +104,24 @@ export interface ScriptScenePlan {
   sfxCueEn?: string; // Veo/Vids SFX katmanı (örn: "SFX: (water splash at 2s)")
 }
 
+export type NarrativeMode = "voiceover_only" | "dialogue_only" | "hybrid";
+
+export interface MusicMoodSpec {
+  moodTr: string; // örn: "Nüktedan ve Neşeli Halk Müziği"
+  instrumentationTr: string; // örn: "Akustik kanun, ney ve hafif ritmik perküsyon"
+  musicPromptEn: string; // Google Vids Audio için: "Playful Anatolian folklore acoustic track, light rhythmic qanun and wooden flute, gentle comedic cadence, no vocals"
+  tempoBpm?: number;
+}
+
 export interface StoryboardResponse {
   title: string;
   narrativeTr: string;
+  narrativeMode?: NarrativeMode;
   totalDurationSeconds: number;
   visualMood: CinematicVisualMood;
   aspectRatio: "9:16" | "16:9" | "1:1";
   characterAnchor?: CharacterAnchorSpec; // Hikayede sabit kalması gereken ana karakter/obje
+  musicSpec?: MusicMoodSpec; // Hikayenin duygusuna göre üretilen müzik spesifikasyonu
   scenes: ScriptScenePlan[];
 }
 
@@ -123,6 +134,8 @@ export async function planCinematicStoryboard(input: {
   visualMood?: CinematicVisualMood;
   targetDuration?: TargetDurationRange;
   aspectRatio?: "9:16" | "16:9" | "1:1";
+  narrativeMode?: NarrativeMode;
+  includeMusic?: boolean;
   brandName?: string;
   revisionFeedback?: string;
   currentStoryboard?: StoryboardResponse;
@@ -133,6 +146,8 @@ export async function planCinematicStoryboard(input: {
   const mood = CINEMATIC_VISUAL_MOODS[moodKey];
   const targetDur = input.targetDuration || "30s";
   const ratio = input.aspectRatio || "9:16";
+  const narrativeMode: NarrativeMode = input.narrativeMode || "hybrid";
+  const includeMusic = input.includeMusic !== false;
 
   const systemPrompt = `You are a world-class AI Film Director, Screenwriter and Dramaturge operating strictly under the 'smixs/visual-skills' framework (references: dramaturgy.md, universal-rules.md, veo.md).
 Your specialty is directing Google Vids Omni / Veo cinematic video generators.
@@ -155,20 +170,32 @@ MANDATORY LAWS FROM THE VISUAL-SKILLS REPOSITORY:
      SFX: [punctual sound event, e.g. (water splashing franticly), (cloth ripping)]
    - In 'audioCueEn', extract the clean Audio line (e.g. "Audio: flowing mountain creek, wind through weeping willows").
    - In 'sfxCueEn', extract the SFX line (e.g. "SFX: (frantic water splashing at 2s)").
-5. "Character Anchor Law (universal-rules.md U7 - Nasreddin Hodja Principle)":
+5. "NARRATIVE MODE LAWS (CRITICAL)":
+   - Current mode is: "${narrativeMode.toUpperCase()}"
+   - If 'voiceover_only': Sシーン MUST NOT have character speech or 'dialogueTr'. Focus 100% on rich, literary, storytelling Turkish narrator voiceover ('voiceoverTr'). Omit 'Says:' lines from 'promptEn'.
+   - If 'dialogue_only': Scenes MUST NOT have narrator voiceover ('voiceoverTr' MUST BE EMPTY OR OMITTED). Every scene is driven directly by in-scene character dialogue ('dialogueTr') with full character names and Veo 'Says: [Character] says [tone]: "[line]"' syntax.
+   - If 'hybrid': Balance narrator storytelling with punchy character dialogue.
+
+6. "VISUAL-SKILLS MUSIC DIRECTION (camera-lighting-vocabulary.md §8)":
+   - If includeMusic is active, analyze the core emotional spine of the story and design 'musicSpec'.
+   - Provide evocative Turkish 'moodTr' and 'instrumentationTr'.
+   - Provide an English instrumental music generation prompt 'musicPromptEn' tailored for Google Vids Audio (e.g. "Playful Anatolian folklore acoustic track, light rhythmic qanun and wooden flute, gentle comedic cadence, no vocals").
+
+7. "Character Anchor Law (universal-rules.md U7 - Nasreddin Hodja Principle)":
    - If the narrative features a central or recurring figure/character (e.g. Nasreddin Hodja, a distinctive boy, a hero), define it once in 'characterAnchor'.
    - Detail 'fixedTraitsEn' (exact headwear/turban, kaftan/robe color and fabric, beard type, facial structure, footwear).
    - In EVERY scene prompt ('promptEn'), begin the character reference with these EXACT fixed traits so the AI cannot drift the character's face, clothing, or appearance between clips.
-6. "Google Vids Omni Temporal & Clip Structure":
+
+8. "Google Vids Omni Temporal & Clip Structure":
    - Base clip duration is 10 seconds. An initial clip can be extended with 'extend' into 20 seconds.
-   - Total duration must respect target length (~15s: 1-2 scenes; ~30s: 2-3 scenes; ~60s: 3-4 scenes).
-   - 'voiceoverTr': Compelling, literary, evocative spoken Turkish narration written for Google Vids native Voiceover track.
-   - 'dialogueTr': Character's Turkish spoken line if applicable.`;
+   - Total duration must respect target length (~15s: 1-2 scenes; ~30s: 2-3 scenes; ~60s: 3-4 scenes).`;
 
   const userPrompt = `TOPIC / USER PROMPT: "${input.topic}"
 BRAND: "${input.brandName || "General"}"
 TARGET DURATION: ${targetDur} (Approximate desired length)
 ASPECT RATIO: ${ratio}
+NARRATIVE MODE: ${narrativeMode}
+INCLUDE MUSIC DIRECTION: ${includeMusic ? "YES" : "NO"}
 SELECTED VISUAL STYLE: ${mood.label}
 - Lighting Style: ${mood.lightingInstruction}
 - Lens / Camera Style: ${mood.lensInstruction}
@@ -184,9 +211,15 @@ Return ONLY a valid JSON object matching this schema (no markdown fences, no con
 {
   "title": "Short catchy title in Turkish",
   "narrativeTr": "1-2 sentence dramatic narrative summary in Turkish explaining the core emotion and conflict",
+  "narrativeMode": "${narrativeMode}",
   "totalDurationSeconds": 30,
   "visualMood": "${moodKey}",
   "aspectRatio": "${ratio}",
+  "musicSpec": {
+    "moodTr": "Duygu tanımı (Türkçe)",
+    "instrumentationTr": "Enstrümanlar (Türkçe)",
+    "musicPromptEn": "Instrumental music generation prompt for Google Vids Audio in English, no vocals"
+  },
   "characterAnchor": {
     "name": "Karakter adı (örn: Nasreddin Hoca veya Ana Karakter)",
     "archetypeTr": "Türkçe arketip (örn: Bilge halk filozofu, 60'lı yaşlar)",
@@ -226,6 +259,7 @@ CRITICAL: Return valid JSON ONLY. No markdown backticks, no markdown code block 
     return {
       title: input.topic.slice(0, 40),
       narrativeTr: "Doğal sinematik akış ve sahne devamlılığı.",
+      narrativeMode,
       totalDurationSeconds: fallbackDuration,
       visualMood: moodKey,
       aspectRatio: ratio,
@@ -280,10 +314,13 @@ export async function rerollSingleScene(input: {
 Your task is to RE-ROLL / RE-DIRECT exactly ONE SCENE (Scene ${input.sceneIndex}) inside an existing multi-scene sequence.
 
 RULES:
-1. Preserve continuity: Retain the existing character anchor traits (${sb.characterAnchor?.fixedTraitsEn || "consistent subject"}), overall visual mood, and surrounding scene progression.
+1. Preserve continuity: Retain the existing character anchor traits (${sb.characterAnchor?.fixedTraitsEn || "consistent subject"}), narrative mode (${sb.narrativeMode || "hybrid"}), overall visual mood, and surrounding scene progression.
 2. The Three-Detail Rule: Ensure the scene has concrete environmental pressure, body micro-actions, and sound/motif anchors.
 3. Audio/Dialogue Syntax: Use Veo official format: [Physical visual action/camera/light] + Audio: ... + Says: ... + SFX: ...
-4. Turkish Voiceover: Provide natural, evocative Turkish 'voiceoverTr'.
+4. Follow Narrative Mode:
+   - If 'voiceover_only', omit 'Says:' and focus on 'voiceoverTr'.
+   - If 'dialogue_only', omit 'voiceoverTr' and focus on 'Says:' and 'dialogueTr'.
+   - If 'hybrid', provide both.
 5. BANNED LAZY WORDS: Never output "cinematic", "photorealistic", "8k", "masterpiece".
 6. Return ONLY a valid JSON object matching the single ScriptScenePlan schema (no markdown, no array wrapping).`;
 

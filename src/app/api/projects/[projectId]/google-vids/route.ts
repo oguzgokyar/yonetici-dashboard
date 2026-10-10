@@ -103,6 +103,8 @@ export async function POST(request: Request, context: Context) {
       durationSeconds: storyboard.totalDurationSeconds || 30,
       visualMood: storyboard.visualMood || "cinematic_photoreal",
       narrativeTr: storyboard.narrativeTr,
+      narrativeMode: storyboard.narrativeMode || "hybrid",
+      musicSpec: storyboard.musicSpec,
       scenes: storyboard.scenes,
     };
 

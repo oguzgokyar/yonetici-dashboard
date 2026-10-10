@@ -3,6 +3,7 @@ import {
   planCinematicStoryboard,
   type CinematicVisualMood,
   type TargetDurationRange,
+  type NarrativeMode,
   type StoryboardResponse,
 } from "@/lib/server/cinematic-prompt-director";
 
@@ -19,6 +20,8 @@ export async function POST(request: Request, context: Context) {
       visualMood?: CinematicVisualMood;
       targetDuration?: TargetDurationRange;
       aspectRatio?: "9:16" | "16:9" | "1:1";
+      narrativeMode?: NarrativeMode;
+      includeMusic?: boolean;
       revisionFeedback?: string;
       currentStoryboard?: StoryboardResponse;
     };
@@ -56,6 +59,8 @@ export async function POST(request: Request, context: Context) {
       visualMood: body.visualMood,
       targetDuration: body.targetDuration,
       aspectRatio: body.aspectRatio,
+      narrativeMode: body.narrativeMode,
+      includeMusic: body.includeMusic,
       brandName,
       revisionFeedback: body.revisionFeedback,
       currentStoryboard: body.currentStoryboard,
