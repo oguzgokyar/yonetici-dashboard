@@ -191,5 +191,5 @@ test("Google Vids UI, character anchor visual harmony, tabbed scene navigation a
   assert.ok(uiSource.includes("handleCopy"), "must have handleCopy function");
   assert.ok(uiSource.includes("char-dna"), "must have copy button on character DNA");
   assert.ok(uiSource.includes("music-prompt"), "must have copy button on music prompt");
-  assert.ok(uiSource.includes("Promptu Kopyala"), "must have copy button on omni prompt");
+  assert.ok(uiSource.includes("scene-${currentIdx}-prompt"), "must have copy button on omni prompt");
 });

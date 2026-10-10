@@ -942,20 +942,17 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                     style={{
                       background: copiedKey === "story-summary" ? "#ecfdf5" : "#f1f5f9",
                       border: copiedKey === "story-summary" ? "1px solid #6ee7b7" : "1px solid #cbd5e1",
-                      color: copiedKey === "story-summary" ? "#059669" : "#475569",
-                      padding: "2px 7px",
+                      color: copiedKey === "story-summary" ? "#059669" : "#64748b",
+                      padding: "4px 6px",
                       borderRadius: "6px",
-                      fontSize: "11px",
-                      fontWeight: 600,
                       cursor: "pointer",
                       display: "inline-flex",
                       alignItems: "center",
-                      gap: "4px",
+                      justifyContent: "center",
                     }}
                     title="Hikaye özetini panoya kopyala"
                   >
-                    {copiedKey === "story-summary" ? <Check size={11} /> : <Copy size={11} />}
-                    {copiedKey === "story-summary" ? "Kopyalandı!" : "Kopyala"}
+                    {copiedKey === "story-summary" ? <Check size={13} /> : <Copy size={13} />}
                   </button>
                 </div>
                 <span style={{ fontSize: "12px", color: "#64748b" }}>
@@ -1018,19 +1015,16 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                         background: copiedKey === "music-prompt" ? "#ecfdf5" : "#ffedd5",
                         border: copiedKey === "music-prompt" ? "1px solid #6ee7b7" : "1px solid #fdba74",
                         color: copiedKey === "music-prompt" ? "#059669" : "#9a3412",
-                        padding: "2px 7px",
+                        padding: "3px 6px",
                         borderRadius: "6px",
-                        fontSize: "11px",
-                        fontWeight: 600,
                         cursor: "pointer",
                         display: "inline-flex",
                         alignItems: "center",
-                        gap: "4px",
+                        justifyContent: "center",
                       }}
                       title="Müzik promptunu kopyala"
                     >
-                      {copiedKey === "music-prompt" ? <Check size={11} /> : <Copy size={11} />}
-                      {copiedKey === "music-prompt" ? "Kopyalandı!" : "Kopyala"}
+                      {copiedKey === "music-prompt" ? <Check size={12} /> : <Copy size={12} />}
                     </button>
                   </div>
                   <textarea
@@ -1095,19 +1089,16 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                           background: copiedKey === "char-dna" ? "#ecfdf5" : "#ffffff",
                           border: copiedKey === "char-dna" ? "1px solid #6ee7b7" : "1px solid #c7d2fe",
                           color: copiedKey === "char-dna" ? "#059669" : "#3730a3",
-                          padding: "2px 7px",
+                          padding: "3px 6px",
                           borderRadius: "6px",
-                          fontSize: "11px",
-                          fontWeight: 600,
                           cursor: "pointer",
                           display: "inline-flex",
                           alignItems: "center",
-                          gap: "4px",
+                          justifyContent: "center",
                         }}
                         title="Karakter DNA ve promptunu kopyala"
                       >
-                        {copiedKey === "char-dna" ? <Check size={11} /> : <Copy size={11} />}
-                        {copiedKey === "char-dna" ? "Kopyalandı!" : "Kopyala"}
+                        {copiedKey === "char-dna" ? <Check size={12} /> : <Copy size={12} />}
                       </button>
                       <span style={{ fontSize: "11px", fontWeight: 600, color: "#4f46e5", background: "#e0e7ff", padding: "2px 8px", borderRadius: "99px" }}>
                         {storyboard.characterAnchor.archetypeTr}
@@ -1312,20 +1303,17 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                           style={{
                             background: copiedKey === `scene-${currentIdx}-summary` ? "#ecfdf5" : "#f1f5f9",
                             border: copiedKey === `scene-${currentIdx}-summary` ? "1px solid #6ee7b7" : "1px solid #cbd5e1",
-                            color: copiedKey === `scene-${currentIdx}-summary` ? "#059669" : "#475569",
-                            padding: "2px 7px",
+                            color: copiedKey === `scene-${currentIdx}-summary` ? "#059669" : "#64748b",
+                            padding: "3px 6px",
                             borderRadius: "6px",
-                            fontSize: "11px",
-                            fontWeight: 600,
                             cursor: "pointer",
                             display: "inline-flex",
                             alignItems: "center",
-                            gap: "4px",
+                            justifyContent: "center",
                           }}
-                          title="Sahne özetini kopyala"
+                          title="Sahne özetini panoya kopyala"
                         >
-                          {copiedKey === `scene-${currentIdx}-summary` ? <Check size={11} /> : <Copy size={11} />}
-                          {copiedKey === `scene-${currentIdx}-summary` ? "Kopyalandı!" : "Kopyala"}
+                          {copiedKey === `scene-${currentIdx}-summary` ? <Check size={12} /> : <Copy size={12} />}
                         </button>
                       </div>
                       <textarea
@@ -1362,19 +1350,16 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                                 background: copiedKey === `scene-${currentIdx}-vo` ? "#ecfdf5" : "#e0f2fe",
                                 border: copiedKey === `scene-${currentIdx}-vo` ? "1px solid #6ee7b7" : "1px solid #bae6fd",
                                 color: copiedKey === `scene-${currentIdx}-vo` ? "#059669" : "#0369a1",
-                                padding: "2px 7px",
+                                padding: "3px 6px",
                                 borderRadius: "6px",
-                                fontSize: "11px",
-                                fontWeight: 600,
                                 cursor: "pointer",
                                 display: "inline-flex",
                                 alignItems: "center",
-                                gap: "4px",
+                                justifyContent: "center",
                               }}
-                              title="Dış ses metnini kopyala"
+                              title="Dış ses metnini panoya kopyala"
                             >
-                              {copiedKey === `scene-${currentIdx}-vo` ? <Check size={11} /> : <Copy size={11} />}
-                              {copiedKey === `scene-${currentIdx}-vo` ? "Kopyalandı!" : "Kopyala"}
+                              {copiedKey === `scene-${currentIdx}-vo` ? <Check size={12} /> : <Copy size={12} />}
                             </button>
                           </div>
                           <textarea
@@ -1411,19 +1396,16 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                                 background: copiedKey === `scene-${currentIdx}-dialogue` ? "#ecfdf5" : "#f3e8ff",
                                 border: copiedKey === `scene-${currentIdx}-dialogue` ? "1px solid #6ee7b7" : "1px solid #e9d5ff",
                                 color: copiedKey === `scene-${currentIdx}-dialogue` ? "#059669" : "#6d28d9",
-                                padding: "2px 7px",
+                                padding: "3px 6px",
                                 borderRadius: "6px",
-                                fontSize: "11px",
-                                fontWeight: 600,
                                 cursor: "pointer",
                                 display: "inline-flex",
                                 alignItems: "center",
-                                gap: "4px",
+                                justifyContent: "center",
                               }}
-                              title="Diyalog repliğini kopyala"
+                              title="Diyalog repliğini panoya kopyala"
                             >
-                              {copiedKey === `scene-${currentIdx}-dialogue` ? <Check size={11} /> : <Copy size={11} />}
-                              {copiedKey === `scene-${currentIdx}-dialogue` ? "Kopyalandı!" : "Kopyala"}
+                              {copiedKey === `scene-${currentIdx}-dialogue` ? <Check size={12} /> : <Copy size={12} />}
                             </button>
                           </div>
                           <textarea
@@ -1464,20 +1446,17 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                               background: copiedKey === `scene-${currentIdx}-prompt` ? "#ecfdf5" : "#612bd3",
                               border: copiedKey === `scene-${currentIdx}-prompt` ? "1px solid #6ee7b7" : "1px solid #612bd3",
                               color: copiedKey === `scene-${currentIdx}-prompt` ? "#059669" : "#ffffff",
-                              padding: "3px 9px",
+                              padding: "4px 8px",
                               borderRadius: "6px",
-                              fontSize: "11px",
-                              fontWeight: 600,
                               cursor: "pointer",
                               display: "inline-flex",
                               alignItems: "center",
-                              gap: "4px",
+                              justifyContent: "center",
                               boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
                             }}
                             title="İngilizce Omni promptunu panoya kopyala"
                           >
-                            {copiedKey === `scene-${currentIdx}-prompt` ? <Check size={11} /> : <Copy size={11} />}
-                            {copiedKey === `scene-${currentIdx}-prompt` ? "Kopyalandı!" : "Promptu Kopyala"}
+                            {copiedKey === `scene-${currentIdx}-prompt` ? <Check size={13} /> : <Copy size={13} />}
                           </button>
                         </div>
                       </div>
