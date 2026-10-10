@@ -132,6 +132,86 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
   const [loadingVideos, setLoadingVideos] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Aktif üretim görevi ve F5 kalıcılığı
+  const [activeJob, setActiveJob] = useState<{
+    id: string;
+    status: string;
+    prompt: string;
+    progress?: { percent?: number; detail?: string; phase?: string; googleVidsUrl?: string };
+    googleVidsUrl?: string;
+  } | null>(null);
+
+  // LocalStorage kalıcılığı
+  useEffect(() => {
+    try {
+      const savedState = localStorage.getItem(`google_vids_form_${projectId}`);
+      if (savedState) {
+        const parsed = JSON.parse(savedState);
+        if (parsed.topic && !topic) setTopic(parsed.topic);
+        if (parsed.visualMood) setVisualMood(parsed.visualMood);
+        if (parsed.targetDuration) setTargetDuration(parsed.targetDuration);
+        if (parsed.aspectRatio) setAspectRatio(parsed.aspectRatio);
+        if (parsed.storyboard && !storyboard) setStoryboard(parsed.storyboard);
+      }
+    } catch {}
+  }, [projectId]);
+
+  // Form ve senaryo değiştikçe kaydet
+  useEffect(() => {
+    try {
+      if (topic || storyboard) {
+        localStorage.setItem(
+          `google_vids_form_${projectId}`,
+          JSON.stringify({
+            topic,
+            visualMood,
+            targetDuration,
+            aspectRatio,
+            storyboard,
+          })
+        );
+      }
+    } catch {}
+  }, [projectId, topic, visualMood, targetDuration, aspectRatio, storyboard]);
+
+  // Aktif Google Vids işlerini sorgula (F5 sonrası kaybolmayı önler)
+  const pollActiveJobs = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/google-vids`, {
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.activeJob) {
+          setActiveJob(data.activeJob);
+          // Eğer ekranda storyboard boşsa ama aktif işte varsa geri yükle
+          if (data.activeJob.request?.scenes && !storyboard) {
+            setStoryboard({
+              title: data.activeJob.request.title || data.activeJob.prompt,
+              narrativeTr: data.activeJob.request.narrativeTr || "",
+              totalDurationSeconds: data.activeJob.request.durationSeconds || 30,
+              visualMood: data.activeJob.request.visualMood || "cinematic_photoreal",
+              aspectRatio: data.activeJob.request.aspectRatio || "9:16",
+              characterAnchor: data.activeJob.request.characterAnchor,
+              scenes: data.activeJob.request.scenes || [],
+            });
+            if (data.activeJob.request.topic) setTopic(data.activeJob.request.topic);
+          }
+        } else {
+          setActiveJob(null);
+        }
+      }
+    } catch {}
+  }, [projectId, storyboard]);
+
+  useEffect(() => {
+    void pollActiveJobs();
+    const interval = setInterval(() => {
+      void pollActiveJobs();
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [pollActiveJobs]);
+
   const loadVideos = useCallback(async () => {
     setLoadingVideos(true);
     try {
@@ -289,6 +369,52 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
             </small>
           </div>
         </div>
+
+        {/* Aktif Üretim Durum Kartı (F5 Dayanıklı & Canlı İlerleme) */}
+        {activeJob && (
+          <div
+            style={{
+              padding: "14px 16px",
+              borderRadius: "14px",
+              border: "1px solid #c7d2fe",
+              background: "#eef2ff",
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "12px", fontWeight: 700, color: "#3730a3", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <LoaderCircle size={14} className="spin" /> Video Üretimi Devam Ediyor
+              </span>
+              <span style={{ fontSize: "11px", fontWeight: 700, color: "#4338ca", background: "#e0e7ff", padding: "2px 8px", borderRadius: "99px" }}>
+                %{activeJob.progress?.percent || 25}
+              </span>
+            </div>
+            <div style={{ fontSize: "12px", color: "#312e81" }}>
+              {activeJob.progress?.detail || "Google Vids Omni sahneleri üretiyor..."}
+            </div>
+            {activeJob.googleVidsUrl ? (
+              <a
+                href={activeJob.googleVidsUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "5px",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  color: "#1d4ed8",
+                  textDecoration: "underline",
+                  marginTop: "4px",
+                }}
+              >
+                <ExternalLink size={13} /> Google Vids Projesine Git (Canlı İzle / Düzenle) →
+              </a>
+            ) : null}
+          </div>
+        )}
 
         {/* Konu / Hikaye Alanı */}
         <div className="control-section">

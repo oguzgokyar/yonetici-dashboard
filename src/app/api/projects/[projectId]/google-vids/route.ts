@@ -7,6 +7,69 @@ export const runtime = "nodejs";
 
 type Context = { params: Promise<{ projectId: string }> };
 
+export async function GET(request: Request, context: Context) {
+  try {
+    const { projectId } = await context.params;
+    const database = getDatabase();
+    
+    // En son veya aktif olan google-vids işlerini getir
+    const rows = database
+      .prepare(`
+        SELECT id, status, prompt, request_json, response_json, progress_json, error, created_at, completed_at
+        FROM generation_jobs
+        WHERE project_id = ? AND type = 'google-vids'
+        ORDER BY created_at DESC
+        LIMIT 10
+      `)
+      .all(projectId) as Array<{
+        id: string;
+        status: string;
+        prompt: string;
+        request_json: string;
+        response_json: string;
+        progress_json: string;
+        error: string | null;
+        created_at: string;
+        completed_at: string | null;
+      }>;
+
+    const jobs = rows.map((r) => {
+      let requestPayload: Record<string, unknown> = {};
+      let responsePayload: Record<string, unknown> = {};
+      let progressPayload: Record<string, unknown> = {};
+      try { requestPayload = JSON.parse(r.request_json || "{}"); } catch {}
+      try { responsePayload = JSON.parse(r.response_json || "{}"); } catch {}
+      try { progressPayload = JSON.parse(r.progress_json || "{}"); } catch {}
+
+      return {
+        id: r.id,
+        status: r.status,
+        prompt: r.prompt,
+        error: r.error,
+        createdAt: r.created_at,
+        completedAt: r.completed_at,
+        request: requestPayload,
+        response: responsePayload,
+        progress: progressPayload,
+        googleVidsUrl: responsePayload.googleVidsUrl || progressPayload.googleVidsUrl || undefined,
+      };
+    });
+
+    const activeJob = jobs.find((j) =>
+      ["queued", "dispatching", "running", "rendering", "exporting", "uploading"].includes(j.status)
+    );
+
+    return Response.json({
+      ok: true,
+      activeJob: activeJob || null,
+      jobs,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Google Vids durumları okunamadı.";
+    return Response.json({ ok: false, message }, { status: 500 });
+  }
+}
+
 export async function POST(request: Request, context: Context) {
   try {
     const { projectId } = await context.params;
