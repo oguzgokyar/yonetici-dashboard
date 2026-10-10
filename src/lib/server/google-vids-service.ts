@@ -20,6 +20,7 @@ export interface GoogleVidsJobRequest {
   narrativeMode?: string;
   musicSpec?: Record<string, unknown>;
   preferredAuthuser?: number;
+  preferredAccountId?: string;
   scenes: ScriptScenePlan[];
 }
 
@@ -42,8 +43,8 @@ export async function processGoogleVidsJob(job: {
   const musicPrompt = (req.musicSpec as { musicPromptEn?: string })?.musicPromptEn || "";
   const scenes = req.scenes || [];
 
-  // Acquire best available account from multi-account pool
-  const accountInfo = acquireAvailableVidsAccount(req.preferredAuthuser);
+  // Acquire best available account from multi-account pool (by account id or authuser)
+  const accountInfo = acquireAvailableVidsAccount(req.preferredAccountId || req.preferredAuthuser);
   const authuserIndex = accountInfo.authuser;
   const profileDir = accountInfo.profileDirectory || "Default";
 

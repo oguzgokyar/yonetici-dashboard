@@ -85,6 +85,7 @@ export async function POST(request: Request, context: Context) {
       topic?: string;
       captionStyle?: string;
       preferredAuthuser?: number;
+      preferredAccountId?: string;
     };
 
     const storyboard = body.storyboard;
@@ -114,6 +115,7 @@ export async function POST(request: Request, context: Context) {
       narrativeMode: storyboard.narrativeMode || "hybrid",
       musicSpec: storyboard.musicSpec,
       preferredAuthuser: typeof body.preferredAuthuser === "number" ? body.preferredAuthuser : undefined,
+      preferredAccountId: body.preferredAccountId || undefined,
       scenes: storyboard.scenes,
     };
 

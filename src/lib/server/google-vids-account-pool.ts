@@ -33,7 +33,7 @@ const KNOWN_SEED_ACCOUNTS = [
   {
     id: "gva_seed_2",
     email: "koraymasal632@gmail.com",
-    authuser_index: 0,
+    authuser_index: 2,
     profile_directory: "Profile 1",
     display_name: "Oğuz (koraymasal632)",
   },
@@ -91,7 +91,12 @@ export function listGoogleVidsAccounts(): GoogleVidsAccountRecord[] {
  * Prefers 'available' status with lowest render count.
  * If all accounts are exhausted, returns the one whose cooldown expires earliest.
  */
-export function acquireAvailableVidsAccount(preferredAuthuser?: number): {
+/**
+ * Acquires the best available account from the pool for video generation.
+ * Accepts either preferredAccountId or preferredAuthuser.
+ */
+export function acquireAvailableVidsAccount(preferredIdentifier?: string | number): {
+  id: string;
   authuser: number;
   profileDirectory: string;
   email: string;
@@ -103,14 +108,20 @@ export function acquireAvailableVidsAccount(preferredAuthuser?: number): {
   const accounts = listGoogleVidsAccounts();
 
   if (!accounts.length) {
-    return { authuser: 1, profileDirectory: "Default", email: "oguzgokyar@gmail.com", isFallback: false };
+    return { id: "default", authuser: 1, profileDirectory: "Default", email: "oguzgokyar@gmail.com", isFallback: false };
   }
 
-  // 1. If user explicitly asked for an authuser, check if it's available
-  if (typeof preferredAuthuser === "number") {
-    const requested = accounts.find((a) => a.authuser_index === preferredAuthuser);
-    if (requested && requested.quota_status === "available") {
+  // 1. If user explicitly asked for an account (by ID, email or authuser)
+  if (preferredIdentifier !== undefined && preferredIdentifier !== null) {
+    const requested = accounts.find(
+      (a) =>
+        a.id === String(preferredIdentifier) ||
+        a.email === String(preferredIdentifier) ||
+        a.authuser_index === Number(preferredIdentifier)
+    );
+    if (requested && requested.quota_status === "available" && requested.is_active !== 0) {
       return {
+        id: requested.id,
         authuser: requested.authuser_index,
         profileDirectory: requested.profile_directory || "Default",
         email: requested.email,
@@ -120,12 +131,13 @@ export function acquireAvailableVidsAccount(preferredAuthuser?: number): {
   }
 
   // 2. Select first available account in pool
-  const available = accounts.filter((a) => a.quota_status === "available");
+  const available = accounts.filter((a) => a.quota_status === "available" && a.is_active !== 0);
   if (available.length > 0) {
     // Sort by least renders today / total
     available.sort((a, b) => a.total_videos_rendered - b.total_videos_rendered);
     const chosen = available[0];
     return {
+      id: chosen.id,
       authuser: chosen.authuser_index,
       profileDirectory: chosen.profile_directory || "Default",
       email: chosen.email,
@@ -142,6 +154,7 @@ export function acquireAvailableVidsAccount(preferredAuthuser?: number): {
 
   const soonest = accounts[0];
   return {
+    id: soonest.id,
     authuser: soonest.authuser_index,
     profileDirectory: soonest.profile_directory || "Default",
     email: soonest.email,

@@ -170,6 +170,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
     id: string;
     email: string;
     authuser_index: number;
+    profile_directory?: string;
     display_name: string;
     quota_status: "available" | "exhausted" | "cooldown";
     total_videos_rendered: number;
@@ -177,7 +178,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
     is_active?: number;
   };
   const [accountsPool, setAccountsPool] = useState<PoolAccount[]>([]);
-  const [selectedAuthuser, setSelectedAuthuser] = useState<number | "auto">("auto");
+  const [selectedAccountId, setSelectedAccountId] = useState<string | "auto">("auto");
   const [showAccountsModal, setShowAccountsModal] = useState(false);
   const [syncingAccounts, setSyncingAccounts] = useState(false);
   const [newEmail, setNewEmail] = useState("");
@@ -540,7 +541,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         body: JSON.stringify({
           topic: topic.trim(),
           storyboard,
-          preferredAuthuser: selectedAuthuser === "auto" ? undefined : selectedAuthuser,
+          preferredAccountId: selectedAccountId === "auto" ? undefined : selectedAccountId,
         }),
       });
       const body = (await res.json()) as { ok: boolean; jobId?: string; message?: string };
@@ -803,15 +804,15 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
             </div>
             <div>
               <select
-                value={selectedAuthuser === "auto" ? "auto" : String(selectedAuthuser)}
-                onChange={(e) => setSelectedAuthuser(e.target.value === "auto" ? "auto" : Number(e.target.value))}
+                value={selectedAccountId}
+                onChange={(e) => setSelectedAccountId(e.target.value)}
               >
                 <option value="auto">
                   🔄 Otomatik Havuz Rotasyonu ({accountsPool.filter(a => a.quota_status === "available" && a.is_active !== 0).length}/{accountsPool.length || 2} Uygun)
                 </option>
                 {accountsPool.map((acc) => (
-                  <option key={acc.id} value={acc.authuser_index}>
-                    {acc.quota_status === "available" ? "🟢" : "🔴"} {acc.email} (authuser={acc.authuser_index}) {acc.quota_status !== "available" ? "[Kotada]" : ""}
+                  <option key={acc.id} value={acc.id}>
+                    {acc.quota_status === "available" ? "🟢" : "🔴"} {acc.email} [{acc.profile_directory || "Default"}] {acc.quota_status !== "available" ? "(Kotada)" : ""}
                   </option>
                 ))}
               </select>
@@ -1493,7 +1494,10 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                       </span>
                       <div>
                         <div style={{ fontSize: "13px", fontWeight: 600, color: "#0f172a" }}>
-                          {acc.email} <span style={{ fontSize: "11px", color: "#64748b" }}>(authuser={acc.authuser_index})</span>
+                          {acc.email}{" "}
+                          <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 400 }}>
+                            [Profil: {acc.profile_directory || "Default"}] (authuser={acc.authuser_index})
+                          </span>
                         </div>
                         <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
                           Durum:{" "}
