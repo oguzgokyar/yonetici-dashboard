@@ -30,6 +30,7 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => ({}))) as {
       email?: string;
       authuserIndex?: number;
+      profileDirectory?: string;
       displayName?: string;
     };
 
@@ -41,17 +42,19 @@ export async function POST(request: Request) {
     const db = getDatabase();
     const now = new Date().toISOString();
     const accountId = `gva_${crypto.randomUUID().slice(0, 8)}`;
+    const profDir = (body.profileDirectory || "Default").trim();
 
     db.prepare(`
       INSERT INTO google_vids_accounts (
-        id, email, authuser_index, display_name, quota_status, total_videos_rendered, is_active, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, 'available', 0, 1, ?, ?)
+        id, email, authuser_index, profile_directory, display_name, quota_status, total_videos_rendered, is_active, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'available', 0, 1, ?, ?)
       ON CONFLICT(email) DO UPDATE SET
         authuser_index = excluded.authuser_index,
+        profile_directory = excluded.profile_directory,
         display_name = excluded.display_name,
         is_active = 1,
         updated_at = excluded.updated_at
-    `).run(accountId, body.email.trim(), body.authuserIndex, (body.displayName || body.email).trim(), now, now);
+    `).run(accountId, body.email.trim(), body.authuserIndex, profDir, (body.displayName || body.email).trim(), now, now);
 
     return Response.json({ ok: true, message: "Hesap başarıyla havuza eklendi." });
   } catch (err: unknown) {
