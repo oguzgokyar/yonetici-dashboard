@@ -74,12 +74,57 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     }
   }
 
+  const videoPath = path.join(videoRendersDir, `${id}.mp4`);
+  if (!fs.existsSync(videoPath)) {
+    return new Response("Not found", { status: 404 });
+  }
+
   try {
-    const bytes = fs.readFileSync(path.join(videoRendersDir, `${id}.mp4`));
-    return new Response(bytes, {
+    const stat = fs.statSync(videoPath);
+    const fileSize = stat.size;
+    const rangeHeader = _request.headers.get("range");
+
+    if (rangeHeader) {
+      const parts = rangeHeader.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunksize = end - start + 1;
+
+      const fileStream = fs.createReadStream(videoPath, { start, end });
+      const stream = new ReadableStream({
+        start(controller) {
+          fileStream.on("data", (chunk) => controller.enqueue(chunk));
+          fileStream.on("end", () => controller.close());
+          fileStream.on("error", (err) => controller.error(err));
+        },
+      });
+
+      return new Response(stream, {
+        status: 206,
+        headers: {
+          "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+          "Accept-Ranges": "bytes",
+          "Content-Length": String(chunksize),
+          "Content-Type": "video/mp4",
+          "Content-Disposition": `inline; filename="motion-creative-${id}.mp4"`,
+        },
+      });
+    }
+
+    const fileStream = fs.createReadStream(videoPath);
+    const stream = new ReadableStream({
+      start(controller) {
+        fileStream.on("data", (chunk) => controller.enqueue(chunk));
+        fileStream.on("end", () => controller.close());
+        fileStream.on("error", (err) => controller.error(err));
+      },
+    });
+
+    return new Response(stream, {
       headers: {
         "Content-Type": "video/mp4",
-        "Content-Length": String(bytes.length),
+        "Content-Length": String(fileSize),
+        "Accept-Ranges": "bytes",
         "Cache-Control": "private, max-age=31536000, immutable",
         "Content-Disposition": `inline; filename="motion-creative-${id}.mp4"`,
       },

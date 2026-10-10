@@ -50,6 +50,7 @@ export async function GET(request: Request) {
     let motionStyle: string | undefined;
     let isStockRender = false;
     let isGoogleVids = row.type === "google-vids";
+    let googleVidsUrl: string | undefined;
     let metadata: Record<string, unknown> | undefined;
 
     try {
@@ -66,12 +67,23 @@ export async function GET(request: Request) {
     } catch { /* ignore */ }
 
     const responseState = JSON.parse(row.response_json || "{}");
+    if (isGoogleVids || responseState.isGoogleVids) {
+      googleVidsUrl = responseState.googleVidsUrl;
+      if (!googleVidsUrl) {
+        try {
+          const req = JSON.parse(row.request_json || "{}");
+          if (req.googleVidsUrl) googleVidsUrl = req.googleVidsUrl;
+        } catch {}
+      }
+    }
+
     return {
       id: row.id,
       url: responseState.url || `/api/videos/${row.id}`,
       title: responseState.title || (isGoogleVids ? "Google Vids Video" : isStockRender ? "Stok Üretim Video" : undefined),
       isStockRender,
       isGoogleVids: isGoogleVids || Boolean(responseState.isGoogleVids),
+      googleVidsUrl,
       sourceAssetId,
       durationSeconds: responseState.durationSeconds || durationSeconds,
       motionStyle,

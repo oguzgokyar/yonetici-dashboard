@@ -98,16 +98,21 @@ export async function processGoogleVidsJob(job: {
       });
 
       const rl = createInterface({ input: proc.stdout });
+      let capturedGoogleVidsUrl: string | undefined;
       rl.on("line", (line) => {
         const trimmed = line.trim();
         if (trimmed.startsWith("__PROGRESS__")) {
           try {
             const progressData = JSON.parse(trimmed.slice("__PROGRESS__".length));
+            if (progressData.googleVidsUrl) {
+              capturedGoogleVidsUrl = progressData.googleVidsUrl;
+            }
             db.prepare("UPDATE generation_jobs SET progress_json = ? WHERE id = ?").run(
               JSON.stringify({
                 phase: progressData.phase,
                 percent: progressData.percent,
                 detail: progressData.detail,
+                googleVidsUrl: progressData.googleVidsUrl,
                 updatedAt: new Date().toISOString(),
               }),
               job.id
@@ -135,6 +140,13 @@ export async function processGoogleVidsJob(job: {
 
   if (automationSucceeded) {
     const videoUrl = `/api/videos/${job.id}`;
+    let googleVidsUrl: string | undefined;
+    try {
+      const jobRow = db.prepare("SELECT progress_json FROM generation_jobs WHERE id=?").get(job.id) as { progress_json?: string } | undefined;
+      const p = JSON.parse(jobRow?.progress_json || "{}");
+      if (p.googleVidsUrl) googleVidsUrl = p.googleVidsUrl;
+    } catch {}
+
     const responsePayload = {
       id: job.id,
       url: videoUrl,
@@ -143,6 +155,7 @@ export async function processGoogleVidsJob(job: {
       durationSeconds: req.durationSeconds || 30,
       aspectRatio: aspectRatio,
       isGoogleVids: true,
+      googleVidsUrl,
       completedAt: new Date().toISOString(),
     };
 
@@ -169,9 +182,10 @@ EOF
 /opt/hermes/.venv/bin/python /opt/data/scripts/google_vids_automation.py --job-id "${job.id}" --title ${JSON.stringify(title)} --aspect-ratio "${aspectRatio}" --scenes-json "${scenesTempFile}" --output-mp4 "/tmp/vids_out_${job.id}.mp4"
 
 Once "/tmp/vids_out_${job.id}.mp4" is generated:
+Parse the stdout log of the python script for '__PROGRESS__' line containing 'googleVidsUrl' to get the URL if available.
 Upload the video file via multipart form-data to the callback endpoint:
-curl -s -X POST ${callbackToken ? `-H "Authorization: Bearer ${callbackToken}" ` : ""}-F "video=@/tmp/vids_out_${job.id}.mp4" "${callbackUrl}"
-rm -f "/tmp/vids_out_${job.id}.mp4" "${scenesTempFile}"
+curl -s -X POST ${callbackToken ? `-H "Authorization: Bearer ${callbackToken}" ` : ""}-F "video=@/tmp/vids_out_${job.id}.mp4" -F "googleVidsUrl=$(grep -o '"googleVidsUrl": *"[^"]*"' /tmp/vids_job_${job.id}.log 2>/dev/null | cut -d'"' -f4 || echo '')" "${callbackUrl}"
+rm -f "/tmp/vids_out_${job.id}.mp4" "${scenesTempFile}" "/tmp/vids_job_${job.id}.log"
 
 Return the completion output.`;
 

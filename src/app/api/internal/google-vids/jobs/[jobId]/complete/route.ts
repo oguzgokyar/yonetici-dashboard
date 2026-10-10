@@ -62,6 +62,7 @@ export async function POST(request: Request, context: Context) {
   } catch {}
 
   const videoUrl = `/api/videos/${jobId}`;
+  const googleVidsUrl = formData.get("googleVidsUrl") as string | null;
   const responsePayload = {
     id: jobId,
     url: videoUrl,
@@ -70,6 +71,7 @@ export async function POST(request: Request, context: Context) {
     durationSeconds: req.durationSeconds || 30,
     aspectRatio: req.aspectRatio || "9:16",
     isGoogleVids: true,
+    googleVidsUrl: googleVidsUrl || undefined,
     completedAt: new Date().toISOString(),
   };
 

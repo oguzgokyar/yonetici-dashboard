@@ -9,6 +9,7 @@ import {
   Clapperboard,
   Clock,
   Download,
+  ExternalLink,
   Film,
   Layers,
   LoaderCircle,
@@ -108,6 +109,7 @@ type RenderedVideo = {
   url: string;
   title?: string;
   isGoogleVids?: boolean;
+  googleVidsUrl?: string;
   durationSeconds?: number;
   motionStyle?: string;
   createdAt: string;
@@ -697,6 +699,24 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                     {video.title || "Google Vids"} • {video.durationSeconds || 30} sn
                   </span>
                   <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    {video.googleVidsUrl ? (
+                      <a
+                        href={video.googleVidsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          color: "#1d4ed8",
+                          fontWeight: 600,
+                          fontSize: "11px",
+                        }}
+                        title="Google Vids projesini aç"
+                      >
+                        <ExternalLink size={13} /> Proje
+                      </a>
+                    ) : null}
                     <a href={video.url} download={`google-vids-${video.id}.mp4`}>
                       <Download size={14} /> İndir
                     </a>
