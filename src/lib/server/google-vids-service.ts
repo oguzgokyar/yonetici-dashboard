@@ -261,6 +261,11 @@ Return the completion output.`;
             throw new Error(runStatus.error || "Hermes Vids üretimi başarısız oldu.");
           }
           if (runStatus.status === "completed") {
+            // Check if run completed with quota exhaustion message
+            const runOut = runStatus.output || "";
+            if (runOut.includes("sınırına ulaştınız") || runOut.includes("quota")) {
+              throw new Error("Google Vids günlük/saatlik video oluşturma sınırına ulaşıldı. Google hesabı kotasını sıfırlayana kadar lütfen bekleyin.");
+            }
             break;
           }
         }
@@ -268,7 +273,15 @@ Return the completion output.`;
     }
 
     if (!fs.existsSync(finalMp4Path) || fs.statSync(finalMp4Path).size < 1000) {
-      throw new Error("Google Vids MP4 dosyası zaman aşımına uğradı veya oluşturulamadı.");
+      // Check last known error or progress
+      let customErr = "Google Vids MP4 dosyası zaman aşımına uğradı veya oluşturulamadı.";
+      try {
+        const curRow = db.prepare("SELECT progress_json FROM generation_jobs WHERE id = ?").get(job.id) as { progress_json?: string } | undefined;
+        if (curRow?.progress_json && curRow.progress_json.includes("sınırına ulaştınız")) {
+          customErr = "Google Vids günlük/saatlik video oluşturma sınırına ulaşıldı. Lütfen kotanın sıfırlanmasını bekleyin.";
+        }
+      } catch {}
+      throw new Error(customErr);
     }
 
     const videoUrl = `/api/videos/${job.id}`;

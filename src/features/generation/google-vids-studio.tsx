@@ -159,6 +159,12 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
     googleVidsUrl?: string;
   } | null>(null);
 
+  const [lastErrorJob, setLastErrorJob] = useState<{
+    id: string;
+    error: string;
+    title: string;
+  } | null>(null);
+
   // LocalStorage kalıcılığı
   useEffect(() => {
     try {
@@ -206,6 +212,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         const data = await res.json();
         if (data.activeJob) {
           setActiveJob(data.activeJob);
+          setLastErrorJob(null);
           // Eğer ekranda storyboard boşsa ama aktif işte varsa geri yükle
           if (data.activeJob.request?.scenes && !storyboard) {
             setStoryboard({
@@ -221,6 +228,15 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
           }
         } else {
           setActiveJob(null);
+          // Son başarısız olan görevi kontrol et
+          const recentFailed = (data.jobs || []).find((j: { status: string; error?: string }) => j.status === "failed" && j.error);
+          if (recentFailed) {
+            setLastErrorJob({
+              id: recentFailed.id,
+              error: recentFailed.error,
+              title: recentFailed.prompt || "Google Vids",
+            });
+          }
         }
       }
     } catch {}
@@ -503,6 +519,37 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                 <ExternalLink size={13} /> Google Vids Projesine Git (Canlı İzle / Düzenle) →
               </a>
             ) : null}
+          </div>
+        )}
+
+        {/* Son Başarısız Görev / Kota Uyarısı */}
+        {!activeJob && lastErrorJob && (
+          <div
+            style={{
+              padding: "12px 14px",
+              borderRadius: "12px",
+              border: "1px solid #fecaca",
+              background: "#fef2f2",
+              display: "flex",
+              flexDirection: "column",
+              gap: "6px",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "12px", fontWeight: 700, color: "#991b1b", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                ⚠️ Son Üretim Bildirimi ({lastErrorJob.title})
+              </span>
+              <button
+                type="button"
+                onClick={() => setLastErrorJob(null)}
+                style={{ background: "none", border: "none", fontSize: "12px", color: "#b91c1c", cursor: "pointer", fontWeight: 600 }}
+              >
+                ✕
+              </button>
+            </div>
+            <div style={{ fontSize: "12px", color: "#7f1d1d", lineHeight: 1.45 }}>
+              {lastErrorJob.error}
+            </div>
           </div>
         )}
 
