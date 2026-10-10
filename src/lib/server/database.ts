@@ -93,9 +93,6 @@ function runMigrations(database: DatabaseSync) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
-    try {
-      database.exec("ALTER TABLE google_vids_accounts ADD COLUMN profile_directory TEXT NOT NULL DEFAULT 'Default'");
-    } catch {}
     CREATE TABLE IF NOT EXISTS content_posts (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -572,7 +569,13 @@ export function getDatabase() {
       database.exec("ALTER TABLE project_brand_strategies ADD COLUMN skills_used_json TEXT NOT NULL DEFAULT '[]';");
     } catch {}
     try {
-      database.exec("ALTER TABLE project_strategy_ideas ADD COLUMN skill_source TEXT NOT NULL DEFAULT '';");
+     database.exec("ALTER TABLE project_strategy_ideas ADD COLUMN skill_source TEXT NOT NULL DEFAULT '';");
+    } catch {}
+    try {
+     database.exec("ALTER TABLE google_vids_accounts ADD COLUMN profile_directory TEXT NOT NULL DEFAULT 'Default';");
+    } catch {}
+    try {
+     database.exec("ALTER TABLE projects ADD COLUMN target_url TEXT;");
     } catch {}
   } catch (err) {
     console.error("[Migration Strategy Tables Error]", err);
