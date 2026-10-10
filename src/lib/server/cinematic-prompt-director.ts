@@ -86,6 +86,7 @@ export interface CharacterAnchorSpec {
   archetypeTr: string; // Türkçe arketip tanımı
   masterVisualPromptEn: string; // Referans görsel üretiminde ve sahnelerde kilitlenecek İngilizce master prompt
   fixedTraitsEn: string; // Her sahnede tekrar eden sabit fiziksel özellikler (kıyafet, sakal, sarık, renkler)
+  referenceImageUrl?: string; // Üretilen veya yüklenen master referans portre görseli URL'si
 }
 
 export interface ScriptScenePlan {
@@ -96,9 +97,11 @@ export interface ScriptScenePlan {
   cameraSetup: string; // örn: "35mm anamorphic, slow push-in"
   lightingSetup: string; // örn: "Low-angle golden hour rim light"
   summaryTr: string; // Kullanıcının arayüzde Türkçe göreceği özet
-  promptEn: string; // Google Vids Omni'ye gönderilecek katı İngilizce prompt (Karakter kilit kurallarını içerir)
+  promptEn: string; // Google Vids Omni'ye gönderilecek katı İngilizce prompt (Veo/Vids resmi Audio/Says/SFX sentaksı)
   voiceoverTr?: string; // Google Vids yerleşik Voiceover paneline girilecek Türkçe dış ses anlatımı
   dialogueTr?: string; // Sahne içinde karakterlerin konuşmaları / replikleri (Türkçe)
+  audioCueEn?: string; // Veo/Vids Audio katmanı (örn: "Audio: rustling leaves, distant creek stream")
+  sfxCueEn?: string; // Veo/Vids SFX katmanı (örn: "SFX: (water splash at 2s)")
 }
 
 export interface StoryboardResponse {
@@ -131,29 +134,36 @@ export async function planCinematicStoryboard(input: {
   const targetDur = input.targetDuration || "30s";
   const ratio = input.aspectRatio || "9:16";
 
-  const systemPrompt = `You are a world-class AI Film Director and Dramaturge operating under the 'smixs/visual-skills' framework.
+  const systemPrompt = `You are a world-class AI Film Director, Screenwriter and Dramaturge operating strictly under the 'smixs/visual-skills' framework (references: dramaturgy.md, universal-rules.md, veo.md).
 Your specialty is directing Google Vids Omni / Veo cinematic video generators.
 
-CORE LAWS YOU MUST ENFORCE:
-1. "Dramaturgy first, syntax second":
-   - BANNED LAZY ADJECTIVES: Never output words like "cinematic", "photorealistic", "ultra realistic", "8k", "masterpiece", "stunning", "epic".
-   - Instead, translate emotion into physical body micro-actions, motivated camera movement, exact focal lengths, and environmental pressure.
-2. "The Three-Detail Rule per Shot":
-   - Environmental pressure (e.g. rain reflecting neon, cold blue light, golden dust motes in wind).
-   - Physical micro-action / body choreography (e.g. paws gripping soft soil, jaw locks, subtle breath).
-   - Spatial geometry and camera motivation (e.g. 50mm lens push-in, low-angle tracking).
-3. "Google Vids Omni Physical Realities":
-   - Base clip duration is 10 seconds. An initial clip can be extended with "+ Uzat (Extend)" into 20 seconds.
-   - For ~15s video: Deliver 1 or 2 scenes totaling 15-20s.
-   - For ~30s video: Deliver either 2 scenes (10s Scene 1 + 20s Extended Scene 2) or 3 scenes (10s + 10s + 10s) totaling 30s.
-   - For ~60s video: Deliver 3 to 4 scenes totaling 45-60s.
-   - For each scene, specify actionType: 'new_scene' (creates a fresh scene on timeline) or 'extend' (extends previous clip seamlessly).
-4. Language, Voiceover & Character Continuity Laws:
-   - 'summaryTr' and 'narrativeTr' must be in natural, evocative, literary Turkish.
-   - 'voiceoverTr' (MANDATORY per scene): The evocative, compelling Turkish narrative spoken by the narrator in that scene (plain text, no emojis).
-   - 'dialogueTr' (Optional per scene): If characters speak in that scene, provide their natural Turkish lines with character names.
-   - Character Anchor Law (e.g. Nasreddin Hodja): If the story features a recurring hero/figure or central subject, identify it in 'characterAnchor'. Define explicit fixed visual traits (exact clothing colors, turban/headwear, beard, age, face features) and enforce these exact traits inside EVERY scene's 'promptEn' so the protagonist never morphs or drifts across clips.
-   - 'promptEn' MUST be strictly in English, concise (40-90 words), dense with physical facts, optical lens terms, lighting and subject blocking, incorporating the fixed character traits.`;
+MANDATORY LAWS FROM THE VISUAL-SKILLS REPOSITORY:
+1. "Dramaturgy first, details intensify emotion, syntax serves story":
+   - BANNED LAZY ADJECTIVES: Never output words like "cinematic", "photorealistic", "ultra realistic", "8k", "masterpiece", "stunning", "epic", "amazing", "beautiful lighting", "dynamic camera".
+   - Replace abstract feelings ("he is sad/happy") with concrete physical facts: bodily micro-actions, tight jaw, posture shift, observable breath.
+2. "The Three-Detail Rule per Shot (dramaturgy.md §2 & universal-rules.md U12)":
+   - Environmental pressure: weather/space acting as character (cold fridge spill, rain on single pane, wet mud traction, low dust motes).
+   - Physical micro-action on body: jaw locks, knuckles whiten, fingers grip sash, eyes drop a quarter-inch.
+   - Perceptual sound anchor or visual motif: creek current, wind in willows, splashing foam.
+3. "The Three-Jobs Rule (dramaturgy.md §3)":
+   - Every shot MUST do at least one of three things: (1) change emotion, (2) advance action, or (3) increase pressure.
+4. "Veo / Google Vids Official Audio & Dialogue Syntax (veo.md §4 & §5)":
+   - In each scene's 'promptEn', construct the prompt with explicit Veo layers:
+     [Subject/Action + Environment + Camera Lens + Lighting + Style/Mood]
+     Audio: [environmental texture and ambient sounds]
+     Says: [Character] says [voice tone modifier]: "[dialogue text, max 8 seconds]"  (omit if scene has no speech)
+     SFX: [punctual sound event, e.g. (water splashing franticly), (cloth ripping)]
+   - In 'audioCueEn', extract the clean Audio line (e.g. "Audio: flowing mountain creek, wind through weeping willows").
+   - In 'sfxCueEn', extract the SFX line (e.g. "SFX: (frantic water splashing at 2s)").
+5. "Character Anchor Law (universal-rules.md U7 - Nasreddin Hodja Principle)":
+   - If the narrative features a central or recurring figure/character (e.g. Nasreddin Hodja, a distinctive boy, a hero), define it once in 'characterAnchor'.
+   - Detail 'fixedTraitsEn' (exact headwear/turban, kaftan/robe color and fabric, beard type, facial structure, footwear).
+   - In EVERY scene prompt ('promptEn'), begin the character reference with these EXACT fixed traits so the AI cannot drift the character's face, clothing, or appearance between clips.
+6. "Google Vids Omni Temporal & Clip Structure":
+   - Base clip duration is 10 seconds. An initial clip can be extended with 'extend' into 20 seconds.
+   - Total duration must respect target length (~15s: 1-2 scenes; ~30s: 2-3 scenes; ~60s: 3-4 scenes).
+   - 'voiceoverTr': Compelling, literary, evocative spoken Turkish narration written for Google Vids native Voiceover track.
+   - 'dialogueTr': Character's Turkish spoken line if applicable.`;
 
   const userPrompt = `TOPIC / USER PROMPT: "${input.topic}"
 BRAND: "${input.brandName || "General"}"
@@ -194,10 +204,14 @@ Return ONLY a valid JSON object matching this schema (no markdown fences, no con
       "summaryTr": "Sahne 1 Türkçe kısa özeti",
       "voiceoverTr": "Etkili, akıcı ve hikayeyi anlatan Türkçe dış ses metni",
       "dialogueTr": "Varsa karakterin Türkçe repliği veya boş string",
-      "promptEn": "English dense physical prompt including fixedTraitsEn without filler adjectives..."
+      "audioCueEn": "Audio: flowing mountain creek, wind through weeping willows",
+      "sfxCueEn": "SFX: (frantic water splashing at 2s)",
+      "promptEn": "English dense physical prompt including fixedTraitsEn, followed by Audio, Says and SFX blocks..."
     }
   ]
-}`;
+}
+
+CRITICAL: Return valid JSON ONLY. No markdown backticks, no markdown code block wrapping, no conversational prefix or suffix.`;
 
   const { content } = await completeText(systemPrompt, userPrompt, {
     temperature: 0.65,
@@ -241,4 +255,75 @@ Return ONLY a valid JSON object matching this schema (no markdown fences, no con
   }
 
   return parsed;
+}
+
+/**
+ * Re-rolls a single scene in an existing storyboard according to visual-skills dramaturgy rules.
+ */
+export async function rerollSingleScene(input: {
+  topic: string;
+  sceneIndex: number;
+  currentStoryboard: StoryboardResponse;
+  userInstruction?: string;
+  visualMood?: CinematicVisualMood;
+}): Promise<ScriptScenePlan> {
+  const sb = input.currentStoryboard;
+  const targetScene = sb.scenes.find((s) => s.sceneIndex === input.sceneIndex);
+  if (!targetScene) {
+    throw new Error(`Sahne ${input.sceneIndex} senaryoda bulunamadı.`);
+  }
+
+  const moodKey = input.visualMood || sb.visualMood || "cinematic_photoreal";
+  const mood = CINEMATIC_VISUAL_MOODS[moodKey] || CINEMATIC_VISUAL_MOODS.cinematic_photoreal;
+
+  const systemPrompt = `You are a world-class AI Film Director operating under the 'smixs/visual-skills' framework.
+Your task is to RE-ROLL / RE-DIRECT exactly ONE SCENE (Scene ${input.sceneIndex}) inside an existing multi-scene sequence.
+
+RULES:
+1. Preserve continuity: Retain the existing character anchor traits (${sb.characterAnchor?.fixedTraitsEn || "consistent subject"}), overall visual mood, and surrounding scene progression.
+2. The Three-Detail Rule: Ensure the scene has concrete environmental pressure, body micro-actions, and sound/motif anchors.
+3. Audio/Dialogue Syntax: Use Veo official format: [Physical visual action/camera/light] + Audio: ... + Says: ... + SFX: ...
+4. Turkish Voiceover: Provide natural, evocative Turkish 'voiceoverTr'.
+5. BANNED LAZY WORDS: Never output "cinematic", "photorealistic", "8k", "masterpiece".
+6. Return ONLY a valid JSON object matching the single ScriptScenePlan schema (no markdown, no array wrapping).`;
+
+  const userPrompt = `ORIGINAL STORY TOPIC: "${input.topic}"
+EXISTING NARRATIVE ARC: "${sb.narrativeTr}"
+CHARACTER ANCHOR: ${JSON.stringify(sb.characterAnchor || {})}
+CURRENT SCENE TO RE-ROLL: ${JSON.stringify(targetScene)}
+ALL SCENES IN STORYBOARD (FOR CONTEXT): ${JSON.stringify(sb.scenes)}
+USER SPECIFIC RE-ROLL INSTRUCTION: "${input.userInstruction || "Make this scene more dynamic and dramatic while preserving continuity."}"
+
+Return valid JSON matching this schema:
+{
+  "sceneIndex": ${targetScene.sceneIndex},
+  "shotType": "${targetScene.shotType}",
+  "durationSeconds": ${targetScene.durationSeconds},
+  "actionType": "${targetScene.actionType}",
+  "cameraSetup": "Updated camera lens & motivated movement",
+  "lightingSetup": "Updated physical lighting & contrast",
+  "summaryTr": "Yeni Türkçe sahne özeti",
+  "voiceoverTr": "Etkili Türkçe dış ses metni",
+  "dialogueTr": "Varsa karakterin Türkçe repliği veya boş string",
+  "audioCueEn": "Audio: sound description",
+  "sfxCueEn": "SFX: sound effect",
+  "promptEn": "Updated physical prompt with character traits and audio cues..."
+}`;
+
+  const { content } = await completeText(systemPrompt, userPrompt, {
+    temperature: 0.7,
+    maxTokens: 1200,
+  });
+
+  const parsed = parseJsonResponse<ScriptScenePlan>(content);
+  if (!parsed || !parsed.promptEn) {
+    throw new Error("Yenilenen sahne verisi geçerli bir formatta üretilemedi.");
+  }
+
+  return {
+    ...targetScene,
+    ...parsed,
+    sceneIndex: targetScene.sceneIndex,
+    durationSeconds: targetScene.durationSeconds,
+  };
 }

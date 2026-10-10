@@ -79,6 +79,7 @@ type CharacterAnchorSpec = {
   archetypeTr: string;
   masterVisualPromptEn: string;
   fixedTraitsEn: string;
+  referenceImageUrl?: string;
 };
 
 type ScriptScenePlan = {
@@ -92,6 +93,8 @@ type ScriptScenePlan = {
   promptEn: string;
   voiceoverTr?: string;
   dialogueTr?: string;
+  audioCueEn?: string;
+  sfxCueEn?: string;
 };
 
 type StoryboardResponse = {
@@ -131,6 +134,10 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
   const [videos, setVideos] = useState<RenderedVideo[]>([]);
   const [loadingVideos, setLoadingVideos] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Karakter görseli üretimi ve tekil sahne re-roll durumu
+  const [generatingAnchorImg, setGeneratingAnchorImg] = useState(false);
+  const [rerollingIndex, setRerollingIndex] = useState<number | null>(null);
 
   // Aktif üretim görevi ve F5 kalıcılığı
   const [activeJob, setActiveJob] = useState<{
@@ -289,12 +296,78 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
     }
   }
 
-  function updateScenePrompt(index: number, field: "promptEn" | "summaryTr" | "voiceoverTr" | "dialogueTr", value: string) {
+  function updateScenePrompt(index: number, field: "promptEn" | "summaryTr" | "voiceoverTr" | "dialogueTr" | "audioCueEn" | "sfxCueEn", value: string) {
     if (!storyboard) return;
     const nextScenes = storyboard.scenes.map((s, idx) =>
       idx === index ? { ...s, [field]: value } : s
     );
     setStoryboard({ ...storyboard, scenes: nextScenes });
+  }
+
+  // Master Karakter Portresi Üret (Visual Seed)
+  async function handleGenerateCharacterImage() {
+    if (!storyboard?.characterAnchor) return;
+    setGeneratingAnchorImg(true);
+    setMessage("Visual-skills motoruyla karakterin master referans portresi üretiliyor...");
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/google-vids/character-anchor`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          characterName: storyboard.characterAnchor.name,
+          masterVisualPromptEn: storyboard.characterAnchor.masterVisualPromptEn,
+          archetypeTr: storyboard.characterAnchor.archetypeTr,
+          fixedTraitsEn: storyboard.characterAnchor.fixedTraitsEn,
+          aspectRatio: "1:1",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.message || "Görsel üretilemedi.");
+      
+      setStoryboard({
+        ...storyboard,
+        characterAnchor: {
+          ...storyboard.characterAnchor,
+          referenceImageUrl: data.imageUrl,
+        },
+      });
+      setMessage("Karakter referans görseli başarıyla oluşturuldu ve kilitlendi!");
+    } catch (err: unknown) {
+      setMessage(err instanceof Error ? err.message : "Referans görseli üretilemedi.");
+    } finally {
+      setGeneratingAnchorImg(false);
+    }
+  }
+
+  // Sahne Başına Tekil Yenileme (Per-Scene Re-roll)
+  async function handleRerollScene(sceneIndex: number) {
+    if (!storyboard) return;
+    setRerollingIndex(sceneIndex);
+    setMessage(`Sahne ${sceneIndex} visual-skills dramaturji kurallarıyla yeniden kurgulanıyor...`);
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/google-vids/reroll-scene`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic,
+          sceneIndex,
+          currentStoryboard: storyboard,
+          visualMood,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.message || "Sahne yenilenemedi.");
+
+      const updatedScenes = storyboard.scenes.map((s) =>
+        s.sceneIndex === sceneIndex ? data.scene : s
+      );
+      setStoryboard({ ...storyboard, scenes: updatedScenes });
+      setMessage(`Sahne ${sceneIndex} başarıyla yenilendi!`);
+    } catch (err: unknown) {
+      setMessage(err instanceof Error ? err.message : "Sahne yenilenirken hata oluştu.");
+    } finally {
+      setRerollingIndex(null);
+    }
   }
 
   async function handleConfirmAndEnqueue() {
@@ -562,23 +635,62 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                   border: "1px solid #c7d2fe",
                   background: "#eef2ff",
                   display: "flex",
-                  flexDirection: "column",
-                  gap: "6px",
+                  gap: "14px",
+                  alignItems: "flex-start",
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
-                  <span style={{ fontSize: "13px", fontWeight: 700, color: "#3730a3", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                    👤 Sabit Karakter DNA&apos;sı (Karakter Tutarlılığı): {storyboard.characterAnchor.name}
-                  </span>
-                  <span style={{ fontSize: "11px", fontWeight: 600, color: "#4f46e5", background: "#e0e7ff", padding: "2px 8px", borderRadius: "99px" }}>
-                    {storyboard.characterAnchor.archetypeTr}
-                  </span>
-                </div>
-                <div style={{ fontSize: "12px", color: "#312e81", lineHeight: 1.45 }}>
-                  <strong>Kilitlenen Fiziksel Özellikler:</strong> {storyboard.characterAnchor.fixedTraitsEn}
-                </div>
-                <div style={{ fontSize: "11px", color: "#6366f1", fontStyle: "italic" }}>
-                  ✓ Bu fiziksel kimlik ve referans promptu tüm sahnelerin görsel promptuna otomatik dahil edilerek karakter sapması (drift) engellenir.
+                {/* Karakter Referans Görseli (Varsa) */}
+                {storyboard.characterAnchor.referenceImageUrl ? (
+                  <div style={{ flexShrink: 0, width: "72px", height: "72px", borderRadius: "10px", overflow: "hidden", border: "2px solid #6366f1", background: "#fff" }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={storyboard.characterAnchor.referenceImageUrl}
+                      alt={storyboard.characterAnchor.name}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  </div>
+                ) : null}
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", flex: 1 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+                    <span style={{ fontSize: "13px", fontWeight: 700, color: "#3730a3", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                      👤 Sabit Karakter DNA&apos;sı (Visual Anchor): {storyboard.characterAnchor.name}
+                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: "#4f46e5", background: "#e0e7ff", padding: "2px 8px", borderRadius: "99px" }}>
+                        {storyboard.characterAnchor.archetypeTr}
+                      </span>
+                      {!storyboard.characterAnchor.referenceImageUrl && (
+                        <button
+                          type="button"
+                          onClick={() => void handleGenerateCharacterImage()}
+                          disabled={generatingAnchorImg}
+                          style={{
+                            fontSize: "11px",
+                            fontWeight: 600,
+                            padding: "3px 8px",
+                            borderRadius: "6px",
+                            border: "1px solid #818cf8",
+                            background: "#ffffff",
+                            color: "#4338ca",
+                            cursor: "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                          }}
+                        >
+                          {generatingAnchorImg ? <LoaderCircle size={12} className="spin" /> : <Sparkles size={12} />}
+                          {generatingAnchorImg ? "Üretiliyor..." : "Referans Görseli Üret"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#312e81", lineHeight: 1.45 }}>
+                    <strong>Kilitlenen Fiziksel Özellikler:</strong> {storyboard.characterAnchor.fixedTraitsEn}
+                  </div>
+                  <div style={{ fontSize: "11px", color: "#6366f1", fontStyle: "italic" }}>
+                    ✓ visual-skills U7 kuralı: Bu fiziksel kimlik tüm sahnelerde başlangıç kuralı olarak kilitlenir.
+                  </div>
                 </div>
               </div>
             )}
@@ -627,13 +739,39 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                       </span>
                     </div>
 
-                    <div style={{ display: "flex", gap: "10px", fontSize: "11px", color: "#64748b" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "11px", color: "#64748b" }}>
                       <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
                         <Camera size={12} /> {scene.cameraSetup}
                       </span>
                       <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
                         <Sun size={12} /> {scene.lightingSetup}
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => void handleRerollScene(scene.sceneIndex)}
+                        disabled={rerollingIndex === scene.sceneIndex}
+                        style={{
+                          background: "#f1f5f9",
+                          border: "1px solid #cbd5e1",
+                          padding: "3px 8px",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          fontSize: "11px",
+                          fontWeight: 600,
+                          color: "#334155",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                        title="Bu sahneyi visual-skills kurallarıyla yeniden kurgula"
+                      >
+                        {rerollingIndex === scene.sceneIndex ? (
+                          <LoaderCircle size={12} className="spin" />
+                        ) : (
+                          <RefreshCw size={12} />
+                        )}
+                        {rerollingIndex === scene.sceneIndex ? "Yenileniyor..." : "Sahneyi Yenile"}
+                      </button>
                     </div>
                   </div>
 
