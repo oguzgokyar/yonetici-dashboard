@@ -77,6 +77,28 @@ export async function GET(request: Request) {
       }
     }
 
+    let storyboard: Record<string, unknown> | undefined;
+    let vidsTopic: string | undefined;
+    if (isGoogleVids) {
+      try {
+        const req = JSON.parse(row.request_json || "{}");
+        vidsTopic = req.topic || req.title;
+        if (req.scenes && Array.isArray(req.scenes)) {
+          storyboard = {
+            title: req.title || responseState.title || "Google Vids Video",
+            narrativeTr: req.narrativeTr || "",
+            narrativeMode: req.narrativeMode || "hybrid",
+            totalDurationSeconds: req.durationSeconds || responseState.durationSeconds || 30,
+            visualMood: req.visualMood || "cinematic_photoreal",
+            aspectRatio: req.aspectRatio || "9:16",
+            characterAnchor: req.characterAnchor,
+            musicSpec: req.musicSpec,
+            scenes: req.scenes,
+          };
+        }
+      } catch {}
+    }
+
     return {
       id: row.id,
       url: responseState.url || `/api/videos/${row.id}`,
@@ -88,7 +110,8 @@ export async function GET(request: Request) {
       durationSeconds: responseState.durationSeconds || durationSeconds,
       motionStyle,
       idea,
-      sourceTopic,
+      sourceTopic: isGoogleVids ? (vidsTopic || sourceTopic) : sourceTopic,
+      storyboard,
       metadata: responseState.metadata || metadata,
       createdAt: row.completed_at || row.created_at,
     };

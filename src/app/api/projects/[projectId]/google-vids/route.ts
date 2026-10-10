@@ -113,6 +113,7 @@ export async function POST(request: Request, context: Context) {
       visualMood: storyboard.visualMood || "cinematic_photoreal",
       narrativeTr: storyboard.narrativeTr,
       narrativeMode: storyboard.narrativeMode || "hybrid",
+      characterAnchor: storyboard.characterAnchor,
       musicSpec: storyboard.musicSpec,
       preferredAuthuser: typeof body.preferredAuthuser === "number" ? body.preferredAuthuser : undefined,
       preferredAccountId: body.preferredAccountId || undefined,

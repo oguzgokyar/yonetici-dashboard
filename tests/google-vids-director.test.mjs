@@ -27,8 +27,19 @@ test("Cinematic visual moods catalog and director storyboard planner work as exp
     title: "Altın Çayırda Tavşan ve Aslan",
     narrativeTr: "Gün batımında tavşan ve aslanın barışçıl karşılaşması.",
     totalDurationSeconds: 30,
-    visualMood: "golden_hour",
+    visualMood: "stylized_3d",
     aspectRatio: "9:16",
+    musicSpec: {
+      moodTr: "Neşeli animasyon orkestrası",
+      instrumentationTr: "Marimba, pizzicato yaylılar ve flüt",
+      musicPromptEn: "Whimsical upbeat 3D animation soundtrack with marimba, light woodwinds and playful pizzicato strings, no vocals",
+    },
+    characterAnchor: {
+      name: "Tavşan Pamuk",
+      archetypeTr: "Meraklı sevimli kahraman",
+      masterVisualPromptEn: "Stylized 3D animated character design model sheet of Rabbit Pamuk, Disney Pixar style, soft white fur, oversized expressive brown eyes, blue vest, vibrant volumetric lighting, clean 3D render",
+      fixedTraitsEn: "Stylized 3D white rabbit, oversized expressive eyes, small blue wool vest with brass button",
+    },
     scenes: [
       {
         sceneIndex: 1,
@@ -38,7 +49,7 @@ test("Cinematic visual moods catalog and director storyboard planner work as exp
         cameraSetup: "50mm prime, slow push-in",
         lightingSetup: "Warm golden hour rim light",
         summaryTr: "Çayırda ilk karşılaşma",
-        promptEn: "Medium shot on 50mm lens, a swift white rabbit pauses on soft grass as a resting lion lifts its head under warm sunset rim light.",
+        promptEn: "Stylized 3D animated scene. Rabbit Pamuk (stylized 3D white rabbit, oversized expressive eyes, blue vest) hops across soft meadow...",
       },
       {
         sceneIndex: 2,
@@ -48,7 +59,7 @@ test("Cinematic visual moods catalog and director storyboard planner work as exp
         cameraSetup: "50mm prime, tracking shot",
         lightingSetup: "Golden sunset sunbeams",
         summaryTr: "Yan yana yürüyüş",
-        promptEn: "Tracking shot on 50mm lens, the lion stands and walks calmly beside the hopping rabbit through amber grass.",
+        promptEn: "Stylized 3D animated scene. Rabbit Pamuk continues walking calmly beside the friendly lion...",
       },
     ],
   });
@@ -62,12 +73,14 @@ test("Cinematic visual moods catalog and director storyboard planner work as exp
 
   assert.ok(director.CINEMATIC_VISUAL_MOODS.golden_hour);
   assert.ok(director.CINEMATIC_VISUAL_MOODS.cinematic_photoreal);
+  assert.ok(director.CINEMATIC_VISUAL_MOODS.stylized_3d);
 
   const result = await director.planCinematicStoryboard({
     topic: "Tavşan ve aslanın dostluğu",
-    visualMood: "golden_hour",
+    visualMood: "stylized_3d",
     targetDuration: "30s",
     aspectRatio: "9:16",
+    includeMusic: true,
   });
 
   assert.equal(result.title, "Altın Çayırda Tavşan ve Aslan");
@@ -75,6 +88,12 @@ test("Cinematic visual moods catalog and director storyboard planner work as exp
   assert.equal(result.scenes.length, 2);
   assert.equal(result.scenes[0].actionType, "new_scene");
   assert.equal(result.scenes[1].actionType, "extend");
+  assert.ok(result.musicSpec);
+  assert.equal(result.musicSpec.moodTr, "Neşeli animasyon orkestrası");
+  assert.ok(result.musicSpec.musicPromptEn.includes("3D animation"));
+  assert.ok(result.characterAnchor);
+  assert.equal(result.characterAnchor.name, "Tavşan Pamuk");
+  assert.ok(result.characterAnchor.masterVisualPromptEn.includes("3D"));
 });
 
 test("FIFO production worker dispatches google-vids jobs sequentially under heavy-job claim", async () => {
@@ -137,4 +156,34 @@ test("FIFO production worker dispatches google-vids jobs sequentially under heav
     "process:vids-job-1",
     "unlock:google-vids:vids-job-1",
   ]);
+});
+
+test("Google Vids UI, character anchor visual harmony, tabbed scene navigation and edit button invariants", () => {
+  const uiSource = fs.readFileSync(new URL("../src/features/generation/google-vids-studio.tsx", import.meta.url), "utf8");
+  const charRouteSource = fs.readFileSync(new URL("../src/app/api/projects/[projectId]/google-vids/character-anchor/route.ts", import.meta.url), "utf8");
+  const videosRouteSource = fs.readFileSync(new URL("../src/app/api/videos/route.ts", import.meta.url), "utf8");
+  const googleVidsRouteSource = fs.readFileSync(new URL("../src/app/api/projects/[projectId]/google-vids/route.ts", import.meta.url), "utf8");
+
+  // 1. Karakter DNA'sı görsel tarz uyumu
+  assert.ok(charRouteSource.includes("visualMood?: CinematicVisualMood"), "character-anchor route must accept visualMood");
+  assert.ok(charRouteSource.includes("CINEMATIC_VISUAL_MOODS"), "character-anchor route must import CINEMATIC_VISUAL_MOODS");
+  assert.ok(charRouteSource.includes("stylized_3d"), "character-anchor route must handle stylized_3d specifically");
+  assert.ok(uiSource.includes("visualMood: targetMoodKey"), "google-vids-studio must pass visualMood when generating character anchor");
+
+  // 2. Sekmeli sahne gezintisi ve kutu sınırlamalarının olmaması
+  assert.ok(uiSource.includes("activeSceneTabIdx"), "google-vids-studio must have activeSceneTabIdx state");
+  assert.ok(uiSource.includes("setActiveSceneTabIdx(idx)"), "google-vids-studio must switch tabs on scene click");
+  assert.ok(uiSource.includes("minHeight: \"150px\""), "promptEn textarea must have generous minHeight without clamp");
+  assert.ok(uiSource.includes("← Önceki Sahne"), "must provide previous scene navigation button");
+  assert.ok(uiSource.includes("Sonraki Sahne →"), "must provide next scene navigation button");
+
+  // 3. Müzik aktif edildiğinde müzik üretim promptunun görünür olması
+  assert.ok(uiSource.includes("Müzik Üretim Promptu (Google Vids Audio - İngilizce)"), "must label visible music generation prompt");
+  assert.ok(uiSource.includes("updateMusicPrompt"), "must provide function to update music prompt");
+
+  // 4. Üretilen videolara Düzenle butonu eklenmesi ve senaryonun geri çağrılması
+  assert.ok(uiSource.includes("handleEditVideo(video)"), "must have handleEditVideo for restoring storyboard");
+  assert.ok(uiSource.includes("Düzenle"), "must have Düzenle button on video cards");
+  assert.ok(videosRouteSource.includes("storyboard = {"), "api/videos must include storyboard in response for google-vids");
+  assert.ok(googleVidsRouteSource.includes("characterAnchor: storyboard.characterAnchor"), "google-vids route must store characterAnchor in request_json");
 });

@@ -6,6 +6,10 @@ import { getDatabase } from "@/lib/server/database";
 import { decryptSecret } from "@/lib/server/secrets";
 import { renderCreative } from "@/lib/server/cliproxy-creative";
 import { runInFifoQueue } from "@/lib/server/production-worker";
+import {
+  CINEMATIC_VISUAL_MOODS,
+  type CinematicVisualMood,
+} from "@/lib/server/cinematic-prompt-director";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -27,6 +31,7 @@ export async function POST(request: Request, context: Context) {
       archetypeTr?: string;
       fixedTraitsEn?: string;
       aspectRatio?: "1:1" | "9:16";
+      visualMood?: CinematicVisualMood;
     };
 
     const promptEn = (body.masterVisualPromptEn || "").trim();
@@ -59,8 +64,28 @@ export async function POST(request: Request, context: Context) {
     const now = new Date().toISOString();
     const ratio = body.aspectRatio || "1:1";
 
-    // Enhance prompt strictly following visual-skills U7 (Character consistency anchor) and animatic-keyframes.md
-    const enhancedPrompt = `Visual-skills character reference portrait sheet of ${body.characterName || "Hero"}, ${body.archetypeTr || ""}. Eye-level 85mm portrait framing, neutral soft studio rim lighting, neutral studio background. PHYSICAL IDENTITY SPECS: ${body.fixedTraitsEn || promptEn}. Master reference portrait: clear bone structure, facial hair and eyes, distinct clothing textures and materials. Strict character anchor reference, no extra text, no watermarks, no split screen, no duplicate faces.`;
+    const moodKey: CinematicVisualMood = body.visualMood && CINEMATIC_VISUAL_MOODS[body.visualMood]
+      ? body.visualMood
+      : "cinematic_photoreal";
+    const mood = CINEMATIC_VISUAL_MOODS[moodKey];
+
+    let styleDescriptor = `35mm cinema framing, ${mood.lightingInstruction}, ${mood.lensInstruction}, ${mood.colorGrading}`;
+    if (moodKey === "stylized_3d") {
+      styleDescriptor = `Stylized 3D animated character design model sheet, Pixar and Unreal Engine 3D digital animation aesthetic, expressive stylized facial features, vibrant three-point volumetric rim lighting, lush saturated palette, clean 3D character render, zero realistic photo texture`;
+    } else if (moodKey === "retro_vintage_80s") {
+      styleDescriptor = `1980s retro vintage cinema character portrait sheet, vintage Panavision lens halation, authentic 80s film stock grain, nostalgic warm color grading`;
+    } else if (moodKey === "moody_chiaroscuro") {
+      styleDescriptor = `Dramatic chiaroscuro cinema portrait sheet, single hard directional side lighting, deep inky shadows, noir atmospheric depth`;
+    } else if (moodKey === "minimal_commercial") {
+      styleDescriptor = `High-end minimalist modern studio portrait sheet, edge-to-edge sharpness, clean neutral studio bounce, calibrated commercial look`;
+    } else if (moodKey === "documentary_nature") {
+      styleDescriptor = `National Geographic documentary portrait grade, authentic natural environmental lighting, crisp true-to-life textures`;
+    } else if (moodKey === "golden_hour") {
+      styleDescriptor = `Warm golden hour cinema portrait sheet, low-angle sunset backlighting, golden rim light, rich bronze shadows`;
+    }
+
+    // Enhance prompt strictly following visual-skills U7 (Character consistency anchor) and project visual mood
+    const enhancedPrompt = `Visual-skills character reference portrait sheet of ${body.characterName || "Hero"}, ${body.archetypeTr || ""}. ${styleDescriptor}. PHYSICAL IDENTITY SPECS: ${body.fixedTraitsEn || promptEn}. Master character reference: consistent facial structure, distinctive wardrobe, clothing textures, eyes and silhouette. Strict character anchor reference sheet, isolated subject, no extra text, no watermarks, no split screen, no duplicate faces.`;
 
     db.prepare(
       "INSERT INTO generation_jobs (id, project_id, type, provider, model, status, prompt, request_json, progress_json, created_at) VALUES (?, ?, 'image', 'cliproxy', ?, 'queued', ?, ?, ?, ?)"
@@ -68,8 +93,8 @@ export async function POST(request: Request, context: Context) {
       jobId,
       projectId,
       model,
-      `Karakter Referansı: ${body.characterName || "Hero"}`,
-      JSON.stringify({ characterName: body.characterName, ratio, isCharacterAnchor: true }),
+      `Karakter Referansı: ${body.characterName || "Hero"} (${mood.label})`,
+      JSON.stringify({ characterName: body.characterName, ratio, visualMood: moodKey, isCharacterAnchor: true }),
       JSON.stringify({ phase: "rendering", percent: 20, detail: "Karakter master görseli üretiliyor..." }),
       now
     );

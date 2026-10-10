@@ -184,9 +184,16 @@ MANDATORY LAWS FROM THE VISUAL-SKILLS REPOSITORY:
    - Provide evocative Turkish 'moodTr' and 'instrumentationTr'.
    - Provide an English instrumental music generation prompt 'musicPromptEn' tailored for Google Vids Audio (e.g. "Playful Anatolian folklore acoustic track, light rhythmic qanun and wooden flute, gentle comedic cadence, no vocals").
 
-7. "Character Anchor Law (universal-rules.md U7 - Nasreddin Hodja Principle)":
+7. "Character Anchor Law (universal-rules.md U7 - Nasreddin Hodja Principle & Visual Style Harmony)":
    - If the narrative features a central or recurring figure/character (e.g. Nasreddin Hodja, a distinctive boy, a hero), define it once in 'characterAnchor'.
-   - Detail 'fixedTraitsEn' (exact headwear/turban, kaftan/robe color and fabric, beard type, facial structure, footwear).
+   - STYLE HARMONY MANDATE: The characterAnchor's 'masterVisualPromptEn' and 'fixedTraitsEn' MUST strictly match the selected visual mood ("${mood.label}")!
+     * If 'stylized_3d': The character MUST be designed as a 3D animated character (Pixar / Unreal Engine 3D stylized character render, non-photorealistic stylized proportions), NEVER a live-action photo!
+     * If 'retro_vintage_80s': 1980s retro vintage film aesthetic with warm analog halation and vintage wardrobe.
+     * If 'moody_chiaroscuro': High-contrast chiaroscuro lighting, deep noir shadows and dramatic character framing.
+     * If 'documentary_nature': Raw authentic environmental lighting and authentic candid textures.
+     * If 'minimal_commercial': Ultra-clean modern commercial look, crisp studio lighting.
+     * If 'cinematic_photoreal' or 'golden_hour': Photorealistic cinematic human portrait with organic film grain and natural light.
+   - Detail 'fixedTraitsEn' (exact headwear/turban, clothing/robe color and fabric, beard type/hair, facial structure, footwear, accessories).
    - In EVERY scene prompt ('promptEn'), begin the character reference with these EXACT fixed traits so the AI cannot drift the character's face, clothing, or appearance between clips.
 
 8. "Google Vids Omni Temporal & Clip Structure":

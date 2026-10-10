@@ -124,6 +124,9 @@ type RenderedVideo = {
   googleVidsUrl?: string;
   durationSeconds?: number;
   motionStyle?: string;
+  storyboard?: StoryboardResponse;
+  sourceTopic?: string;
+  topic?: string;
   createdAt: string;
 };
 
@@ -140,6 +143,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
   const [enqueueing, setEnqueueing] = useState(false);
 
   const [storyboard, setStoryboard] = useState<StoryboardResponse | null>(null);
+  const [activeSceneTabIdx, setActiveSceneTabIdx] = useState(0);
   const [revisionNote, setRevisionNote] = useState("");
   const [message, setMessage] = useState("");
   const [videos, setVideos] = useState<RenderedVideo[]>([]);
@@ -439,6 +443,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
       }
 
       setStoryboard(body.storyboard);
+      setActiveSceneTabIdx(0);
       if (isRevision) setRevisionNote("");
       setMessage(
         `Senaryo hazır: ${body.storyboard.scenes.length} sahne, toplam ${body.storyboard.totalDurationSeconds} sn. İnceleyip onaylayabilirsiniz.`
@@ -459,11 +464,51 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
     setStoryboard({ ...storyboard, scenes: nextScenes });
   }
 
-  // Master Karakter Portresi Üret (Visual Seed)
+  function updateMusicPrompt(value: string) {
+    if (!storyboard?.musicSpec) return;
+    setStoryboard({
+      ...storyboard,
+      musicSpec: {
+        ...storyboard.musicSpec,
+        musicPromptEn: value,
+      },
+    });
+  }
+
+  function handleEditVideo(video: RenderedVideo) {
+    if (!video.storyboard) {
+      setMessage("Bu videonun senaryo detayları bulunamadı.");
+      return;
+    }
+    const sb = video.storyboard;
+    setStoryboard(sb);
+    if (video.topic || video.sourceTopic || sb.title) {
+      setTopic(video.topic || video.sourceTopic || sb.title || "");
+    }
+    if (sb.visualMood) setVisualMood(sb.visualMood);
+    if (sb.aspectRatio) setAspectRatio(sb.aspectRatio);
+    if (sb.narrativeMode) setNarrativeMode(sb.narrativeMode);
+    if (sb.totalDurationSeconds) {
+      if (sb.totalDurationSeconds <= 15) setTargetDuration("15s");
+      else if (sb.totalDurationSeconds >= 45) setTargetDuration("60s");
+      else setTargetDuration("30s");
+    }
+    setIncludeMusic(Boolean(sb.musicSpec));
+    setActiveSceneTabIdx(0);
+    setMessage(`"${video.title || "Video"}" senaryosu düzenleme paneline yüklendi. Sahneleri inceleyip düzenleyebilir ve yeniden üretime gönderebilirsiniz.`);
+
+    try {
+      window.scrollTo({ top: 120, behavior: "smooth" });
+    } catch {}
+  }
+
+  // Master Karakter Portresi Üret (Visual Seed) - Seçilen visualMood ile tam senkron
   async function handleGenerateCharacterImage() {
     if (!storyboard?.characterAnchor) return;
     setGeneratingAnchorImg(true);
-    setMessage("Visual-skills motoruyla karakterin master referans portresi üretiliyor...");
+    const targetMoodKey = storyboard.visualMood || visualMood;
+    const moodLabel = VISUAL_MOOD_OPTIONS.find((m) => m.key === targetMoodKey)?.label || "Seçilen Tarz";
+    setMessage(`Visual-skills motoruyla karakterin master referans portresi üretiliyor (${moodLabel})...`);
     try {
       const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/google-vids/character-anchor`, {
         method: "POST",
@@ -473,6 +518,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
           masterVisualPromptEn: storyboard.characterAnchor.masterVisualPromptEn,
           archetypeTr: storyboard.characterAnchor.archetypeTr,
           fixedTraitsEn: storyboard.characterAnchor.fixedTraitsEn,
+          visualMood: targetMoodKey,
           aspectRatio: "1:1",
         }),
       });
@@ -486,7 +532,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
           referenceImageUrl: data.imageUrl,
         },
       });
-      setMessage("Karakter referans görseli başarıyla oluşturuldu ve kilitlendi!");
+      setMessage("Karakter referans görseli seçilen görsel tarzla uyumlu olarak başarıyla oluşturuldu ve kilitlendi!");
     } catch (err: unknown) {
       setMessage(err instanceof Error ? err.message : "Referans görseli üretilemedi.");
     } finally {
@@ -887,49 +933,74 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
               </p>
             </div>
 
-            {/* Müzik ve Duygu Özeti */}
+            {/* Müzik ve Duygu Özeti - Prompt Tam Metin Görünümü */}
             {storyboard.musicSpec && (
               <div
                 style={{
-                  padding: "12px 14px",
-                  borderRadius: "12px",
+                  padding: "16px",
+                  borderRadius: "14px",
                   border: "1px solid #fed7aa",
                   background: "#fff7ed",
                   display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  flexWrap: "wrap",
-                  gap: "8px",
+                  flexDirection: "column",
+                  gap: "10px",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span style={{ fontSize: "14px" }}>🎵</span>
-                  <div>
-                    <strong style={{ fontSize: "12.5px", color: "#9a3412" }}>
-                      Arka Plan Müziği: {storyboard.musicSpec.moodTr}
-                    </strong>
-                    <div style={{ fontSize: "11px", color: "#c2410c" }}>
-                      {storyboard.musicSpec.instrumentationTr}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "18px" }}>🎵</span>
+                    <div>
+                      <strong style={{ fontSize: "13.5px", color: "#9a3412" }}>
+                        Arka Plan Müziği: {storyboard.musicSpec.moodTr}
+                      </strong>
+                      <div style={{ fontSize: "11.5px", color: "#c2410c", marginTop: "2px" }}>
+                        {storyboard.musicSpec.instrumentationTr}
+                      </div>
                     </div>
                   </div>
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      background: "#ffedd5",
+                      color: "#9a3412",
+                      padding: "3px 8px",
+                      borderRadius: "6px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    ✓ Google Vids Audio Promptu Aktif
+                  </span>
                 </div>
-                <span
-                  style={{
-                    fontSize: "11px",
-                    background: "#ffedd5",
-                    color: "#9a3412",
-                    padding: "3px 8px",
-                    borderRadius: "6px",
-                    fontWeight: 600,
-                  }}
-                  title={storyboard.musicSpec.musicPromptEn}
-                >
-                  ✓ Google Vids Müzik Promptu Hazır
-                </span>
+
+                <div>
+                  <label style={{ fontSize: "11px", fontWeight: 700, color: "#9a3412", display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px" }}>
+                    <Pencil size={11} /> Müzik Üretim Promptu (Google Vids Audio - İngilizce)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={storyboard.musicSpec.musicPromptEn}
+                    onChange={(e) => updateMusicPrompt(e.target.value)}
+                    placeholder="Müzik üretim promptu..."
+                    style={{
+                      width: "100%",
+                      padding: "8px 10px",
+                      fontSize: "12px",
+                      fontFamily: "monospace",
+                      borderRadius: "8px",
+                      border: "1px solid #fdba74",
+                      boxSizing: "border-box",
+                      lineHeight: 1.45,
+                      background: "#ffffff",
+                      color: "#7c2d12",
+                      resize: "vertical",
+                      minHeight: "60px",
+                    }}
+                  />
+                </div>
               </div>
             )}
 
-            {/* Sabit Karakter / Hero Anchor Özeti */}
+            {/* Sabit Karakter / Hero Anchor Özeti - Tarz Uyumu */}
             {storyboard.characterAnchor && (
               <div
                 style={{
@@ -957,220 +1028,356 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px", flex: 1 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
                     <span style={{ fontSize: "13px", fontWeight: 700, color: "#3730a3", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                      👤 Sabit Karakter DNA&apos;sı (Visual Anchor): {storyboard.characterAnchor.name}
+                      👤 Sabit Karakter DNA&apos;sı: {storyboard.characterAnchor.name}
                     </span>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <span style={{ fontSize: "11px", fontWeight: 600, color: "#4f46e5", background: "#e0e7ff", padding: "2px 8px", borderRadius: "99px" }}>
                         {storyboard.characterAnchor.archetypeTr}
                       </span>
-                      {!storyboard.characterAnchor.referenceImageUrl && (
-                        <button
-                          type="button"
-                          onClick={() => void handleGenerateCharacterImage()}
-                          disabled={generatingAnchorImg}
-                          style={{
-                            fontSize: "11px",
-                            fontWeight: 600,
-                            padding: "3px 8px",
-                            borderRadius: "6px",
-                            border: "1px solid #818cf8",
-                            background: "#ffffff",
-                            color: "#4338ca",
-                            cursor: "pointer",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "4px",
-                          }}
-                        >
-                          {generatingAnchorImg ? <LoaderCircle size={12} className="spin" /> : <Sparkles size={12} />}
-                          {generatingAnchorImg ? "Üretiliyor..." : "Referans Görseli Üret"}
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => void handleGenerateCharacterImage()}
+                        disabled={generatingAnchorImg}
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: 600,
+                          padding: "3px 8px",
+                          borderRadius: "6px",
+                          border: "1px solid #818cf8",
+                          background: "#ffffff",
+                          color: "#4338ca",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                        title="Seçilen proje görsel tarzına uygun referans portre üret"
+                      >
+                        {generatingAnchorImg ? <LoaderCircle size={12} className="spin" /> : <Sparkles size={12} />}
+                        {generatingAnchorImg ? "Üretiliyor..." : storyboard.characterAnchor.referenceImageUrl ? "Görseli Yenile (Tarza Uyarla)" : "Referans Görseli Üret"}
+                      </button>
                     </div>
                   </div>
                   <div style={{ fontSize: "12px", color: "#312e81", lineHeight: 1.45 }}>
                     <strong>Kilitlenen Fiziksel Özellikler:</strong> {storyboard.characterAnchor.fixedTraitsEn}
                   </div>
                   <div style={{ fontSize: "11px", color: "#6366f1", fontStyle: "italic" }}>
-                    ✓ visual-skills U7 kuralı: Bu fiziksel kimlik tüm sahnelerde başlangıç kuralı olarak kilitlenir.
+                    ✓ Tarz Uyumu: {VISUAL_MOOD_OPTIONS.find((m) => m.key === (storyboard.visualMood || visualMood))?.label} ile senkronize model üretilir.
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Sahne Kartları Listesi */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              {storyboard.scenes.map((scene, idx) => (
-                <div
-                  key={scene.sceneIndex}
-                  style={{
-                    padding: "16px",
-                    borderRadius: "14px",
-                    border: "1px solid var(--border, #e2e8f0)",
-                    background: "#ffffff",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "10px",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {/* Sahneler - Sekmeli Gezinti & Tam Okunabilir Prompt Alanları */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {/* Sekme Çubuğu */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  overflowX: "auto",
+                  paddingBottom: "6px",
+                  borderBottom: "1px solid #e2e8f0",
+                }}
+              >
+                {storyboard.scenes.map((s, idx) => {
+                  const isSelected = idx === activeSceneTabIdx;
+                  return (
+                    <button
+                      key={s.sceneIndex}
+                      type="button"
+                      onClick={() => setActiveSceneTabIdx(idx)}
+                      style={{
+                        padding: "8px 14px",
+                        borderRadius: "10px",
+                        border: isSelected ? "2px solid #612bd3" : "1px solid #cbd5e1",
+                        background: isSelected ? "rgba(97, 43, 211, 0.08)" : "#ffffff",
+                        color: isSelected ? "#612bd3" : "#475569",
+                        fontWeight: isSelected ? 700 : 500,
+                        fontSize: "12.5px",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        whiteSpace: "nowrap",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
                       <span
                         style={{
-                          background: "#612bd3",
-                          color: "#fff",
+                          width: "20px",
+                          height: "20px",
+                          borderRadius: "50%",
+                          background: isSelected ? "#612bd3" : "#e2e8f0",
+                          color: isSelected ? "#ffffff" : "#475569",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
                           fontSize: "11px",
                           fontWeight: 700,
-                          padding: "3px 9px",
-                          borderRadius: "99px",
                         }}
                       >
-                        Sahne {idx + 1}
+                        {idx + 1}
                       </span>
+                      <span>Sahne {idx + 1}</span>
                       <span
                         style={{
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          color: "#0f172a",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "4px",
+                          fontSize: "11px",
+                          padding: "1px 6px",
+                          borderRadius: "99px",
+                          background: isSelected ? "#612bd3" : "#f1f5f9",
+                          color: isSelected ? "#ffffff" : "#64748b",
                         }}
                       >
-                        <Clock size={13} /> {scene.durationSeconds} sn (
-                        {scene.actionType === "extend" ? "Kesintisiz Uzatma" : "Yeni Sahne"})
+                        {s.durationSeconds} sn • {s.actionType === "extend" ? "Uzatma" : "Yeni"}
                       </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Seçili Sahne İçeriği (Tam Metin Görünümü) */}
+              {(() => {
+                const currentIdx = Math.min(Math.max(activeSceneTabIdx, 0), storyboard.scenes.length - 1);
+                const scene = storyboard.scenes[currentIdx] || storyboard.scenes[0];
+                if (!scene) return null;
+
+                return (
+                  <div
+                    style={{
+                      padding: "18px",
+                      borderRadius: "14px",
+                      border: "1px solid var(--border, #e2e8f0)",
+                      background: "#ffffff",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "14px",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <span
+                          style={{
+                            background: "#612bd3",
+                            color: "#fff",
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            padding: "4px 10px",
+                            borderRadius: "99px",
+                          }}
+                        >
+                          Sahne {currentIdx + 1} / {storyboard.scenes.length}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "12.5px",
+                            fontWeight: 600,
+                            color: "#0f172a",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px",
+                          }}
+                        >
+                          <Clock size={14} /> {scene.durationSeconds} sn ({scene.actionType === "extend" ? "Kesintisiz Uzatma" : "Yeni Sahne"})
+                        </span>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: "10px", fontSize: "11px", color: "#64748b", marginRight: "6px" }}>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                            <Camera size={12} /> {scene.cameraSetup}
+                          </span>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                            <Sun size={12} /> {scene.lightingSetup}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void handleRerollScene(scene.sceneIndex)}
+                          disabled={rerollingIndex === scene.sceneIndex}
+                          style={{
+                            background: "#f1f5f9",
+                            border: "1px solid #cbd5e1",
+                            padding: "4px 10px",
+                            borderRadius: "8px",
+                            cursor: "pointer",
+                            fontSize: "11.5px",
+                            fontWeight: 600,
+                            color: "#334155",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px",
+                          }}
+                          title="Bu sahneyi visual-skills kurallarıyla yeniden kurgula"
+                        >
+                          {rerollingIndex === scene.sceneIndex ? (
+                            <LoaderCircle size={13} className="spin" />
+                          ) : (
+                            <RefreshCw size={13} />
+                          )}
+                          {rerollingIndex === scene.sceneIndex ? "Yenileniyor..." : "Sahneyi Yenile"}
+                        </button>
+                      </div>
                     </div>
 
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "11px", color: "#64748b" }}>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                        <Camera size={12} /> {scene.cameraSetup}
-                      </span>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                        <Sun size={12} /> {scene.lightingSetup}
-                      </span>
+                    {/* Türkçe Sahne Açıklaması */}
+                    <div>
+                      <label style={{ fontSize: "12px", fontWeight: 600, color: "#475569", display: "block", marginBottom: "4px" }}>
+                        Sahne Hikayesi (Türkçe Özet)
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={scene.summaryTr}
+                        onChange={(e) => updateScenePrompt(currentIdx, "summaryTr", e.target.value)}
+                        placeholder="Sahne özeti..."
+                        style={{
+                          width: "100%",
+                          padding: "8px 12px",
+                          fontSize: "13px",
+                          borderRadius: "8px",
+                          border: "1px solid #cbd5e1",
+                          boxSizing: "border-box",
+                          lineHeight: 1.45,
+                          resize: "vertical",
+                          minHeight: "56px",
+                        }}
+                      />
+                    </div>
+
+                    {/* Google Vids Türkçe Dış Ses (Voiceover) & Diyaloglar */}
+                    <div style={{ background: "#f8fafc", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: "10px" }}>
+                      {narrativeMode !== "dialogue_only" && (
+                        <div>
+                          <label style={{ fontSize: "11.5px", fontWeight: 700, color: "#0284c7", display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px" }}>
+                            🎙️ Google Vids Yerleşik Dış Ses (Voiceover)
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={scene.voiceoverTr || ""}
+                            onChange={(e) => updateScenePrompt(currentIdx, "voiceoverTr", e.target.value)}
+                            placeholder="Google Vids Voiceover paneline yazılacak etkili Türkçe dış ses metni..."
+                            style={{
+                              width: "100%",
+                              padding: "9px 12px",
+                              fontSize: "13px",
+                              borderRadius: "8px",
+                              border: "1px solid #cbd5e1",
+                              boxSizing: "border-box",
+                              lineHeight: 1.45,
+                              background: "#ffffff",
+                              resize: "vertical",
+                              minHeight: "70px",
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      {narrativeMode !== "voiceover_only" && (
+                        <div>
+                          <label style={{ fontSize: "11.5px", fontWeight: 700, color: "#7c3aed", display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px" }}>
+                            💬 Karakter Repliği / Diyalog (Veo Lip-Sync)
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={scene.dialogueTr || ""}
+                            onChange={(e) => updateScenePrompt(currentIdx, "dialogueTr", e.target.value)}
+                            placeholder="Örn: Hoca: 'Bizim memleketin kazları hep tek ayak üstünde durur!'"
+                            style={{
+                              width: "100%",
+                              padding: "8px 12px",
+                              fontSize: "12.5px",
+                              borderRadius: "8px",
+                              border: "1px solid #cbd5e1",
+                              boxSizing: "border-box",
+                              background: "#ffffff",
+                              resize: "vertical",
+                              minHeight: "50px",
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* İngilizce Google Vids Omni Promptu - TAM OKUNABİLİR, SINIRLAMASIZ */}
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                        <label style={{ fontSize: "12px", fontWeight: 700, color: "#334155", display: "flex", alignItems: "center", gap: "5px" }}>
+                          <Pencil size={12} /> Google Vids Omni Promptu (İngilizce - Düzenlenebilir)
+                        </label>
+                        <span style={{ fontSize: "11px", color: "#64748b" }}>
+                          {scene.promptEn.length} karakter • Tam metin görünümü
+                        </span>
+                      </div>
+                      <textarea
+                        rows={6}
+                        value={scene.promptEn}
+                        onChange={(e) => updateScenePrompt(currentIdx, "promptEn", e.target.value)}
+                        placeholder="Google Vids Omni İngilizce promptu..."
+                        style={{
+                          width: "100%",
+                          padding: "12px 14px",
+                          fontSize: "13px",
+                          fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                          borderRadius: "10px",
+                          border: "1px solid #cbd5e1",
+                          boxSizing: "border-box",
+                          lineHeight: 1.55,
+                          background: "#ffffff",
+                          resize: "vertical",
+                          minHeight: "150px",
+                          whiteSpace: "pre-wrap",
+                          overflowWrap: "break-word",
+                        }}
+                      />
+                    </div>
+
+                    {/* Sahneler Arası Gezinme Alt Çubuğu */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "6px", borderTop: "1px solid #f1f5f9" }}>
                       <button
                         type="button"
-                        onClick={() => void handleRerollScene(scene.sceneIndex)}
-                        disabled={rerollingIndex === scene.sceneIndex}
+                        disabled={currentIdx === 0}
+                        onClick={() => setActiveSceneTabIdx(currentIdx - 1)}
                         style={{
-                          background: "#f1f5f9",
+                          padding: "6px 14px",
+                          borderRadius: "8px",
                           border: "1px solid #cbd5e1",
-                          padding: "3px 8px",
-                          borderRadius: "6px",
-                          cursor: "pointer",
-                          fontSize: "11px",
+                          background: currentIdx === 0 ? "#f8fafc" : "#ffffff",
+                          color: currentIdx === 0 ? "#94a3b8" : "#334155",
+                          fontSize: "12px",
                           fontWeight: 600,
-                          color: "#334155",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "4px",
+                          cursor: currentIdx === 0 ? "not-allowed" : "pointer",
                         }}
-                        title="Bu sahneyi visual-skills kurallarıyla yeniden kurgula"
                       >
-                        {rerollingIndex === scene.sceneIndex ? (
-                          <LoaderCircle size={12} className="spin" />
-                        ) : (
-                          <RefreshCw size={12} />
-                        )}
-                        {rerollingIndex === scene.sceneIndex ? "Yenileniyor..." : "Sahneyi Yenile"}
+                        ← Önceki Sahne
+                      </button>
+
+                      <span style={{ fontSize: "11.5px", color: "#64748b" }}>
+                        {currentIdx + 1} / {storyboard.scenes.length}
+                      </span>
+
+                      <button
+                        type="button"
+                        disabled={currentIdx === storyboard.scenes.length - 1}
+                        onClick={() => setActiveSceneTabIdx(currentIdx + 1)}
+                        style={{
+                          padding: "6px 14px",
+                          borderRadius: "8px",
+                          border: "1px solid #cbd5e1",
+                          background: currentIdx === storyboard.scenes.length - 1 ? "#f8fafc" : "#ffffff",
+                          color: currentIdx === storyboard.scenes.length - 1 ? "#94a3b8" : "#334155",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          cursor: currentIdx === storyboard.scenes.length - 1 ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        Sonraki Sahne →
                       </button>
                     </div>
                   </div>
-
-                  {/* Türkçe Sahne Açıklaması */}
-                  <div>
-                    <label style={{ fontSize: "11px", fontWeight: 600, color: "#64748b", display: "block", marginBottom: "4px" }}>
-                      Sahne Hikayesi (Türkçe Özet)
-                    </label>
-                    <input
-                      type="text"
-                      value={scene.summaryTr}
-                      onChange={(e) => updateScenePrompt(idx, "summaryTr", e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: "8px 10px",
-                        fontSize: "13px",
-                        borderRadius: "8px",
-                        border: "1px solid #cbd5e1",
-                        boxSizing: "border-box",
-                      }}
-                    />
-                  </div>
-
-                  {/* Google Vids Türkçe Dış Ses (Voiceover) & Diyaloglar */}
-                  <div style={{ background: "#f8fafc", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
-                    {narrativeMode !== "dialogue_only" && (
-                      <div style={{ marginBottom: scene.dialogueTr ? "8px" : "0" }}>
-                        <label style={{ fontSize: "11px", fontWeight: 700, color: "#0284c7", display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px" }}>
-                          🎙️ Google Vids Yerleşik Dış Ses (Voiceover)
-                        </label>
-                        <textarea
-                          rows={2}
-                          value={scene.voiceoverTr || ""}
-                          onChange={(e) => updateScenePrompt(idx, "voiceoverTr", e.target.value)}
-                          placeholder="Google Vids Voiceover paneline yazılacak etkili Türkçe dış ses metni..."
-                          style={{
-                            width: "100%",
-                            padding: "8px 10px",
-                            fontSize: "12.5px",
-                            borderRadius: "6px",
-                            border: "1px solid #cbd5e1",
-                            boxSizing: "border-box",
-                            lineHeight: 1.45,
-                            background: "#ffffff",
-                          }}
-                        />
-                      </div>
-                    )}
-
-                    {narrativeMode !== "voiceover_only" && (
-                      <div>
-                        <label style={{ fontSize: "11px", fontWeight: 700, color: "#7c3aed", display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px" }}>
-                          💬 Karakter Repliği / Diyalog (Veo Lip-Sync)
-                        </label>
-                        <input
-                          type="text"
-                          value={scene.dialogueTr || ""}
-                          onChange={(e) => updateScenePrompt(idx, "dialogueTr", e.target.value)}
-                          placeholder="Örn: Hoca: 'Bizim memleketin kazları hep tek ayak üstünde durur!'"
-                          style={{
-                            width: "100%",
-                            padding: "7px 10px",
-                            fontSize: "12px",
-                            borderRadius: "6px",
-                            border: "1px solid #cbd5e1",
-                            boxSizing: "border-box",
-                            background: "#ffffff",
-                          }}
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* İngilizce Google Vids Omni Promptu */}
-                  <div>
-                    <label style={{ fontSize: "11px", fontWeight: 600, color: "#64748b", display: "flex", alignItems: "center", gap: "4px", marginBottom: "4px" }}>
-                      <Pencil size={11} /> Google Vids Omni Promptu (İngilizce - Düzenlenebilir)
-                    </label>
-                    <textarea
-                      rows={3}
-                      value={scene.promptEn}
-                      onChange={(e) => updateScenePrompt(idx, "promptEn", e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: "8px 10px",
-                        fontSize: "12.5px",
-                        fontFamily: "monospace",
-                        borderRadius: "8px",
-                        border: "1px solid #cbd5e1",
-                        boxSizing: "border-box",
-                        lineHeight: 1.45,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
+                );
+              })()}
             </div>
 
             {/* Revizyon İsteme Kutusu */}
@@ -1288,6 +1495,28 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                     {video.title || "Google Vids"} • {video.durationSeconds || 30} sn
                   </span>
                   <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    {video.storyboard ? (
+                      <button
+                        type="button"
+                        onClick={() => handleEditVideo(video)}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          color: "#4f46e5",
+                          background: "#eef2ff",
+                          border: "1px solid #c7d2fe",
+                          padding: "3px 8px",
+                          borderRadius: "6px",
+                          fontWeight: 600,
+                          fontSize: "11px",
+                          cursor: "pointer",
+                        }}
+                        title="Senaryoyu düzenleme paneline çağırıp yeni üretim başlat"
+                      >
+                        <Pencil size={12} /> Düzenle
+                      </button>
+                    ) : null}
                     {video.googleVidsUrl ? (
                       <a
                         href={video.googleVidsUrl}
