@@ -165,6 +165,19 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
     title: string;
   } | null>(null);
 
+  // Google Vids Çoklu Hesap Havuzu Durumu
+  type PoolAccount = {
+    id: string;
+    email: string;
+    authuser_index: number;
+    display_name: string;
+    quota_status: "available" | "exhausted" | "cooldown";
+    total_videos_rendered: number;
+    cooldown_until: string | null;
+  };
+  const [accountsPool, setAccountsPool] = useState<PoolAccount[]>([]);
+  const [selectedAuthuser, setSelectedAuthuser] = useState<number | "auto">("auto");
+
   // LocalStorage kalıcılığı
   useEffect(() => {
     try {
@@ -210,6 +223,9 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
       });
       if (res.ok) {
         const data = await res.json();
+        if (data.accounts && Array.isArray(data.accounts)) {
+          setAccountsPool(data.accounts as PoolAccount[]);
+        }
         if (data.activeJob) {
           setActiveJob(data.activeJob);
           setLastErrorJob(null);
@@ -419,6 +435,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         body: JSON.stringify({
           topic: topic.trim(),
           storyboard,
+          preferredAuthuser: selectedAuthuser === "auto" ? undefined : selectedAuthuser,
         }),
       });
       const body = (await res.json()) as { ok: boolean; jobId?: string; message?: string };
@@ -468,10 +485,15 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
           <span style={{ background: "#612bd3" }}>
             <Sparkles size={13} />
           </span>
-          <div>
-            <strong>Sinematik Yönetmen Aktif</strong>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <strong>Sinematik Yönetmen & Hesap Havuzu</strong>
+              <span style={{ fontSize: "11px", fontWeight: 700, color: accountsPool.some(a => a.quota_status === "available") ? "#15803d" : "#b91c1c", background: "#f8fafc", padding: "2px 8px", borderRadius: "99px", border: "1px solid #e2e8f0" }}>
+                👥 {accountsPool.filter(a => a.quota_status === "available").length}/{accountsPool.length || 2} Hesap Aktif
+              </span>
+            </div>
             <small>
-              Sahne sayısı ve kurgu ritmi seçtiğiniz süreye göre visual-skills dramaturji motoruyla belirlenir.
+              Sahne sayısı ve kurgu ritmi visual-skills motoruyla belirlenir. Hesap kotası dolduğunda otomatik failover çalışır.
             </small>
           </div>
         </div>
@@ -647,6 +669,26 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
               >
                 <option value="yes">🎵 Müzik Aktif (visual-skills Duygu Promptu ile)</option>
                 <option value="no">🔇 Müziksiz (Sadece Ses / Diyalog)</option>
+              </select>
+              <ChevronDown size={14} />
+            </div>
+          </label>
+
+          <label className="select-field">
+            <span>Google Hesap Havuzu (Multi-Account)</span>
+            <div>
+              <select
+                value={selectedAuthuser === "auto" ? "auto" : String(selectedAuthuser)}
+                onChange={(e) => setSelectedAuthuser(e.target.value === "auto" ? "auto" : Number(e.target.value))}
+              >
+                <option value="auto">
+                  🔄 Otomatik Havuz Rotasyonu ({accountsPool.filter(a => a.quota_status === "available").length}/{accountsPool.length || 2} Uygun)
+                </option>
+                {accountsPool.map((acc) => (
+                  <option key={acc.id} value={acc.authuser_index}>
+                    {acc.quota_status === "available" ? "🟢" : "🔴"} {acc.email} (authuser={acc.authuser_index}) {acc.quota_status !== "available" ? "[Kotada]" : ""}
+                  </option>
+                ))}
               </select>
               <ChevronDown size={14} />
             </div>

@@ -79,6 +79,19 @@ function runMigrations(database: DatabaseSync) {
       UNIQUE(project_id, platform, name)
     );
     CREATE INDEX IF NOT EXISTS idx_hashtag_sets_project_platform ON project_hashtag_sets(project_id, platform);
+    CREATE TABLE IF NOT EXISTS google_vids_accounts (
+      id TEXT PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      authuser_index INTEGER UNIQUE NOT NULL,
+      display_name TEXT NOT NULL DEFAULT '',
+      quota_status TEXT NOT NULL DEFAULT 'available',
+      quota_exhausted_at TEXT,
+      cooldown_until TEXT,
+      total_videos_rendered INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS content_posts (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,

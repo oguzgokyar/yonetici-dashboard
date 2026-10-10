@@ -4,6 +4,11 @@ import path from "node:path";
 import fs from "node:fs";
 import { getDatabase } from "@/lib/server/database";
 import { getCanvaConfig, createJobCallbackToken } from "@/lib/server/canva-config";
+import {
+  acquireAvailableVidsAccount,
+  markVidsAccountQuotaExhausted,
+  recordVidsAccountRenderSuccess,
+} from "./google-vids-account-pool";
 import type { ScriptScenePlan } from "./cinematic-prompt-director";
 
 export interface GoogleVidsJobRequest {
@@ -14,6 +19,7 @@ export interface GoogleVidsJobRequest {
   visualMood: string;
   narrativeMode?: string;
   musicSpec?: Record<string, unknown>;
+  preferredAuthuser?: number;
   scenes: ScriptScenePlan[];
 }
 
@@ -35,6 +41,10 @@ export async function processGoogleVidsJob(job: {
   const aspectRatio = req.aspectRatio || "9:16";
   const musicPrompt = (req.musicSpec as { musicPromptEn?: string })?.musicPromptEn || "";
   const scenes = req.scenes || [];
+
+  // Acquire best available account from multi-account pool
+  const accountInfo = acquireAvailableVidsAccount(req.preferredAuthuser);
+  const authuserIndex = accountInfo.authuser;
 
   if (!scenes.length) {
     db.prepare("UPDATE generation_jobs SET status='failed', error=?, completed_at=? WHERE id=?").run(
@@ -91,6 +101,7 @@ export async function processGoogleVidsJob(job: {
         "--title", title,
         "--aspect-ratio", aspectRatio,
         "--music-prompt", musicPrompt,
+        "--authuser", String(authuserIndex),
         "--scenes-json", scenesTempFile,
         "--output-mp4", finalMp4Path,
       ], {
@@ -143,6 +154,7 @@ export async function processGoogleVidsJob(job: {
   }
 
   if (automationSucceeded) {
+    recordVidsAccountRenderSuccess(authuserIndex);
     const videoUrl = `/api/videos/${job.id}`;
     let googleVidsUrl: string | undefined;
     try {
@@ -183,7 +195,7 @@ export async function processGoogleVidsJob(job: {
 cat << 'EOF' > "${scenesTempFile}"
 ${JSON.stringify(scenes, null, 2)}
 EOF
-/opt/hermes/.venv/bin/python /opt/data/scripts/google_vids_automation.py --job-id "${job.id}" --title ${JSON.stringify(title)} --aspect-ratio "${aspectRatio}" --music-prompt ${JSON.stringify(musicPrompt)} --scenes-json "${scenesTempFile}" --output-mp4 "/tmp/vids_out_${job.id}.mp4"
+/opt/hermes/.venv/bin/python /opt/data/scripts/google_vids_automation.py --job-id "${job.id}" --title ${JSON.stringify(title)} --aspect-ratio "${aspectRatio}" --music-prompt ${JSON.stringify(musicPrompt)} --authuser ${authuserIndex} --scenes-json "${scenesTempFile}" --output-mp4 "/tmp/vids_out_${job.id}.mp4"
 
 Once "/tmp/vids_out_${job.id}.mp4" is generated:
 Parse the stdout log of the python script for '__PROGRESS__' line containing 'googleVidsUrl' to get the URL if available.
@@ -264,8 +276,10 @@ Return the completion output.`;
             // Check if run completed with quota exhaustion message
             const runOut = runStatus.output || "";
             if (runOut.includes("sınırına ulaştınız") || runOut.includes("quota")) {
+              markVidsAccountQuotaExhausted(authuserIndex);
               throw new Error("Google Vids günlük/saatlik video oluşturma sınırına ulaşıldı. Google hesabı kotasını sıfırlayana kadar lütfen bekleyin.");
             }
+            recordVidsAccountRenderSuccess(authuserIndex);
             break;
           }
         }
@@ -278,6 +292,7 @@ Return the completion output.`;
       try {
         const curRow = db.prepare("SELECT progress_json FROM generation_jobs WHERE id = ?").get(job.id) as { progress_json?: string } | undefined;
         if (curRow?.progress_json && curRow.progress_json.includes("sınırına ulaştınız")) {
+          markVidsAccountQuotaExhausted(authuserIndex);
           customErr = "Google Vids günlük/saatlik video oluşturma sınırına ulaşıldı. Lütfen kotanın sıfırlanmasını bekleyin.";
         }
       } catch {}

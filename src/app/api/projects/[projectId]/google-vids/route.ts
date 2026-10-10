@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { getDatabase } from "@/lib/server/database";
 import { triggerProductionWorker } from "@/lib/server/production-worker";
+import { listGoogleVidsAccounts } from "@/lib/server/google-vids-account-pool";
 import type { StoryboardResponse } from "@/lib/server/cinematic-prompt-director";
 
 export const runtime = "nodejs";
@@ -59,9 +60,15 @@ export async function GET(request: Request, context: Context) {
       ["queued", "dispatching", "running", "rendering", "exporting", "uploading"].includes(j.status)
     );
 
+    let accounts: unknown[] = [];
+    try {
+      accounts = listGoogleVidsAccounts();
+    } catch {}
+
     return Response.json({
       ok: true,
       activeJob: activeJob || null,
+      accounts,
       jobs,
     });
   } catch (err: unknown) {
@@ -77,6 +84,7 @@ export async function POST(request: Request, context: Context) {
       storyboard?: StoryboardResponse;
       topic?: string;
       captionStyle?: string;
+      preferredAuthuser?: number;
     };
 
     const storyboard = body.storyboard;
@@ -105,6 +113,7 @@ export async function POST(request: Request, context: Context) {
       narrativeTr: storyboard.narrativeTr,
       narrativeMode: storyboard.narrativeMode || "hybrid",
       musicSpec: storyboard.musicSpec,
+      preferredAuthuser: typeof body.preferredAuthuser === "number" ? body.preferredAuthuser : undefined,
       scenes: storyboard.scenes,
     };
 
