@@ -69,13 +69,38 @@ print(json.dumps(val))
       );
     }
 
-    // 3. Extract accounts from Google's response
-    // Google returns something like: [["gaia.l.a",1,"Display Name","email@gmail.com",...], ...]
+    // 3. Extract accounts from Local State profiles & Google's response
     const text = parsedRes.text;
     const db = getDatabase();
     const now = new Date().toISOString();
 
     const emailMatches = Array.from(text.matchAll(/([a-zA-Z0-9._%+-]+@gmail\.com)/g)).map((m) => m[1]);
+    
+    // Also read Local State profiles if present
+    try {
+      const fs = await import("node:fs");
+      const localStatePath = "/opt/data/chrome_profile_canva/Local State";
+      if (fs.existsSync(localStatePath)) {
+        const lsData = JSON.parse(fs.readFileSync(localStatePath, "utf-8"));
+        const infoCache = lsData?.profile?.info_cache || {};
+        for (const [profDir, pData] of Object.entries(infoCache) as Array<[string, { user_name?: string; name?: string }]>) {
+          if (pData?.user_name && pData.user_name.includes("@gmail.com")) {
+            emailMatches.push(pData.user_name);
+            db.prepare(`
+              INSERT INTO google_vids_accounts (
+                id, email, authuser_index, profile_directory, display_name, quota_status, total_videos_rendered, is_active, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, 'available', 0, 1, ?, ?)
+              ON CONFLICT(email) DO UPDATE SET
+                profile_directory = excluded.profile_directory,
+                display_name = excluded.display_name,
+                is_active = 1,
+                updated_at = excluded.updated_at
+            `).run(`gva_${profDir.toLowerCase()}`, pData.user_name, profDir === "Default" ? 0 : 0, profDir, pData.name || pData.user_name, now, now);
+          }
+        }
+      }
+    } catch {}
+
     const uniqueEmails = Array.from(new Set(emailMatches));
 
     let syncedCount = 0;

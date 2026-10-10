@@ -45,6 +45,7 @@ export async function processGoogleVidsJob(job: {
   // Acquire best available account from multi-account pool
   const accountInfo = acquireAvailableVidsAccount(req.preferredAuthuser);
   const authuserIndex = accountInfo.authuser;
+  const profileDir = accountInfo.profileDirectory || "Default";
 
   if (!scenes.length) {
     db.prepare("UPDATE generation_jobs SET status='failed', error=?, completed_at=? WHERE id=?").run(
@@ -102,6 +103,7 @@ export async function processGoogleVidsJob(job: {
         "--aspect-ratio", aspectRatio,
         "--music-prompt", musicPrompt,
         "--authuser", String(authuserIndex),
+        "--profile-dir", profileDir,
         "--scenes-json", scenesTempFile,
         "--output-mp4", finalMp4Path,
       ], {
@@ -195,7 +197,7 @@ export async function processGoogleVidsJob(job: {
 cat << 'EOF' > "${scenesTempFile}"
 ${JSON.stringify(scenes, null, 2)}
 EOF
-/opt/hermes/.venv/bin/python /opt/data/scripts/google_vids_automation.py --job-id "${job.id}" --title ${JSON.stringify(title)} --aspect-ratio "${aspectRatio}" --music-prompt ${JSON.stringify(musicPrompt)} --authuser ${authuserIndex} --scenes-json "${scenesTempFile}" --output-mp4 "/tmp/vids_out_${job.id}.mp4"
+/opt/hermes/.venv/bin/python /opt/data/scripts/google_vids_automation.py --job-id "${job.id}" --title ${JSON.stringify(title)} --aspect-ratio "${aspectRatio}" --music-prompt ${JSON.stringify(musicPrompt)} --authuser ${authuserIndex} --profile-dir "${profileDir}" --scenes-json "${scenesTempFile}" --output-mp4 "/tmp/vids_out_${job.id}.mp4"
 
 Once "/tmp/vids_out_${job.id}.mp4" is generated:
 Parse the stdout log of the python script for '__PROGRESS__' line containing 'googleVidsUrl' to get the URL if available.

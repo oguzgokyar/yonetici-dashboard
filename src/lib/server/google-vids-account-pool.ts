@@ -4,6 +4,7 @@ export interface GoogleVidsAccountRecord {
   id: string;
   email: string;
   authuser_index: number;
+  profile_directory: string;
   display_name: string;
   quota_status: "available" | "exhausted" | "cooldown";
   quota_exhausted_at: string | null;
@@ -19,13 +20,22 @@ const KNOWN_SEED_ACCOUNTS = [
     id: "gva_seed_0",
     email: "ai.deneyleri@gmail.com",
     authuser_index: 0,
+    profile_directory: "Default",
     display_name: "Test Hesabı (ai.deneyleri)",
   },
   {
     id: "gva_seed_1",
     email: "oguzgokyar@gmail.com",
     authuser_index: 1,
+    profile_directory: "Default",
     display_name: "Oğuz Gökyar (oguzgokyar)",
+  },
+  {
+    id: "gva_seed_2",
+    email: "koraymasal632@gmail.com",
+    authuser_index: 0,
+    profile_directory: "Profile 1",
+    display_name: "Oğuz (koraymasal632)",
   },
 ];
 
@@ -40,13 +50,14 @@ export function ensureGoogleVidsAccountsSeed(): void {
   for (const seed of KNOWN_SEED_ACCOUNTS) {
     db.prepare(`
       INSERT INTO google_vids_accounts (
-        id, email, authuser_index, display_name, quota_status, total_videos_rendered, is_active, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, 'available', 0, 1, ?, ?)
+        id, email, authuser_index, profile_directory, display_name, quota_status, total_videos_rendered, is_active, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'available', 0, 1, ?, ?)
       ON CONFLICT(email) DO UPDATE SET
         authuser_index = excluded.authuser_index,
+        profile_directory = excluded.profile_directory,
         display_name = excluded.display_name,
         updated_at = excluded.updated_at
-    `).run(seed.id, seed.email, seed.authuser_index, seed.display_name, now, now);
+    `).run(seed.id, seed.email, seed.authuser_index, seed.profile_directory, seed.display_name, now, now);
   }
 
   // 2. Clear expired cooldowns (e.g. cooldown_until < now)
@@ -82,6 +93,7 @@ export function listGoogleVidsAccounts(): GoogleVidsAccountRecord[] {
  */
 export function acquireAvailableVidsAccount(preferredAuthuser?: number): {
   authuser: number;
+  profileDirectory: string;
   email: string;
   isFallback: boolean;
   quotaWarning?: string;
@@ -91,14 +103,19 @@ export function acquireAvailableVidsAccount(preferredAuthuser?: number): {
   const accounts = listGoogleVidsAccounts();
 
   if (!accounts.length) {
-    return { authuser: 1, email: "oguzgokyar@gmail.com", isFallback: false };
+    return { authuser: 1, profileDirectory: "Default", email: "oguzgokyar@gmail.com", isFallback: false };
   }
 
   // 1. If user explicitly asked for an authuser, check if it's available
   if (typeof preferredAuthuser === "number") {
     const requested = accounts.find((a) => a.authuser_index === preferredAuthuser);
     if (requested && requested.quota_status === "available") {
-      return { authuser: requested.authuser_index, email: requested.email, isFallback: false };
+      return {
+        authuser: requested.authuser_index,
+        profileDirectory: requested.profile_directory || "Default",
+        email: requested.email,
+        isFallback: false,
+      };
     }
   }
 
@@ -110,6 +127,7 @@ export function acquireAvailableVidsAccount(preferredAuthuser?: number): {
     const chosen = available[0];
     return {
       authuser: chosen.authuser_index,
+      profileDirectory: chosen.profile_directory || "Default",
       email: chosen.email,
       isFallback: false,
     };
@@ -125,6 +143,7 @@ export function acquireAvailableVidsAccount(preferredAuthuser?: number): {
   const soonest = accounts[0];
   return {
     authuser: soonest.authuser_index,
+    profileDirectory: soonest.profile_directory || "Default",
     email: soonest.email,
     isFallback: true,
     quotaWarning: "Tüm Google hesaplarının günlük oluşturma kotası dolmuş görünüyor.",

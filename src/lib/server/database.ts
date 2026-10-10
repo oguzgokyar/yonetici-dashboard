@@ -82,7 +82,8 @@ function runMigrations(database: DatabaseSync) {
     CREATE TABLE IF NOT EXISTS google_vids_accounts (
       id TEXT PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
-      authuser_index INTEGER UNIQUE NOT NULL,
+      authuser_index INTEGER NOT NULL DEFAULT 0,
+      profile_directory TEXT NOT NULL DEFAULT 'Default',
       display_name TEXT NOT NULL DEFAULT '',
       quota_status TEXT NOT NULL DEFAULT 'available',
       quota_exhausted_at TEXT,
@@ -92,6 +93,9 @@ function runMigrations(database: DatabaseSync) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    try {
+      database.exec("ALTER TABLE google_vids_accounts ADD COLUMN profile_directory TEXT NOT NULL DEFAULT 'Default'");
+    } catch {}
     CREATE TABLE IF NOT EXISTS content_posts (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
