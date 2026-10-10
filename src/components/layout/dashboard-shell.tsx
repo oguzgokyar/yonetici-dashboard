@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useProjects } from "@/features/projects/projects-context";
 import { ProductionQueueDrawer } from "./production-queue-drawer";
+import { QuickIdeasDrawer } from "./quick-ideas-drawer";
 
 type DashboardShellProps = {
   children: React.ReactNode;
@@ -39,6 +40,8 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [queueDrawerOpen, setQueueDrawerOpen] = useState(false);
   const [activeQueueCount, setActiveQueueCount] = useState(0);
+  const [ideasDrawerOpen, setIdeasDrawerOpen] = useState(false);
+  const [totalIdeasCount, setTotalIdeasCount] = useState(0);
 
   useEffect(() => {
     function handleQueueUpdate(e: Event) {
@@ -47,8 +50,18 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
         setQueueDrawerOpen(true);
       }
     }
+    function handleIdeasUpdate(e: Event) {
+      const customEvent = e as CustomEvent<{ openDrawer?: boolean }>;
+      if (customEvent.detail?.openDrawer) {
+        setIdeasDrawerOpen(true);
+      }
+    }
     window.addEventListener("production-queue-updated", handleQueueUpdate);
-    return () => window.removeEventListener("production-queue-updated", handleQueueUpdate);
+    window.addEventListener("quick-ideas-updated", handleIdeasUpdate);
+    return () => {
+      window.removeEventListener("production-queue-updated", handleQueueUpdate);
+      window.removeEventListener("quick-ideas-updated", handleIdeasUpdate);
+    };
   }, []);
 
   const activeProject = projectId ? projects.find((project) => project.id === projectId) : undefined;
@@ -145,6 +158,25 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
             )}
             <button className="search-button"><Search size={18} /><span>İçerik ara...</span><kbd>⌘ K</kbd></button>
 
+            {/* Hızlı İçerik Önerileri Butonu */}
+            {projectId && (
+              <button
+                type="button"
+                className={`icon-button queue-button ${totalIdeasCount > 0 ? "has-active-jobs" : ""}`}
+                style={totalIdeasCount > 0 ? { borderColor: "#f0abfc", background: "#fdf4ff", color: "#c026d3" } : {}}
+                onClick={() => setIdeasDrawerOpen(true)}
+                title={totalIdeasCount > 0 ? `Hızlı İçerik Önerileri (${totalIdeasCount} öneri)` : "Hızlı İçerik Önerileri"}
+                aria-label="Hızlı içerik önerilerini aç"
+              >
+                <Compass size={19} />
+                {totalIdeasCount > 0 ? (
+                  <span className="queue-indicator active" style={{ background: "#c026d3" }}>{totalIdeasCount}</span>
+                ) : (
+                  <span className="queue-indicator" />
+                )}
+              </button>
+            )}
+
             {/* Üretim Listesi & Kuyruk Butonu */}
             {projectId && (
               <button
@@ -175,6 +207,14 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
         isOpen={queueDrawerOpen}
         onClose={() => setQueueDrawerOpen(false)}
         onActiveCountChange={(count) => setActiveQueueCount(count)}
+      />
+
+      {/* Slide-over Quick Ideas Drawer */}
+      <QuickIdeasDrawer
+        projectId={projectId}
+        isOpen={ideasDrawerOpen}
+        onClose={() => setIdeasDrawerOpen(false)}
+        onTotalCountChange={(count) => setTotalIdeasCount(count)}
       />
     </div>
   );

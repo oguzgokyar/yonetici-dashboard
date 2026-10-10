@@ -192,4 +192,15 @@ test("Google Vids UI, character anchor visual harmony, tabbed scene navigation a
   assert.ok(uiSource.includes("char-dna"), "must have copy button on character DNA");
   assert.ok(uiSource.includes("music-prompt"), "must have copy button on music prompt");
   assert.ok(uiSource.includes("scene-${currentIdx}-prompt"), "must have copy button on omni prompt");
+
+  // 6. Hızlı İçerik Önerileri (QuickIdeasDrawer) yan panel entegrasyonu
+  const quickDrawerSource = fs.readFileSync(new URL("../src/components/layout/quick-ideas-drawer.tsx", import.meta.url), "utf8");
+  const shellSource = fs.readFileSync(new URL("../src/components/layout/dashboard-shell.tsx", import.meta.url), "utf8");
+  assert.ok(quickDrawerSource.includes("Hızlı İçerik Önerileri"), "QuickIdeasDrawer must render title");
+  assert.ok(quickDrawerSource.includes("vertical_video"), "QuickIdeasDrawer must have vertical_video icon tab");
+  assert.ok(quickDrawerSource.includes("carousel"), "QuickIdeasDrawer must have carousel icon tab");
+  assert.ok(quickDrawerSource.includes("single_post"), "QuickIdeasDrawer must have single_post icon tab");
+  assert.ok(quickDrawerSource.includes("engagement"), "QuickIdeasDrawer must have engagement icon tab");
+  assert.ok(quickDrawerSource.includes("kanban-card"), "QuickIdeasDrawer must render strategy idea cards");
+  assert.ok(shellSource.includes("QuickIdeasDrawer"), "DashboardShell must integrate QuickIdeasDrawer");
 });

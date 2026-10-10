@@ -206,6 +206,17 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         if (parsed.storyboard && !storyboard) setStoryboard(parsed.storyboard);
       }
     } catch {}
+
+    function handlePrefill(e: Event) {
+      const customEvent = e as CustomEvent<{ topic?: string }>;
+      if (customEvent.detail?.topic) {
+        setTopic(customEvent.detail.topic);
+        setMessage("Seçilen içerik fikri video konusu olarak yüklendi.");
+        try { window.scrollTo({ top: 100, behavior: "smooth" }); } catch {}
+      }
+    }
+    window.addEventListener("google-vids-prefill", handlePrefill);
+    return () => window.removeEventListener("google-vids-prefill", handlePrefill);
   }, [projectId]);
 
   // Hesap Havuzu İşlemleri
