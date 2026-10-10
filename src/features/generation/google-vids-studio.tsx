@@ -174,9 +174,15 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
     quota_status: "available" | "exhausted" | "cooldown";
     total_videos_rendered: number;
     cooldown_until: string | null;
+    is_active?: number;
   };
   const [accountsPool, setAccountsPool] = useState<PoolAccount[]>([]);
   const [selectedAuthuser, setSelectedAuthuser] = useState<number | "auto">("auto");
+  const [showAccountsModal, setShowAccountsModal] = useState(false);
+  const [syncingAccounts, setSyncingAccounts] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [newAuthuser, setNewAuthuser] = useState<number>(0);
+  const [accountActionMsg, setAccountActionMsg] = useState("");
 
   // LocalStorage kalıcılığı
   useEffect(() => {
@@ -194,6 +200,105 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
       }
     } catch {}
   }, [projectId]);
+
+  // Hesap Havuzu İşlemleri
+  async function refreshAccounts() {
+    try {
+      const res = await fetch("/api/system/google-vids/accounts", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.accounts) setAccountsPool(data.accounts as PoolAccount[]);
+      }
+    } catch {}
+  }
+
+  async function handleSyncBrowserAccounts() {
+    setSyncingAccounts(true);
+    setAccountActionMsg("Tarayıcıdaki oturumlar taranıyor...");
+    try {
+      const res = await fetch("/api/system/google-vids/accounts/sync", { method: "POST" });
+      const data = await res.json();
+      if (data.ok) {
+        setAccountActionMsg(`✓ ${data.message || "Hesaplar başarıyla eşitlendi."}`);
+        await refreshAccounts();
+      } else {
+        setAccountActionMsg(`❌ ${data.message || "Eşitleme başarısız."}`);
+      }
+    } catch (e) {
+      setAccountActionMsg(`❌ Hata: ${String(e)}`);
+    } finally {
+      setSyncingAccounts(false);
+    }
+  }
+
+  async function handleAddManualAccount(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newEmail.trim()) return;
+    try {
+      const res = await fetch("/api/system/google-vids/accounts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: newEmail.trim(), authuserIndex: newAuthuser }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setNewEmail("");
+        setAccountActionMsg("✓ Yeni hesap havuza eklendi.");
+        await refreshAccounts();
+      } else {
+        setAccountActionMsg(`❌ ${data.message}`);
+      }
+    } catch (e) {
+      setAccountActionMsg(`❌ Hata: ${String(e)}`);
+    }
+  }
+
+  async function handleDeleteAccount(id: string) {
+    if (!confirm("Bu hesabı havuzdan silmek istediğinize emin misiniz?")) return;
+    try {
+      const res = await fetch(`/api/system/google-vids/accounts?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setAccountActionMsg("✓ Hesap havuzdan silindi.");
+        await refreshAccounts();
+      } else {
+        setAccountActionMsg(`❌ ${data.message}`);
+      }
+    } catch (e) {
+      setAccountActionMsg(`❌ Hata: ${String(e)}`);
+    }
+  }
+
+  async function handleResetQuota(id: string) {
+    try {
+      const res = await fetch("/api/system/google-vids/accounts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, quotaStatus: "available" }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setAccountActionMsg("✓ Hesap kotası sıfırlandı.");
+        await refreshAccounts();
+      }
+    } catch {}
+  }
+
+  async function handleToggleActive(id: string, currentActive: boolean) {
+    try {
+      const res = await fetch("/api/system/google-vids/accounts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, isActive: !currentActive }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        await refreshAccounts();
+      }
+    } catch {}
+  }
 
   // Form ve senaryo değiştikçe kaydet
   useEffect(() => {
@@ -674,15 +779,35 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
             </div>
           </label>
 
-          <label className="select-field">
-            <span>Google Hesap Havuzu (Multi-Account)</span>
+          <div className="select-field">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+              <span style={{ fontSize: "12px", fontWeight: 600, color: "#475569" }}>Google Hesap Havuzu (Multi-Account)</span>
+              <button
+                type="button"
+                onClick={() => { setShowAccountsModal(true); setAccountActionMsg(""); }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#6366f1",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  padding: "0",
+                }}
+              >
+                ⚙️ Hesapları Yönet
+              </button>
+            </div>
             <div>
               <select
                 value={selectedAuthuser === "auto" ? "auto" : String(selectedAuthuser)}
                 onChange={(e) => setSelectedAuthuser(e.target.value === "auto" ? "auto" : Number(e.target.value))}
               >
                 <option value="auto">
-                  🔄 Otomatik Havuz Rotasyonu ({accountsPool.filter(a => a.quota_status === "available").length}/{accountsPool.length || 2} Uygun)
+                  🔄 Otomatik Havuz Rotasyonu ({accountsPool.filter(a => a.quota_status === "available" && a.is_active !== 0).length}/{accountsPool.length || 2} Uygun)
                 </option>
                 {accountsPool.map((acc) => (
                   <option key={acc.id} value={acc.authuser_index}>
@@ -692,7 +817,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
               </select>
               <ChevronDown size={14} />
             </div>
-          </label>
+          </div>
         </div>
 
         {message && (
@@ -1227,6 +1352,275 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
           </div>
         )}
       </section>
+      {/* Hesap Yönetimi Modalı */}
+      {showAccountsModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.65)",
+            backdropFilter: "blur(4px)",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px",
+          }}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "16px",
+              maxWidth: "600px",
+              width: "100%",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                padding: "18px 22px",
+                borderBottom: "1px solid #e2e8f0",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
+                  👥 Google Vids Çoklu Hesap Havuzu
+                </h3>
+                <p style={{ margin: "4px 0 0", fontSize: "12px", color: "#64748b" }}>
+                  Google video oluşturma kotasını paylaştırmak için hesapları ekleyin ve yönetin.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAccountsModal(false)}
+                style={{
+                  background: "#f1f5f9",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "6px 10px",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  color: "#475569",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Eylem Butonları */}
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="button secondary"
+                  style={{ flex: 1, padding: "10px 14px", fontSize: "12.5px", justifyContent: "center" }}
+                  disabled={syncingAccounts}
+                  onClick={() => void handleSyncBrowserAccounts()}
+                >
+                  {syncingAccounts ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}
+                  Tarayıcıdaki Hesapları Otomatik Eşitle
+                </button>
+
+                <a
+                  href="http://43.131.47.253:8080/novnc/vnc_auto.html?path=novnc/websockify%3Fservice%3Dcanva"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="button"
+                  style={{
+                    background: "#4f46e5",
+                    color: "#ffffff",
+                    textDecoration: "none",
+                    padding: "10px 14px",
+                    fontSize: "12.5px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    borderRadius: "10px",
+                  }}
+                >
+                  <ExternalLink size={14} /> Tarayıcıda Yeni Hesap Aç (noVNC) →
+                </a>
+              </div>
+
+              {accountActionMsg && (
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                    background: accountActionMsg.startsWith("❌") ? "#fef2f2" : "#f0fdf4",
+                    color: accountActionMsg.startsWith("❌") ? "#991b1b" : "#166534",
+                    border: accountActionMsg.startsWith("❌") ? "1px solid #fecaca" : "1px solid #bbf7d0",
+                  }}
+                >
+                  {accountActionMsg}
+                </div>
+              )}
+
+              {/* Hesap Kartları Listesi */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <span style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>
+                  Bağlı Hesaplar ({accountsPool.length})
+                </span>
+
+                {accountsPool.map((acc) => (
+                  <div
+                    key={acc.id}
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: "10px",
+                      border: "1px solid #e2e8f0",
+                      background: acc.is_active === 0 ? "#f8fafc" : "#ffffff",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: "10px",
+                      opacity: acc.is_active === 0 ? 0.6 : 1,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span style={{ fontSize: "16px" }}>
+                        {acc.quota_status === "available" ? "🟢" : "🔴"}
+                      </span>
+                      <div>
+                        <div style={{ fontSize: "13px", fontWeight: 600, color: "#0f172a" }}>
+                          {acc.email} <span style={{ fontSize: "11px", color: "#64748b" }}>(authuser={acc.authuser_index})</span>
+                        </div>
+                        <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+                          Durum:{" "}
+                          <strong style={{ color: acc.quota_status === "available" ? "#16a34a" : "#dc2626" }}>
+                            {acc.quota_status === "available" ? "Kota Kullanılabilir" : "Kotada / Dinlenmede"}
+                          </strong>{" "}
+                          • Toplam Üretilen: {acc.total_videos_rendered} Video
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      {acc.quota_status !== "available" && (
+                        <button
+                          type="button"
+                          onClick={() => void handleResetQuota(acc.id)}
+                          style={{
+                            padding: "5px 8px",
+                            fontSize: "11px",
+                            borderRadius: "6px",
+                            border: "1px solid #cbd5e1",
+                            background: "#f8fafc",
+                            cursor: "pointer",
+                            color: "#0284c7",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Kotayı Sıfırla
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => void handleToggleActive(acc.id, acc.is_active !== 0)}
+                        style={{
+                          padding: "5px 8px",
+                          fontSize: "11px",
+                          borderRadius: "6px",
+                          border: "1px solid #cbd5e1",
+                          background: "#f8fafc",
+                          cursor: "pointer",
+                          color: "#475569",
+                        }}
+                      >
+                        {acc.is_active === 0 ? "Aktifleştir" : "Pasifleştir"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteAccount(acc.id)}
+                        style={{
+                          padding: "5px 8px",
+                          fontSize: "11px",
+                          borderRadius: "6px",
+                          border: "1px solid #fecaca",
+                          background: "#fff1f2",
+                          cursor: "pointer",
+                          color: "#e11d48",
+                          fontWeight: 600,
+                        }}
+                      >
+                        Sil
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Manuel Hesap Ekleme Formu */}
+              <form
+                onSubmit={(e) => void handleAddManualAccount(e)}
+                style={{
+                  marginTop: "8px",
+                  padding: "14px",
+                  borderRadius: "10px",
+                  background: "#f8fafc",
+                  border: "1px dashed #cbd5e1",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px",
+                }}
+              >
+                <span style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>
+                  Manuel Hesap Kaydı Ekle
+                </span>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    type="email"
+                    required
+                    placeholder="hesap@gmail.com"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    style={{
+                      flex: 2,
+                      padding: "8px 10px",
+                      fontSize: "12.5px",
+                      borderRadius: "6px",
+                      border: "1px solid #cbd5e1",
+                    }}
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    max="10"
+                    placeholder="authuser (0,1,2)"
+                    value={newAuthuser}
+                    onChange={(e) => setNewAuthuser(Number(e.target.value))}
+                    style={{
+                      flex: 1,
+                      padding: "8px 10px",
+                      fontSize: "12.5px",
+                      borderRadius: "6px",
+                      border: "1px solid #cbd5e1",
+                    }}
+                    title="Google oturum sırası indeksi (0, 1, 2...)"
+                  />
+                  <button
+                    type="submit"
+                    className="button"
+                    style={{ background: "#0f172a", color: "#ffffff", padding: "8px 14px", fontSize: "12px" }}
+                  >
+                    Ekle
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
