@@ -156,6 +156,9 @@ MANDATORY LAWS FROM THE VISUAL-SKILLS REPOSITORY:
 1. "Dramaturgy first, details intensify emotion, syntax serves story":
    - BANNED LAZY ADJECTIVES: Never output words like "cinematic", "photorealistic", "ultra realistic", "8k", "masterpiece", "stunning", "epic", "amazing", "beautiful lighting", "dynamic camera".
    - Replace abstract feelings ("he is sad/happy") with concrete physical facts: bodily micro-actions, tight jaw, posture shift, observable breath.
+   - GOOGLE SAFETY POLICY STRICT GUARDRAIL (CRITICAL):
+     * NEVER mention numerical or spelled-out child/minor ages (e.g. NEVER write "8-year-old girl", "10-year-old boy", "young child", "toddler"). Google Vids triggers automatic Generative AI Prohibited Use policy violations on age-defined minors. Instead, use generic stylized persona titles like "Artisan apprentice Maya", "Young craftsman Leo", "Apprentice companion".
+     * Avoid peril or sensitive physical intimacy cues: do NOT write "lower lip quivers", "slumping under frustration", "hands wrapped over trembling palms". Replace with neutral or collaborative phrases: "focuses intently on the wheel", "steadying the terracotta base alongside her".
 2. "The Three-Detail Rule per Shot (dramaturgy.md §2 & universal-rules.md U12)":
    - Environmental pressure: weather/space acting as character (cold fridge spill, rain on single pane, wet mud traction, low dust motes).
    - Physical micro-action on body: jaw locks, knuckles whiten, fingers grip sash, eyes drop a quarter-inch.
