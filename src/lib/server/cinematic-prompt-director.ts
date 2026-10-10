@@ -196,9 +196,12 @@ MANDATORY LAWS FROM THE VISUAL-SKILLS REPOSITORY:
    - Detail 'fixedTraitsEn' (exact headwear/turban, clothing/robe color and fabric, beard type/hair, facial structure, footwear, accessories).
    - In EVERY scene prompt ('promptEn'), begin the character reference with these EXACT fixed traits so the AI cannot drift the character's face, clothing, or appearance between clips.
 
-8. "Google Vids Omni Temporal & Clip Structure":
-   - Base clip duration is 10 seconds. An initial clip can be extended with 'extend' into 20 seconds.
-   - Total duration must respect target length (~15s: 1-2 scenes; ~30s: 2-3 scenes; ~60s: 3-4 scenes).`;
+8. "Google Vids Omni Scene Independence & Voiceover Duration Law (STRICT)":
+   - EXTEND (UZAT) IS FORBIDDEN: Every scene MUST have "actionType": "new_scene" and "durationSeconds": 10. Do NOT use "extend". Each clip will be generated independently and lined up onto the timeline sequentially.
+   - VOICEOVER PACE LIMIT (CRITICAL): In Turkish natural speech, pacing is ~2.2 words/second. A 10-second scene CANNOT accommodate more than 18-20 words!
+     * Each scene's 'voiceoverTr' MUST BE STRICTLY MAXIMUM 16-20 WORDS (~6-8 seconds spoken audio).
+     * Leave 2 seconds buffer per scene for camera movement and breath, so voiceover NEVER overflows the 10-second clip!
+   - Total video duration is scene_count * 10 seconds (~15s: 2 scenes [20s]; ~30s: 3 scenes [30s]; ~60s: 5-6 scenes [50-60s]).`;
 
   const userPrompt = `TOPIC / USER PROMPT: "${input.topic}"
 BRAND: "${input.brandName || "General"}"
@@ -265,7 +268,8 @@ CRITICAL: Return valid JSON ONLY. No markdown backticks, no markdown code block 
 
   // Validate or apply fallback if parsed result is incomplete
   if (!parsed || !Array.isArray(parsed.scenes) || parsed.scenes.length === 0) {
-    const fallbackDuration = targetDur === "15s" ? 15 : targetDur === "60s" ? 60 : 30;
+    const sceneCount = targetDur === "15s" ? 2 : targetDur === "60s" ? 5 : 3;
+    const fallbackDuration = sceneCount * 10;
     return {
       title: input.topic.slice(0, 40),
       narrativeTr: "Doğal sinematik akış ve sahne devamlılığı.",
@@ -273,30 +277,28 @@ CRITICAL: Return valid JSON ONLY. No markdown backticks, no markdown code block 
       totalDurationSeconds: fallbackDuration,
       visualMood: moodKey,
       aspectRatio: ratio,
-      scenes: [
-        {
-          sceneIndex: 1,
-          shotType: "establishing",
-          durationSeconds: 10,
-          actionType: "new_scene",
-          cameraSetup: mood.lensInstruction,
-          lightingSetup: mood.lightingInstruction,
-          summaryTr: "Açılış ve ana konunun kadraja girişi",
-          promptEn: `A focused scene of ${input.topic}, ${mood.lensInstruction}, ${mood.lightingInstruction}, smooth cinematic camera movement, ${mood.colorGrading}.`,
-        },
-        {
-          sceneIndex: 2,
-          shotType: "resolution_climax",
-          durationSeconds: fallbackDuration > 10 ? fallbackDuration - 10 : 10,
-          actionType: fallbackDuration > 20 ? "new_scene" : "extend",
-          cameraSetup: mood.lensInstruction,
-          lightingSetup: mood.lightingInstruction,
-          summaryTr: "Gelişme ve hikaye finali",
-          promptEn: `Continuation of ${input.topic}, showing the decisive movement and resolution, ${mood.lensInstruction}, ${mood.lightingInstruction}, steady camera holding on final composition.`,
-        },
-      ],
+      scenes: Array.from({ length: sceneCount }).map((_, i) => ({
+        sceneIndex: i + 1,
+        shotType: i === 0 ? "establishing" : i === sceneCount - 1 ? "resolution_climax" : "action_development",
+        durationSeconds: 10,
+        actionType: "new_scene",
+        cameraSetup: mood.lensInstruction,
+        lightingSetup: mood.lightingInstruction,
+        summaryTr: `Sahne ${i + 1} gelişimi`,
+        voiceoverTr: `Etkili kısa anlatım cümlesi sahne ${i + 1}.`,
+        promptEn: `A focused scene ${i + 1} of ${input.topic}, ${mood.lensInstruction}, ${mood.lightingInstruction}, smooth cinematic camera movement, ${mood.colorGrading}.`,
+      })),
     };
   }
+
+  // Ensure all scenes strictly enforce 10s and new_scene (no extend)
+  parsed.scenes = parsed.scenes.map((sc, i) => ({
+    ...sc,
+    sceneIndex: i + 1,
+    durationSeconds: 10,
+    actionType: "new_scene",
+  }));
+  parsed.totalDurationSeconds = parsed.scenes.length * 10;
 
   return parsed;
 }
@@ -326,7 +328,10 @@ Your task is to RE-ROLL / RE-DIRECT exactly ONE SCENE (Scene ${input.sceneIndex}
 RULES:
 1. Preserve continuity: Retain the existing character anchor traits (${sb.characterAnchor?.fixedTraitsEn || "consistent subject"}), narrative mode (${sb.narrativeMode || "hybrid"}), overall visual mood, and surrounding scene progression.
 2. The Three-Detail Rule: Ensure the scene has concrete environmental pressure, body micro-actions, and sound/motif anchors.
-3. Audio/Dialogue Syntax: Use Veo official format: [Physical visual action/camera/light] + Audio: ... + Says: ... + SFX: ...
+3. "Google Vids Omni Scene Independence & Voiceover Pace Limit":
+   - EXTEND (UZAT) IS FORBIDDEN: Scene actionType MUST be "new_scene" and durationSeconds: 10.
+   - VOICEOVER WORD LIMIT: 'voiceoverTr' MUST BE MAXIMUM 16-20 WORDS (~6-8 seconds spoken audio). Never write more than 20 words per scene.
+4. Audio/Dialogue Syntax: Use Veo official format: [Physical visual action/camera/light] + Audio: ... + Says: ... + SFX: ...
 4. Follow Narrative Mode:
    - If 'voiceover_only', omit 'Says:' and focus on 'voiceoverTr'.
    - If 'dialogue_only', omit 'voiceoverTr' and focus on 'Says:' and 'dialogueTr'.
@@ -371,6 +376,7 @@ Return valid JSON matching this schema:
     ...targetScene,
     ...parsed,
     sceneIndex: targetScene.sceneIndex,
-    durationSeconds: targetScene.durationSeconds,
+    durationSeconds: 10,
+    actionType: "new_scene",
   };
 }

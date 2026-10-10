@@ -49,17 +49,30 @@ test("Cinematic visual moods catalog and director storyboard planner work as exp
         cameraSetup: "50mm prime, slow push-in",
         lightingSetup: "Warm golden hour rim light",
         summaryTr: "Çayırda ilk karşılaşma",
+        voiceoverTr: "Güneşin altın ışıkları çayırı sararken, sevimli tavşan Pamuk ilk kez dev aslanla karşılaştı.",
         promptEn: "Stylized 3D animated scene. Rabbit Pamuk (stylized 3D white rabbit, oversized expressive eyes, blue vest) hops across soft meadow...",
       },
       {
         sceneIndex: 2,
-        shotType: "resolution_climax",
-        durationSeconds: 20,
-        actionType: "extend",
+        shotType: "action_development",
+        durationSeconds: 10,
+        actionType: "new_scene",
         cameraSetup: "50mm prime, tracking shot",
         lightingSetup: "Golden sunset sunbeams",
         summaryTr: "Yan yana yürüyüş",
-        promptEn: "Stylized 3D animated scene. Rabbit Pamuk continues walking calmly beside the friendly lion...",
+        voiceoverTr: "Korkunun yerini merak aldı ve iki dost neşeyle birlikte adım atmaya başladı.",
+        promptEn: "Stylized 3D animated scene. Rabbit Pamuk walks calmly beside the friendly lion in the meadow...",
+      },
+      {
+        sceneIndex: 3,
+        shotType: "resolution_climax",
+        durationSeconds: 10,
+        actionType: "new_scene",
+        cameraSetup: "50mm prime, wide tilt",
+        lightingSetup: "Golden sunset warm glow",
+        summaryTr: "Dostluğun zaferi",
+        voiceoverTr: "Gerçek dostluk farklılıklara bakmazdı; onlar artık ayrılmaz bir ikiliydi.",
+        promptEn: "Stylized 3D animated scene. Rabbit Pamuk and the lion watch the sunset side by side...",
       },
     ],
   });
@@ -85,9 +98,10 @@ test("Cinematic visual moods catalog and director storyboard planner work as exp
 
   assert.equal(result.title, "Altın Çayırda Tavşan ve Aslan");
   assert.equal(result.totalDurationSeconds, 30);
-  assert.equal(result.scenes.length, 2);
+  assert.equal(result.scenes.length, 3);
   assert.equal(result.scenes[0].actionType, "new_scene");
-  assert.equal(result.scenes[1].actionType, "extend");
+  assert.equal(result.scenes[1].actionType, "new_scene");
+  assert.equal(result.scenes[2].actionType, "new_scene");
   assert.ok(result.musicSpec);
   assert.equal(result.musicSpec.moodTr, "Neşeli animasyon orkestrası");
   assert.ok(result.musicSpec.musicPromptEn.includes("3D animation"));

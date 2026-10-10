@@ -1260,7 +1260,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                             gap: "5px",
                           }}
                         >
-                          <Clock size={14} /> {scene.durationSeconds} sn ({scene.actionType === "extend" ? "Kesintisiz Uzatma" : "Yeni Sahne"})
+                          <Clock size={14} /> {scene.durationSeconds || 10} sn (Bağımsız Sahne)
                         </span>
                       </div>
 
@@ -1351,9 +1351,14 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                       {narrativeMode !== "dialogue_only" && (
                         <div>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-                            <label style={{ fontSize: "11.5px", fontWeight: 700, color: "#0284c7", display: "flex", alignItems: "center", gap: "5px" }}>
-                              🎙️ Google Vids Yerleşik Dış Ses (Voiceover)
-                            </label>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                              <label style={{ fontSize: "11.5px", fontWeight: 700, color: "#0284c7", display: "flex", alignItems: "center", gap: "5px" }}>
+                                🎙️ Google Vids Yerleşik Dış Ses (Voiceover)
+                              </label>
+                              <span style={{ fontSize: "11px", fontWeight: 600, color: (scene.voiceoverTr || "").trim().split(/\s+/).filter(Boolean).length > 20 ? "#e11d48" : "#64748b" }}>
+                                ({(scene.voiceoverTr || "").trim().split(/\s+/).filter(Boolean).length}/20 kelime • ~7s)
+                              </span>
+                            </div>
                             <button
                               type="button"
                               onClick={() => handleCopy(scene.voiceoverTr, `scene-${currentIdx}-vo`)}

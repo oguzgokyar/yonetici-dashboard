@@ -18,6 +18,13 @@ export interface GoogleVidsJobRequest {
   durationSeconds: number;
   visualMood: string;
   narrativeMode?: string;
+  characterAnchor?: {
+    name?: string;
+    archetypeTr?: string;
+    masterVisualPromptEn?: string;
+    fixedTraitsEn?: string;
+    referenceImageUrl?: string;
+  };
   musicSpec?: Record<string, unknown>;
   preferredAuthuser?: number;
   preferredAccountId?: string;
@@ -82,6 +89,20 @@ export async function processGoogleVidsJob(job: {
   const scenesTempFile = path.join("/tmp", `vids_scenes_${job.id}.json`);
   fs.writeFileSync(scenesTempFile, JSON.stringify(scenes, null, 2), "utf-8");
 
+  // Referans görsel yolu (varsa)
+  let referenceImageLocalPath = "";
+  if (req.characterAnchor?.referenceImageUrl) {
+    const refUrl = req.characterAnchor.referenceImageUrl;
+    const assetMatch = refUrl.match(/\/api\/assets\/([a-f0-9-]+)/i);
+    if (assetMatch) {
+      const assetId = assetMatch[1];
+      const possiblePath = path.join(process.cwd(), ".data", "assets", `${assetId}.png`);
+      if (fs.existsSync(possiblePath)) {
+        referenceImageLocalPath = possiblePath;
+      }
+    }
+  }
+
   const canvaConfig = getCanvaConfig();
   const baseUrl = canvaConfig.baseUrl.replace(/\/+$/, "");
   const apiKey = canvaConfig.apiKey;
@@ -97,7 +118,7 @@ export async function processGoogleVidsJob(job: {
     const { createInterface } = await import("node:readline");
 
     await new Promise<void>((resolve, reject) => {
-      const proc = spawn("/opt/hermes/.venv/bin/python", [
+      const args = [
         "/opt/data/scripts/google_vids_automation.py",
         "--job-id", job.id,
         "--title", title,
@@ -107,7 +128,12 @@ export async function processGoogleVidsJob(job: {
         "--profile-dir", profileDir,
         "--scenes-json", scenesTempFile,
         "--output-mp4", finalMp4Path,
-      ], {
+      ];
+      if (referenceImageLocalPath) {
+        args.push("--reference-image", referenceImageLocalPath);
+      }
+
+      const proc = spawn("/opt/hermes/.venv/bin/python", args, {
         env: {
           ...process.env,
           DISPLAY: ":97",
@@ -194,17 +220,31 @@ export async function processGoogleVidsJob(job: {
     return;
   }
 
+  // Referans görsel URL (varsa)
+  const referenceImagePublicUrl = req.characterAnchor?.referenceImageUrl
+    ? req.characterAnchor.referenceImageUrl.startsWith("http")
+      ? req.characterAnchor.referenceImageUrl
+      : `${callbackBaseUrl}${req.characterAnchor.referenceImageUrl}`
+    : "";
+
+  const downloadRefImageCmd = referenceImagePublicUrl
+    ? `curl -sL "${referenceImagePublicUrl}" -o "/tmp/vids_ref_${job.id}.png"\n`
+    : "";
+  const refImageFlag = referenceImagePublicUrl
+    ? ` --reference-image "/tmp/vids_ref_${job.id}.png"`
+    : "";
+
   const taskPrompt = `Create the Google Vids video for job_id='${job.id}' by executing this exact python command:
 cat << 'EOF' > "${scenesTempFile}"
 ${JSON.stringify(scenes, null, 2)}
 EOF
-/opt/hermes/.venv/bin/python /opt/data/scripts/google_vids_automation.py --job-id "${job.id}" --title ${JSON.stringify(title)} --aspect-ratio "${aspectRatio}" --music-prompt ${JSON.stringify(musicPrompt)} --authuser ${authuserIndex} --profile-dir "${profileDir}" --scenes-json "${scenesTempFile}" --output-mp4 "/tmp/vids_out_${job.id}.mp4"
+${downloadRefImageCmd}/opt/hermes/.venv/bin/python /opt/data/scripts/google_vids_automation.py --job-id "${job.id}" --title ${JSON.stringify(title)} --aspect-ratio "${aspectRatio}" --music-prompt ${JSON.stringify(musicPrompt)} --authuser ${authuserIndex} --profile-dir "${profileDir}" --scenes-json "${scenesTempFile}" --output-mp4 "/tmp/vids_out_${job.id}.mp4"${refImageFlag}
 
 Once "/tmp/vids_out_${job.id}.mp4" is generated:
 Parse the stdout log of the python script for '__PROGRESS__' line containing 'googleVidsUrl' to get the URL if available.
 Upload the video file via multipart form-data to the callback endpoint:
 curl -s -X POST ${callbackToken ? `-H "Authorization: Bearer ${callbackToken}" ` : ""}-F "video=@/tmp/vids_out_${job.id}.mp4" -F "googleVidsUrl=$(grep -o '"googleVidsUrl": *"[^"]*"' /tmp/vids_job_${job.id}.log 2>/dev/null | cut -d'"' -f4 || echo '')" "${callbackUrl}"
-rm -f "/tmp/vids_out_${job.id}.mp4" "${scenesTempFile}" "/tmp/vids_job_${job.id}.log"
+rm -f "/tmp/vids_out_${job.id}.mp4" "${scenesTempFile}" "/tmp/vids_job_${job.id}.log" "/tmp/vids_ref_${job.id}.png"
 
 Return the completion output.`;
 
