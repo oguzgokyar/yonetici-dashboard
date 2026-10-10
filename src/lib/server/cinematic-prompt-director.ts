@@ -104,12 +104,15 @@ export interface ScriptScenePlan {
   sfxCueEn?: string; // Veo/Vids SFX katmanı (örn: "SFX: (water splash at 2s)")
 }
 
+export type CaptionStyleType = "hormozi" | "minimal" | "banner" | "off";
+
 export interface StoryboardResponse {
   title: string;
   narrativeTr: string;
   totalDurationSeconds: number;
   visualMood: CinematicVisualMood;
   aspectRatio: "9:16" | "16:9" | "1:1";
+  captionStyle?: CaptionStyleType;
   characterAnchor?: CharacterAnchorSpec; // Hikayede sabit kalması gereken ana karakter/obje
   scenes: ScriptScenePlan[];
 }

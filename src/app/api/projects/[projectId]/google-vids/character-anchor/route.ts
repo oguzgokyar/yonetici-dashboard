@@ -59,8 +59,8 @@ export async function POST(request: Request, context: Context) {
     const now = new Date().toISOString();
     const ratio = body.aspectRatio || "1:1";
 
-    // Direct clean character reference portrait prompt
-    const enhancedPrompt = `Master character design reference sheet portrait of ${body.characterName || "Hero"}, ${promptEn}. Centered eye-level portrait framing, clear recognizable facial structure, authentic costume details (${body.fixedTraitsEn || ""}), solid neutral studio background, pristine illumination. Clean character reference without any text, logos, or watermarks.`;
+    // Enhance prompt strictly following visual-skills U7 (Character consistency anchor) and animatic-keyframes.md
+    const enhancedPrompt = `Visual-skills character reference portrait sheet of ${body.characterName || "Hero"}, ${body.archetypeTr || ""}. Eye-level 85mm portrait framing, neutral soft studio rim lighting, neutral studio background. PHYSICAL IDENTITY SPECS: ${body.fixedTraitsEn || promptEn}. Master reference portrait: clear bone structure, facial hair and eyes, distinct clothing textures and materials. Strict character anchor reference, no extra text, no watermarks, no split screen, no duplicate faces.`;
 
     db.prepare(
       "INSERT INTO generation_jobs (id, project_id, type, provider, model, status, prompt, request_json, progress_json, created_at) VALUES (?, ?, 'image', 'cliproxy', ?, 'queued', ?, ?, ?, ?)"
