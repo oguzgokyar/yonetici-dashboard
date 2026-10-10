@@ -186,4 +186,10 @@ test("Google Vids UI, character anchor visual harmony, tabbed scene navigation a
   assert.ok(uiSource.includes("Düzenle"), "must have Düzenle button on video cards");
   assert.ok(videosRouteSource.includes("storyboard = {"), "api/videos must include storyboard in response for google-vids");
   assert.ok(googleVidsRouteSource.includes("characterAnchor: storyboard.characterAnchor"), "google-vids route must store characterAnchor in request_json");
+
+  // 5. Senaryo içerik kutularında hızlı kopyala simgesi
+  assert.ok(uiSource.includes("handleCopy"), "must have handleCopy function");
+  assert.ok(uiSource.includes("char-dna"), "must have copy button on character DNA");
+  assert.ok(uiSource.includes("music-prompt"), "must have copy button on music prompt");
+  assert.ok(uiSource.includes("Promptu Kopyala"), "must have copy button on omni prompt");
 });

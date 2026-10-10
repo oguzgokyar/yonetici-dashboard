@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Clapperboard,
   Clock,
+  Copy,
   Download,
   ExternalLink,
   Film,
@@ -144,6 +145,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
 
   const [storyboard, setStoryboard] = useState<StoryboardResponse | null>(null);
   const [activeSceneTabIdx, setActiveSceneTabIdx] = useState(0);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [revisionNote, setRevisionNote] = useState("");
   const [message, setMessage] = useState("");
   const [videos, setVideos] = useState<RenderedVideo[]>([]);
@@ -473,6 +475,15 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         musicPromptEn: value,
       },
     });
+  }
+
+  function handleCopy(text: string | undefined, key: string) {
+    if (!text) return;
+    try {
+      void navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey((prev) => (prev === key ? null : prev)), 2000);
+    } catch {}
   }
 
   function handleEditVideo(video: RenderedVideo) {
@@ -923,7 +934,30 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                <strong style={{ fontSize: "15px" }}>{storyboard.title}</strong>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <strong style={{ fontSize: "15px" }}>{storyboard.title}</strong>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(`${storyboard.title}\n\n${storyboard.narrativeTr}`, "story-summary")}
+                    style={{
+                      background: copiedKey === "story-summary" ? "#ecfdf5" : "#f1f5f9",
+                      border: copiedKey === "story-summary" ? "1px solid #6ee7b7" : "1px solid #cbd5e1",
+                      color: copiedKey === "story-summary" ? "#059669" : "#475569",
+                      padding: "2px 7px",
+                      borderRadius: "6px",
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                    title="Hikaye özetini panoya kopyala"
+                  >
+                    {copiedKey === "story-summary" ? <Check size={11} /> : <Copy size={11} />}
+                    {copiedKey === "story-summary" ? "Kopyalandı!" : "Kopyala"}
+                  </button>
+                </div>
                 <span style={{ fontSize: "12px", color: "#64748b" }}>
                   {VISUAL_MOOD_OPTIONS.find((m) => m.key === storyboard.visualMood)?.label} • {storyboard.aspectRatio}
                 </span>
@@ -973,9 +1007,32 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: "11px", fontWeight: 700, color: "#9a3412", display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px" }}>
-                    <Pencil size={11} /> Müzik Üretim Promptu (Google Vids Audio - İngilizce)
-                  </label>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                    <label style={{ fontSize: "11px", fontWeight: 700, color: "#9a3412", display: "flex", alignItems: "center", gap: "5px" }}>
+                      <Pencil size={11} /> Müzik Üretim Promptu (Google Vids Audio - İngilizce)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(storyboard.musicSpec?.musicPromptEn, "music-prompt")}
+                      style={{
+                        background: copiedKey === "music-prompt" ? "#ecfdf5" : "#ffedd5",
+                        border: copiedKey === "music-prompt" ? "1px solid #6ee7b7" : "1px solid #fdba74",
+                        color: copiedKey === "music-prompt" ? "#059669" : "#9a3412",
+                        padding: "2px 7px",
+                        borderRadius: "6px",
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                      }}
+                      title="Müzik promptunu kopyala"
+                    >
+                      {copiedKey === "music-prompt" ? <Check size={11} /> : <Copy size={11} />}
+                      {copiedKey === "music-prompt" ? "Kopyalandı!" : "Kopyala"}
+                    </button>
+                  </div>
                   <textarea
                     rows={2}
                     value={storyboard.musicSpec.musicPromptEn}
@@ -1031,6 +1088,27 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                       👤 Sabit Karakter DNA&apos;sı: {storyboard.characterAnchor.name}
                     </span>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(`${storyboard.characterAnchor?.name}: ${storyboard.characterAnchor?.fixedTraitsEn}\n\nMaster Prompt: ${storyboard.characterAnchor?.masterVisualPromptEn}`, "char-dna")}
+                        style={{
+                          background: copiedKey === "char-dna" ? "#ecfdf5" : "#ffffff",
+                          border: copiedKey === "char-dna" ? "1px solid #6ee7b7" : "1px solid #c7d2fe",
+                          color: copiedKey === "char-dna" ? "#059669" : "#3730a3",
+                          padding: "2px 7px",
+                          borderRadius: "6px",
+                          fontSize: "11px",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                        title="Karakter DNA ve promptunu kopyala"
+                      >
+                        {copiedKey === "char-dna" ? <Check size={11} /> : <Copy size={11} />}
+                        {copiedKey === "char-dna" ? "Kopyalandı!" : "Kopyala"}
+                      </button>
                       <span style={{ fontSize: "11px", fontWeight: 600, color: "#4f46e5", background: "#e0e7ff", padding: "2px 8px", borderRadius: "99px" }}>
                         {storyboard.characterAnchor.archetypeTr}
                       </span>
@@ -1224,9 +1302,32 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
 
                     {/* Türkçe Sahne Açıklaması */}
                     <div>
-                      <label style={{ fontSize: "12px", fontWeight: 600, color: "#475569", display: "block", marginBottom: "4px" }}>
-                        Sahne Hikayesi (Türkçe Özet)
-                      </label>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                        <label style={{ fontSize: "12px", fontWeight: 600, color: "#475569" }}>
+                          Sahne Hikayesi (Türkçe Özet)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(scene.summaryTr, `scene-${currentIdx}-summary`)}
+                          style={{
+                            background: copiedKey === `scene-${currentIdx}-summary` ? "#ecfdf5" : "#f1f5f9",
+                            border: copiedKey === `scene-${currentIdx}-summary` ? "1px solid #6ee7b7" : "1px solid #cbd5e1",
+                            color: copiedKey === `scene-${currentIdx}-summary` ? "#059669" : "#475569",
+                            padding: "2px 7px",
+                            borderRadius: "6px",
+                            fontSize: "11px",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                          }}
+                          title="Sahne özetini kopyala"
+                        >
+                          {copiedKey === `scene-${currentIdx}-summary` ? <Check size={11} /> : <Copy size={11} />}
+                          {copiedKey === `scene-${currentIdx}-summary` ? "Kopyalandı!" : "Kopyala"}
+                        </button>
+                      </div>
                       <textarea
                         rows={2}
                         value={scene.summaryTr}
@@ -1250,9 +1351,32 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                     <div style={{ background: "#f8fafc", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: "10px" }}>
                       {narrativeMode !== "dialogue_only" && (
                         <div>
-                          <label style={{ fontSize: "11.5px", fontWeight: 700, color: "#0284c7", display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px" }}>
-                            🎙️ Google Vids Yerleşik Dış Ses (Voiceover)
-                          </label>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                            <label style={{ fontSize: "11.5px", fontWeight: 700, color: "#0284c7", display: "flex", alignItems: "center", gap: "5px" }}>
+                              🎙️ Google Vids Yerleşik Dış Ses (Voiceover)
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(scene.voiceoverTr, `scene-${currentIdx}-vo`)}
+                              style={{
+                                background: copiedKey === `scene-${currentIdx}-vo` ? "#ecfdf5" : "#e0f2fe",
+                                border: copiedKey === `scene-${currentIdx}-vo` ? "1px solid #6ee7b7" : "1px solid #bae6fd",
+                                color: copiedKey === `scene-${currentIdx}-vo` ? "#059669" : "#0369a1",
+                                padding: "2px 7px",
+                                borderRadius: "6px",
+                                fontSize: "11px",
+                                fontWeight: 600,
+                                cursor: "pointer",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                              }}
+                              title="Dış ses metnini kopyala"
+                            >
+                              {copiedKey === `scene-${currentIdx}-vo` ? <Check size={11} /> : <Copy size={11} />}
+                              {copiedKey === `scene-${currentIdx}-vo` ? "Kopyalandı!" : "Kopyala"}
+                            </button>
+                          </div>
                           <textarea
                             rows={3}
                             value={scene.voiceoverTr || ""}
@@ -1276,9 +1400,32 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
 
                       {narrativeMode !== "voiceover_only" && (
                         <div>
-                          <label style={{ fontSize: "11.5px", fontWeight: 700, color: "#7c3aed", display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px" }}>
-                            💬 Karakter Repliği / Diyalog (Veo Lip-Sync)
-                          </label>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                            <label style={{ fontSize: "11.5px", fontWeight: 700, color: "#7c3aed", display: "flex", alignItems: "center", gap: "5px" }}>
+                              💬 Karakter Repliği / Diyalog (Veo Lip-Sync)
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(scene.dialogueTr, `scene-${currentIdx}-dialogue`)}
+                              style={{
+                                background: copiedKey === `scene-${currentIdx}-dialogue` ? "#ecfdf5" : "#f3e8ff",
+                                border: copiedKey === `scene-${currentIdx}-dialogue` ? "1px solid #6ee7b7" : "1px solid #e9d5ff",
+                                color: copiedKey === `scene-${currentIdx}-dialogue` ? "#059669" : "#6d28d9",
+                                padding: "2px 7px",
+                                borderRadius: "6px",
+                                fontSize: "11px",
+                                fontWeight: 600,
+                                cursor: "pointer",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                              }}
+                              title="Diyalog repliğini kopyala"
+                            >
+                              {copiedKey === `scene-${currentIdx}-dialogue` ? <Check size={11} /> : <Copy size={11} />}
+                              {copiedKey === `scene-${currentIdx}-dialogue` ? "Kopyalandı!" : "Kopyala"}
+                            </button>
+                          </div>
                           <textarea
                             rows={2}
                             value={scene.dialogueTr || ""}
@@ -1306,9 +1453,33 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                         <label style={{ fontSize: "12px", fontWeight: 700, color: "#334155", display: "flex", alignItems: "center", gap: "5px" }}>
                           <Pencil size={12} /> Google Vids Omni Promptu (İngilizce - Düzenlenebilir)
                         </label>
-                        <span style={{ fontSize: "11px", color: "#64748b" }}>
-                          {scene.promptEn.length} karakter • Tam metin görünümü
-                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{ fontSize: "11px", color: "#64748b" }}>
+                            {scene.promptEn.length} karakter
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(scene.promptEn, `scene-${currentIdx}-prompt`)}
+                            style={{
+                              background: copiedKey === `scene-${currentIdx}-prompt` ? "#ecfdf5" : "#612bd3",
+                              border: copiedKey === `scene-${currentIdx}-prompt` ? "1px solid #6ee7b7" : "1px solid #612bd3",
+                              color: copiedKey === `scene-${currentIdx}-prompt` ? "#059669" : "#ffffff",
+                              padding: "3px 9px",
+                              borderRadius: "6px",
+                              fontSize: "11px",
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+                            }}
+                            title="İngilizce Omni promptunu panoya kopyala"
+                          >
+                            {copiedKey === `scene-${currentIdx}-prompt` ? <Check size={11} /> : <Copy size={11} />}
+                            {copiedKey === `scene-${currentIdx}-prompt` ? "Kopyalandı!" : "Promptu Kopyala"}
+                          </button>
+                        </div>
                       </div>
                       <textarea
                         rows={6}
