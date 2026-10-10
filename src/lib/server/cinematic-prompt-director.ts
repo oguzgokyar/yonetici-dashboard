@@ -81,6 +81,13 @@ export const CINEMATIC_VISUAL_MOODS: Record<CinematicVisualMood, CinematicVisual
 
 export type TargetDurationRange = "15s" | "30s" | "60s";
 
+export interface CharacterAnchorSpec {
+  name: string; // Karakter adı (örn: "Nasreddin Hoca")
+  archetypeTr: string; // Türkçe arketip tanımı
+  masterVisualPromptEn: string; // Referans görsel üretiminde ve sahnelerde kilitlenecek İngilizce master prompt
+  fixedTraitsEn: string; // Her sahnede tekrar eden sabit fiziksel özellikler (kıyafet, sakal, sarık, renkler)
+}
+
 export interface ScriptScenePlan {
   sceneIndex: number;
   shotType: "establishing" | "action_development" | "resolution_climax";
@@ -89,7 +96,9 @@ export interface ScriptScenePlan {
   cameraSetup: string; // örn: "35mm anamorphic, slow push-in"
   lightingSetup: string; // örn: "Low-angle golden hour rim light"
   summaryTr: string; // Kullanıcının arayüzde Türkçe göreceği özet
-  promptEn: string; // Google Vids Omni'ye gönderilecek katı İngilizce prompt
+  promptEn: string; // Google Vids Omni'ye gönderilecek katı İngilizce prompt (Karakter kilit kurallarını içerir)
+  voiceoverTr?: string; // Google Vids yerleşik Voiceover paneline girilecek Türkçe dış ses anlatımı
+  dialogueTr?: string; // Sahne içinde karakterlerin konuşmaları / replikleri (Türkçe)
 }
 
 export interface StoryboardResponse {
@@ -98,6 +107,7 @@ export interface StoryboardResponse {
   totalDurationSeconds: number;
   visualMood: CinematicVisualMood;
   aspectRatio: "9:16" | "16:9" | "1:1";
+  characterAnchor?: CharacterAnchorSpec; // Hikayede sabit kalması gereken ana karakter/obje
   scenes: ScriptScenePlan[];
 }
 
@@ -138,9 +148,12 @@ CORE LAWS YOU MUST ENFORCE:
    - For ~30s video: Deliver either 2 scenes (10s Scene 1 + 20s Extended Scene 2) or 3 scenes (10s + 10s + 10s) totaling 30s.
    - For ~60s video: Deliver 3 to 4 scenes totaling 45-60s.
    - For each scene, specify actionType: 'new_scene' (creates a fresh scene on timeline) or 'extend' (extends previous clip seamlessly).
-4. Language Requirement:
-   - 'summaryTr' and 'narrativeTr' must be in natural, evocative Turkish.
-   - 'promptEn' MUST be strictly in English, concise (40-90 words), dense with physical facts, optical lens terms, lighting and subject blocking.`;
+4. Language, Voiceover & Character Continuity Laws:
+   - 'summaryTr' and 'narrativeTr' must be in natural, evocative, literary Turkish.
+   - 'voiceoverTr' (MANDATORY per scene): The evocative, compelling Turkish narrative spoken by the narrator in that scene (plain text, no emojis).
+   - 'dialogueTr' (Optional per scene): If characters speak in that scene, provide their natural Turkish lines with character names.
+   - Character Anchor Law (e.g. Nasreddin Hodja): If the story features a recurring hero/figure or central subject, identify it in 'characterAnchor'. Define explicit fixed visual traits (exact clothing colors, turban/headwear, beard, age, face features) and enforce these exact traits inside EVERY scene's 'promptEn' so the protagonist never morphs or drifts across clips.
+   - 'promptEn' MUST be strictly in English, concise (40-90 words), dense with physical facts, optical lens terms, lighting and subject blocking, incorporating the fixed character traits.`;
 
   const userPrompt = `TOPIC / USER PROMPT: "${input.topic}"
 BRAND: "${input.brandName || "General"}"
@@ -155,7 +168,7 @@ ${input.revisionFeedback ? `USER REVISION FEEDBACK: "${input.revisionFeedback}"\
 ${input.currentStoryboard ? `EXISTING STORYBOARD TO REFINE: ${JSON.stringify(input.currentStoryboard)}` : ""}
 
 TASK:
-Determine the optimal scene count, timing rhythm (10s vs 20s extend), and write the exact physical English prompt for Google Vids Omni.
+Determine the optimal scene count, timing rhythm (10s vs 20s extend), extract character anchor traits for continuity, write compelling Turkish voiceover/dialogues for each scene, and write the exact physical English prompt for Google Vids Omni.
 
 Return ONLY a valid JSON object matching this schema (no markdown fences, no conversational text):
 {
@@ -164,6 +177,12 @@ Return ONLY a valid JSON object matching this schema (no markdown fences, no con
   "totalDurationSeconds": 30,
   "visualMood": "${moodKey}",
   "aspectRatio": "${ratio}",
+  "characterAnchor": {
+    "name": "Karakter adı (örn: Nasreddin Hoca veya Ana Karakter)",
+    "archetypeTr": "Türkçe arketip (örn: Bilge halk filozofu, 60'lı yaşlar)",
+    "masterVisualPromptEn": "Detailed character design prompt in English for generating the reference image",
+    "fixedTraitsEn": "Exact recurring traits: white round turban, turquoise wool robe, full white beard, gentle smiling eyes"
+  },
   "scenes": [
     {
       "sceneIndex": 1,
@@ -173,7 +192,9 @@ Return ONLY a valid JSON object matching this schema (no markdown fences, no con
       "cameraSetup": "Wide angle 35mm, slow steady tracking",
       "lightingSetup": "Warm sunset backlight with natural dust haze",
       "summaryTr": "Sahne 1 Türkçe kısa özeti",
-      "promptEn": "English dense physical prompt without filler adjectives..."
+      "voiceoverTr": "Etkili, akıcı ve hikayeyi anlatan Türkçe dış ses metni",
+      "dialogueTr": "Varsa karakterin Türkçe repliği veya boş string",
+      "promptEn": "English dense physical prompt including fixedTraitsEn without filler adjectives..."
     }
   ]
 }`;

@@ -73,6 +73,13 @@ const VISUAL_MOOD_OPTIONS: VisualMoodOption[] = [
   },
 ];
 
+type CharacterAnchorSpec = {
+  name: string;
+  archetypeTr: string;
+  masterVisualPromptEn: string;
+  fixedTraitsEn: string;
+};
+
 type ScriptScenePlan = {
   sceneIndex: number;
   shotType: "establishing" | "action_development" | "resolution_climax";
@@ -82,6 +89,8 @@ type ScriptScenePlan = {
   lightingSetup: string;
   summaryTr: string;
   promptEn: string;
+  voiceoverTr?: string;
+  dialogueTr?: string;
 };
 
 type StoryboardResponse = {
@@ -90,6 +99,7 @@ type StoryboardResponse = {
   totalDurationSeconds: number;
   visualMood: VisualMoodOption["key"];
   aspectRatio: "9:16" | "16:9" | "1:1";
+  characterAnchor?: CharacterAnchorSpec;
   scenes: ScriptScenePlan[];
 };
 
@@ -197,7 +207,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
     }
   }
 
-  function updateScenePrompt(index: number, field: "promptEn" | "summaryTr", value: string) {
+  function updateScenePrompt(index: number, field: "promptEn" | "summaryTr" | "voiceoverTr" | "dialogueTr", value: string) {
     if (!storyboard) return;
     const nextScenes = storyboard.scenes.map((s, idx) =>
       idx === index ? { ...s, [field]: value } : s
@@ -415,6 +425,36 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
               </p>
             </div>
 
+            {/* Sabit Karakter / Hero Anchor Özeti */}
+            {storyboard.characterAnchor && (
+              <div
+                style={{
+                  padding: "14px 16px",
+                  borderRadius: "14px",
+                  border: "1px solid #c7d2fe",
+                  background: "#eef2ff",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+                  <span style={{ fontSize: "13px", fontWeight: 700, color: "#3730a3", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    👤 Sabit Karakter DNA&apos;sı (Karakter Tutarlılığı): {storyboard.characterAnchor.name}
+                  </span>
+                  <span style={{ fontSize: "11px", fontWeight: 600, color: "#4f46e5", background: "#e0e7ff", padding: "2px 8px", borderRadius: "99px" }}>
+                    {storyboard.characterAnchor.archetypeTr}
+                  </span>
+                </div>
+                <div style={{ fontSize: "12px", color: "#312e81", lineHeight: 1.45 }}>
+                  <strong>Kilitlenen Fiziksel Özellikler:</strong> {storyboard.characterAnchor.fixedTraitsEn}
+                </div>
+                <div style={{ fontSize: "11px", color: "#6366f1", fontStyle: "italic" }}>
+                  ✓ Bu fiziksel kimlik ve referans promptu tüm sahnelerin görsel promptuna otomatik dahil edilerek karakter sapması (drift) engellenir.
+                </div>
+              </div>
+            )}
+
             {/* Sahne Kartları Listesi */}
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               {storyboard.scenes.map((scene, idx) => (
@@ -487,6 +527,34 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                         boxSizing: "border-box",
                       }}
                     />
+                  </div>
+
+                  {/* Google Vids Türkçe Dış Ses (Voiceover) & Diyaloglar */}
+                  <div style={{ background: "#f8fafc", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <label style={{ fontSize: "11px", fontWeight: 700, color: "#0284c7", display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px" }}>
+                      🎙️ Google Vids Yerleşik Türkçe Dış Ses (Voiceover Scripti)
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={scene.voiceoverTr || ""}
+                      onChange={(e) => updateScenePrompt(idx, "voiceoverTr", e.target.value)}
+                      placeholder="Google Vids Voiceover paneline yazılacak etkili Türkçe dış ses metni..."
+                      style={{
+                        width: "100%",
+                        padding: "8px 10px",
+                        fontSize: "12.5px",
+                        borderRadius: "6px",
+                        border: "1px solid #cbd5e1",
+                        boxSizing: "border-box",
+                        lineHeight: 1.45,
+                        background: "#ffffff",
+                      }}
+                    />
+                    {scene.dialogueTr ? (
+                      <div style={{ marginTop: "6px", fontSize: "11px", color: "#475569" }}>
+                        <strong>💬 Sahne Diyaloğu:</strong> <em>{scene.dialogueTr}</em>
+                      </div>
+                    ) : null}
                   </div>
 
                   {/* İngilizce Google Vids Omni Promptu */}
