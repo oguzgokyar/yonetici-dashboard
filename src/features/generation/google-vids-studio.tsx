@@ -123,7 +123,6 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
   const [visualMood, setVisualMood] = useState<VisualMoodOption["key"]>("cinematic_photoreal");
   const [targetDuration, setTargetDuration] = useState<"15s" | "30s" | "60s">("30s");
   const [aspectRatio, setAspectRatio] = useState<"9:16" | "16:9" | "1:1">("9:16");
-  const [captionStyle, setCaptionStyle] = useState<"hormozi" | "minimal" | "banner" | "off">("hormozi");
 
   const [planning, setPlanning] = useState(false);
   const [revising, setRevising] = useState(false);
@@ -159,7 +158,6 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         if (parsed.visualMood) setVisualMood(parsed.visualMood);
         if (parsed.targetDuration) setTargetDuration(parsed.targetDuration);
         if (parsed.aspectRatio) setAspectRatio(parsed.aspectRatio);
-        if (parsed.captionStyle) setCaptionStyle(parsed.captionStyle);
         if (parsed.storyboard && !storyboard) setStoryboard(parsed.storyboard);
       }
     } catch {}
@@ -176,7 +174,6 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
             visualMood,
             targetDuration,
             aspectRatio,
-            captionStyle,
             storyboard,
           })
         );
@@ -389,7 +386,6 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         body: JSON.stringify({
           topic: topic.trim(),
           storyboard,
-          captionStyle,
         }),
       });
       const body = (await res.json()) as { ok: boolean; jobId?: string; message?: string };
@@ -558,22 +554,6 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                 <option value="9:16">Dikey (9:16 • Reels / Shorts / TikTok)</option>
                 <option value="16:9">Yatay (16:9 • YouTube / Sunum)</option>
                 <option value="1:1">Kare (1:1 • Instagram Akış)</option>
-              </select>
-              <ChevronDown size={14} />
-            </div>
-          </label>
-
-          <label className="select-field">
-            <span>Altyazı Stili (Captions)</span>
-            <div>
-              <select
-                value={captionStyle}
-                onChange={(e) => setCaptionStyle(e.target.value as "hormozi" | "minimal" | "banner" | "off")}
-              >
-                <option value="hormozi">🔥 Hormozi / Viral (Sarı Vurgulu, Kalın Kontur)</option>
-                <option value="minimal">✨ Minimal (Temiz Beyaz, Gölgeli)</option>
-                <option value="banner">⬛ Şerit Kutu (Koyu Yarı-Saydam Zemin)</option>
-                <option value="off">🚫 Altyazı Kapalı (Sadece Dış Ses)</option>
               </select>
               <ChevronDown size={14} />
             </div>

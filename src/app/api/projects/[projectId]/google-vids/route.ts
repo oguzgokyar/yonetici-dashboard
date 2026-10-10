@@ -102,7 +102,6 @@ export async function POST(request: Request, context: Context) {
       aspectRatio: storyboard.aspectRatio || "9:16",
       durationSeconds: storyboard.totalDurationSeconds || 30,
       visualMood: storyboard.visualMood || "cinematic_photoreal",
-      captionStyle: body.captionStyle || storyboard.captionStyle || "hormozi",
       narrativeTr: storyboard.narrativeTr,
       scenes: storyboard.scenes,
     };
