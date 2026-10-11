@@ -511,6 +511,79 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
         </section>
       )}
 
+      {/* 4.5 TikTok Tarayıcı Otomasyonu Doğrudan Kurulum & Giriş Paneli */}
+      <section className="panel" style={{ marginTop: "18px", border: "1px solid #fed7aa", background: "#fffaf5" }}>
+        <div className="panel-header" style={{ flexWrap: "wrap", gap: "8px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{ padding: "8px", borderRadius: "10px", background: "#ffedd5", color: "#ea580c" }}>
+              <Music2 size={20} />
+            </div>
+            <div>
+              <h3 style={{ color: "#9a3412" }}>TikTok Tarayıcı Otomasyonu (Doğrudan Web Yükleme)</h3>
+              <p>Postiz API kısıtlamalarını atlayarak TikTok Creator Studio web arayüzünden doğrudan herkese açık video paylaşır.</p>
+            </div>
+          </div>
+          <span
+            style={{
+              fontSize: "11px",
+              padding: "4px 10px",
+              borderRadius: "999px",
+              fontWeight: 700,
+              background: tiktokSession?.loggedIn ? "#dcfce7" : "#fee2e2",
+              color: tiktokSession?.loggedIn ? "#166534" : "#991b1b",
+            }}
+          >
+            {loadingTiktokSession ? "Kontrol ediliyor..." : tiktokSession?.loggedIn ? "✓ Oturum Açık & Yayına Hazır" : "Giriş Bekleniyor"}
+          </span>
+        </div>
+
+        <div style={{ padding: "16px 20px 20px" }}>
+          <p style={{ margin: "0 0 14px", fontSize: "12px", color: "#4b5563", lineHeight: 1.6 }}>
+            Bu yöntemle videolarınız TikTok Creator Studio üzerinden doğrudan gerçek bir kullanıcı gibi yüklenir.
+            İlk kurulum için aşağıdaki butona basıp açılan noVNC canlı masaüstü penceresinde TikTok hesabınıza <strong>bir kerelik giriş yapmanız</strong> yeterlidir.
+            Oturumunuz sunucuda kalıcı olarak saklanır.
+          </p>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={() => void handleToggleTiktokBrowser("start")}
+              disabled={startingTiktokBrowser}
+              className="button primary"
+              style={{ fontSize: "12px", height: "36px", padding: "0 18px", fontWeight: 700 }}
+            >
+              {startingTiktokBrowser ? "Tarayıcı Başlatılıyor..." : "🖥️ Tarayıcıyı Başlat & noVNC ile Giriş Yap"}
+            </button>
+
+            {tiktokSession?.novncUrl && (
+              <a
+                href={tiktokSession.novncUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="button secondary"
+                style={{ fontSize: "12px", height: "36px", padding: "0 14px" }}
+                title="Canlı masaüstü oturumu"
+              >
+                <ExternalLink size={14} />
+                noVNC Canlı Ekranı Aç ↗
+              </a>
+            )}
+
+            <button
+              type="button"
+              onClick={() => void loadTiktokSession()}
+              disabled={loadingTiktokSession}
+              className="button ghost"
+              style={{ fontSize: "12px", height: "36px", padding: "0 12px" }}
+              title="Oturum Durumunu Yenile"
+            >
+              <RefreshCw size={13} className={loadingTiktokSession ? "spin" : ""} />
+              <span>Durumu Denetle</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
       {/* 5. YouTube ve TikTok Bağlama Kılavuzu */}
       {!hasYoutube || !hasTiktok ? (
         <section className="panel" style={{ marginTop: "18px" }}>
