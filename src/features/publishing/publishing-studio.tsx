@@ -679,11 +679,26 @@ export function PublishingStudio({
     finally { setSavingHashtagSet(false); }
   }
 
-  async function deleteHashtagSet(id: string) {
-    const response = await fetch(`/api/projects/${projectId}/hashtag-sets/${id}`, { method: "DELETE" });
-    if (!response.ok) return;
-    setHashtagSets((prev) => prev.filter((set) => set.id !== id));
-    setSelectedHashtagSetIds((prev) => Object.fromEntries(Object.entries(prev).map(([key, ids]) => [key, ids.filter((item) => item !== id)])));
+  async function deleteHashtagSet(set: HashtagSet) {
+    if (!window.confirm(`"${set.name}" (${set.platform}) etiket kümesini silmek istediğinize emin misiniz?`)) {
+      return;
+    }
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${projectId}/hashtag-sets/${set.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.message || "Etiket kümesi silinemedi.");
+      }
+      setHashtagSets((prev) => prev.filter((item) => item.id !== set.id));
+      setSelectedHashtagSetIds((prev) =>
+        Object.fromEntries(Object.entries(prev).map(([key, ids]) => [key, ids.filter((item) => item !== set.id)]))
+      );
+      setSuccess("Etiket kümesi silindi.");
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   // Submit Publishing / Schedule
@@ -728,7 +743,7 @@ export function PublishingStudio({
         // Strip platform-inappropriate or random dev tags from YouTube
         hashtags = hashtags
           .split(/\s+/)
-          .filter((t) => !/^#(instagram|tiktok|facebook|dd\w+|studiotoylab)/i.test(t))
+          .filter((t) => !/^#(instagram|tiktok|facebook|dd[a-z0-9_-]{6,}|studiotoylab)/i.test(t))
           .join(" ");
       }
 
@@ -1451,7 +1466,7 @@ export function PublishingStudio({
                         return <button key={set.id} type="button" className={`hashtag-set-chip ${selected ? "active" : ""}`}
                           onClick={() => setSelectedHashtagSetIds((prev) => ({ ...prev, [set.platform]: selected ? (prev[set.platform] || []).filter((id) => id !== set.id) : [...(prev[set.platform] || []), set.id] }))}>
                           <span>{set.platform} · {set.name}</span><small>{set.hashtags.length}</small>
-                          <X size={11} onClick={(event) => { event.stopPropagation(); void deleteHashtagSet(set.id); }} />
+                          <X size={11} onClick={(event) => { event.stopPropagation(); void deleteHashtagSet(set); }} />
                         </button>;
                       })}
                     </div>

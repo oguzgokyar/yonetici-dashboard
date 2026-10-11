@@ -47,7 +47,7 @@ function invalidForPlatform(platform: SocialPlatform, hashtag: string) {
   const key = hashtag.replace(/^#/, "").toLocaleLowerCase("tr-TR");
   return (
     FOREIGN_PLATFORM_TAGS[platform].has(key) ||
-    /^dd[a-z0-9_-]+$/i.test(key) ||
+    /^dd[a-z0-9_-]{6,}$/i.test(key) ||
     key === "studiotoylab"
   );
 }

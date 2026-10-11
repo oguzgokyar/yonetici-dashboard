@@ -35,11 +35,19 @@ function getEnabledSetHashtags(projectId: string, platform: SocialPlatform, sele
 
 async function generatePlatformCopy(input: {
   platform: SocialPlatform;
+  postType: "post" | "reel" | "story";
   brand: Record<string, string>;
   brandConcept: Partial<BrandConcept>;
   style: CopyStyle;
   topicContext: string;
 }) {
+  const formatLabel =
+    input.postType === "reel"
+      ? "Dikey Kısa Video / Reels & Shorts (merak uyandırıcı kanca ve dinamik akış)"
+      : input.postType === "story"
+      ? "Hikâye / Story (çok kısa, samimi ve doğrudan etkileşime/DM'ye davet eden dil)"
+      : "Standart Akış Gönderisi / Feed Post (dengeli, okunabilir paragraflar ve net değer önerisi)";
+
   const prompt = `MARKA BİLGİLERİ:
 Marka Adı: ${input.brand.brandName || "Belirtilmedi"}
 Sektör: ${input.brand.industry || "Belirtilmedi"}
@@ -49,8 +57,9 @@ Varsayılan CTA: ${input.brand.defaultCta || "Detaylı bilgi için profil bağla
 ${brandConceptInstruction(input.brandConcept)}
 
 PLATFORM: ${input.platform}
+HEDEF FORMAT: ${formatLabel}
 PLATFORM KURALI: ${PLATFORM_COPY_RULES[input.platform]}
-İÇERİK STİLİ: ${styleDescriptions[input.style]}
+İÇERİK STİLİ: ${styleDescriptions[input.style] || styleDescriptions.sales}
 ${input.topicContext}
 
 GÖREV:
@@ -87,7 +96,10 @@ export async function POST(request: Request) {
     };
     if (!input.projectId) return Response.json({ ok: false, message: "Proje kimliği zorunludur." }, { status: 400 });
 
-    const requestedPlatforms = uniquePlatforms(input.platforms?.length ? input.platforms : [input.platform || "instagram"]);
+    const rawPlatforms = Array.isArray(input.platforms) && input.platforms.length
+      ? input.platforms
+      : [typeof input.platform === "string" && input.platform ? input.platform : "instagram"];
+    const requestedPlatforms = uniquePlatforms(rawPlatforms);
     if (!requestedPlatforms.length) return Response.json({ ok: false, message: "En az bir desteklenen platform seçilmelidir." }, { status: 400 });
 
     const database = getDatabase();
@@ -104,8 +116,18 @@ export async function POST(request: Request) {
       topicContext += `\nHam Başlık: "${input.stockVideoMeta.rawTitle || ""}"\nHam Açıklama: "${input.stockVideoMeta.rawDescription || ""}"\nKaynak Kelimeler: ${(input.stockVideoMeta.keywords || []).join(", ")}`;
     }
 
+    const postType: "post" | "reel" | "story" =
+      input.postType === "reel" || input.postType === "story" ? input.postType : "post";
+
     const settled = await Promise.allSettled(requestedPlatforms.map(async (platform) => {
-      const generated = await generatePlatformCopy({ platform, brand, brandConcept, style: input.style || "sales", topicContext });
+      const generated = await generatePlatformCopy({
+        platform,
+        postType,
+        brand,
+        brandConcept,
+        style: input.style || "sales",
+        topicContext,
+      });
       const aiHashtags = normalizeHashtagList(generated.hashtags || []);
       const setHashtags = input.includeHashtagSets
         ? getEnabledSetHashtags(input.projectId!, platform, input.selectedHashtagSetIds?.[platform])
@@ -135,7 +157,8 @@ export async function POST(request: Request) {
       if (result.status === "fulfilled") copies[platform] = result.value.copy;
       else errors[platform] = result.reason instanceof Error ? result.reason.message : "Metin üretilemedi.";
     });
-    return Response.json({ ok: Object.keys(copies).length > 0, copies, errors });
+    const firstCopy = copies[requestedPlatforms[0]];
+    return Response.json({ ok: Object.keys(copies).length > 0, copy: firstCopy, copies, errors });
   } catch (error) {
     return Response.json({ ok: false, message: error instanceof Error ? error.message : "Metin üretilemedi." }, { status: 500 });
   }
