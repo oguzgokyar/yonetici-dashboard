@@ -47,6 +47,7 @@ export async function processGoogleVidsJob(job: {
 
   const title = req.title || job.prompt || "Google Vids Video";
   const aspectRatio = req.aspectRatio || "9:16";
+  const narrativeMode = req.narrativeMode || "hybrid";
   const musicPrompt = (req.musicSpec as { musicPromptEn?: string })?.musicPromptEn || "";
   const scenes = req.scenes || [];
 
@@ -124,6 +125,7 @@ export async function processGoogleVidsJob(job: {
         "--title", title,
         "--aspect-ratio", aspectRatio,
         "--music-prompt", musicPrompt,
+        "--narrative-mode", narrativeMode,
         "--authuser", String(authuserIndex),
         "--profile-dir", profileDir,
         "--scenes-json", scenesTempFile,
@@ -238,7 +240,7 @@ export async function processGoogleVidsJob(job: {
 cat << 'EOF' > "${scenesTempFile}"
 ${JSON.stringify(scenes, null, 2)}
 EOF
-${downloadRefImageCmd}/opt/hermes/.venv/bin/python /opt/data/scripts/google_vids_automation.py --job-id "${job.id}" --title ${JSON.stringify(title)} --aspect-ratio "${aspectRatio}" --music-prompt ${JSON.stringify(musicPrompt)} --authuser ${authuserIndex} --profile-dir "${profileDir}" --scenes-json "${scenesTempFile}" --output-mp4 "/tmp/vids_out_${job.id}.mp4"${refImageFlag}
+${downloadRefImageCmd}/opt/hermes/.venv/bin/python /opt/data/scripts/google_vids_automation.py --job-id "${job.id}" --title ${JSON.stringify(title)} --aspect-ratio "${aspectRatio}" --music-prompt ${JSON.stringify(musicPrompt)} --narrative-mode "${narrativeMode}" --authuser ${authuserIndex} --profile-dir "${profileDir}" --scenes-json "${scenesTempFile}" --output-mp4 "/tmp/vids_out_${job.id}.mp4"${refImageFlag}
 
 Once "/tmp/vids_out_${job.id}.mp4" is generated:
 Parse the stdout log of the python script for '__PROGRESS__' line containing 'googleVidsUrl' to get the URL if available.

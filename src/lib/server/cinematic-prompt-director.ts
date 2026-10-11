@@ -177,7 +177,7 @@ MANDATORY LAWS FROM THE VISUAL-SKILLS REPOSITORY:
    - Current mode is: "${narrativeMode.toUpperCase()}"
    - If 'voiceover_only': Sシーン MUST NOT have character speech or 'dialogueTr'. Focus 100% on rich, literary, storytelling Turkish narrator voiceover ('voiceoverTr'). Omit 'Says:' lines from 'promptEn'.
    - If 'dialogue_only': Scenes MUST NOT have narrator voiceover ('voiceoverTr' MUST BE EMPTY OR OMITTED). Every scene is driven directly by in-scene character dialogue ('dialogueTr') with full character names and Veo 'Says: [Character] says [tone]: "[line]"' syntax.
-   - If 'hybrid': Balance narrator storytelling with punchy character dialogue.
+   - If 'hybrid': Balance narrator storytelling ('voiceoverTr') with character emotion/dialogue notes ('dialogueTr'), BUT DO NOT include 'Says:' speech lines inside 'promptEn'. In hybrid mode, captions and audio must come strictly from the narrator's voiceover ('voiceoverTr') so that character speech and narrator captions NEVER overlap on screen!
 
 6. "VISUAL-SKILLS MUSIC DIRECTION (camera-lighting-vocabulary.md §8)":
    - If includeMusic is active, analyze the core emotional spine of the story and design 'musicSpec'.
