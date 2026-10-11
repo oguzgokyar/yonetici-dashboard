@@ -9,7 +9,8 @@ export type CinematicVisualMood =
   | "documentary_nature"
   | "retro_vintage_80s"
   | "minimal_commercial"
-  | "stylized_3d";
+  | "stylized_3d"
+  | "diy_craft_macro";
 
 export interface CinematicVisualMoodMeta {
   key: CinematicVisualMood;
@@ -76,6 +77,14 @@ export const CINEMATIC_VISUAL_MOODS: Record<CinematicVisualMood, CinematicVisual
     lightingInstruction: "Stylized three-point lighting, expressive rim light glow, vibrant soft bounce radiance.",
     lensInstruction: "Digital cinema camera with smooth virtual dolly tracking, clean depth separation.",
     colorGrading: "Lush vibrant color saturation, expressive lighting gradients, fairytale clarity.",
+  },
+  diy_craft_macro: {
+    key: "diy_craft_macro",
+    label: "Masaüstü DIY & Karton Zanaat (Crafty Makro)",
+    description: "Yakın plan masaüstü zanaat, net karton ve tutkal dokusu, tatmin edici mekanizma testi.",
+    lightingInstruction: "Focused warm tungsten task lamp, soft overhead daylight fill, crisp micro-shadows defining cardboard flutes and tactile edges.",
+    lensInstruction: "Shot on 50mm macro cinema lens, shallow depth of field, top-down 45-degree angle focusing sharply on artisan fingers, cutter guides and moving gears.",
+    colorGrading: "Warm inviting workshop grade, rich organic cardboard kraft browns, vibrant colorful accent pieces (caps, rubber bands, balloon), clean high micro-contrast.",
   },
 };
 

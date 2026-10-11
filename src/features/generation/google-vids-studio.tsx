@@ -32,7 +32,8 @@ type VisualMoodOption = {
     | "documentary_nature"
     | "retro_vintage_80s"
     | "minimal_commercial"
-    | "stylized_3d";
+    | "stylized_3d"
+    | "diy_craft_macro";
   label: string;
   desc: string;
 };
@@ -72,6 +73,11 @@ const VISUAL_MOOD_OPTIONS: VisualMoodOption[] = [
     key: "stylized_3d",
     label: "Animasyon & Stilize 3D",
     desc: "Zengin hacimsel ışık ve canlı animasyon paleti",
+  },
+  {
+    key: "diy_craft_macro",
+    label: "Masaüstü DIY & Karton Zanaat (Crafty Makro)",
+    desc: "Yakın plan masaüstü zanaat, karton dokusu ve mekanizma testi",
   },
 ];
 
