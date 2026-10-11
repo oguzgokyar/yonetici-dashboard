@@ -94,6 +94,45 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [tiktokSession, setTiktokSession] = useState<{ loggedIn?: boolean; novncUrl?: string } | null>(null);
+  const [loadingTiktokSession, setLoadingTiktokSession] = useState(false);
+  const [startingTiktokBrowser, setStartingTiktokBrowser] = useState(false);
+
+  async function loadTiktokSession() {
+    setLoadingTiktokSession(true);
+    try {
+      const res = await fetch("/api/system/tiktok/session");
+      if (res.ok) {
+        const d = await res.json();
+        setTiktokSession(d);
+      }
+    } catch {}
+    finally { setLoadingTiktokSession(false); }
+  }
+
+  async function handleToggleTiktokBrowser(action: "start" | "stop") {
+    setStartingTiktokBrowser(true);
+    try {
+      const res = await fetch("/api/system/tiktok/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const d = await res.json();
+      if (d.ok && action === "start" && d.novnc_url) {
+        window.open(d.novnc_url, "_blank");
+      }
+      await loadTiktokSession();
+    } catch (e) {
+      alert("İşlem başarısız: " + String(e));
+    } finally {
+      setStartingTiktokBrowser(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadTiktokSession();
+  }, []);
 
   async function copyToClipboard(text: string, key: string) {
     try {
@@ -793,6 +832,78 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
                   <ExternalLink size={13} />
                   TikTok Developers Portalı ↗
                 </a>
+
+                {/* TikTok Tarayıcı Doğrudan Yükleyici Kartı */}
+                <div
+                  style={{
+                    marginTop: "14px",
+                    padding: "12px",
+                    background: "#ffffff",
+                    borderRadius: "10px",
+                    border: "1px solid #fed7aa",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span style={{ fontSize: "12px", fontWeight: 700, color: "#9a3412" }}>
+                        TikTok Tarayıcı Otomasyonu (Doğrudan Web)
+                      </span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: "10px",
+                        padding: "2px 8px",
+                        borderRadius: "999px",
+                        fontWeight: 700,
+                        background: tiktokSession?.loggedIn ? "#dcfce7" : "#fee2e2",
+                        color: tiktokSession?.loggedIn ? "#166534" : "#991b1b",
+                      }}
+                    >
+                      {loadingTiktokSession ? "Kontrol ediliyor..." : tiktokSession?.loggedIn ? "✓ Oturum Açık" : "Giriş Gerekli"}
+                    </span>
+                  </div>
+
+                  <p style={{ margin: 0, fontSize: "11px", color: "#64748b", lineHeight: 1.4 }}>
+                    Postiz API kısıtlamalarını atlayarak TikTok Creator Studio web arayüzünden doğrudan herkese açık video paylaşır.
+                  </p>
+
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center", marginTop: "2px" }}>
+                    <button
+                      type="button"
+                      onClick={() => void handleToggleTiktokBrowser("start")}
+                      disabled={startingTiktokBrowser}
+                      className="button compact primary"
+                      style={{ fontSize: "11px", height: "30px", flex: 1 }}
+                    >
+                      {startingTiktokBrowser ? "Açılıyor..." : "🖥️ Tarayıcıyı Aç (Giriş Yap)"}
+                    </button>
+                    {tiktokSession?.novncUrl && (
+                      <a
+                        href={tiktokSession.novncUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="button compact secondary"
+                        style={{ fontSize: "11px", height: "30px" }}
+                        title="Canlı masaüstü oturumu"
+                      >
+                        noVNC ↗
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void loadTiktokSession()}
+                      disabled={loadingTiktokSession}
+                      className="button compact ghost"
+                      style={{ fontSize: "11px", height: "30px", padding: "0 8px" }}
+                      title="Yenile"
+                    >
+                      <RefreshCw size={12} className={loadingTiktokSession ? "spin" : ""} />
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
