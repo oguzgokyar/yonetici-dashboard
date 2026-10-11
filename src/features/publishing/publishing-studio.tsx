@@ -214,7 +214,7 @@ export function PublishingStudio({
   const [newSetName, setNewSetName] = useState("");
   const [newSetTags, setNewSetTags] = useState("");
   const [savingHashtagSet, setSavingHashtagSet] = useState(false);
-  const [tiktokUploadMethod, setTiktokUploadMethod] = useState<"browser" | "postiz">("browser");
+  const [tiktokUploadMethod, setTiktokUploadMethod] = useState<"browser" | "postiz">("postiz");
 
   // -------------------------------------------------------------
   // BULK PUBLISHING STATE
@@ -1179,7 +1179,14 @@ export function PublishingStudio({
 
       const resData = await response.json();
       if (!response.ok || !resData.ok) {
-        throw new Error(resData.message || "Toplu gönderi oluşturulamadı.");
+        const errorDetail = Array.isArray(resData.results)
+          ? resData.results
+              .filter((r: { success: boolean; error?: string }) => !r.success)
+              .map((r: { title: string; error?: string }) => `"${r.title}": ${r.error || "Bilinmeyen hata"}`)
+              .join("; ")
+          : "";
+        const baseMsg = resData.message || "Toplu gönderi oluşturulamadı.";
+        throw new Error(errorDetail ? `${baseMsg}\n\nDetay: ${errorDetail}` : baseMsg);
       }
 
       setSuccess(resData.message || `${bulkItems.length} içerik başarıyla paylaşıma eklendi.`);
@@ -1437,8 +1444,8 @@ export function PublishingStudio({
                 className="custom-select"
                 style={{ height: "24px", fontSize: "10.5px", padding: "0 6px", border: "none", background: "transparent", fontWeight: 700 }}
               >
-                <option value="browser">Tarayıcı (Herkese Açık)</option>
-                <option value="postiz">Postiz API (Taslak)</option>
+                <option value="postiz">Postiz API (Gelen Kutusu / Taslak)</option>
+                <option value="browser">Tarayıcı (TikTok Studio Doğrudan)</option>
               </select>
             </div>
           )}

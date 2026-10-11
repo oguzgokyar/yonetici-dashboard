@@ -58,6 +58,7 @@ export async function POST(request: Request, context: Context) {
   const dataDir = path.join(process.cwd(), ".data");
   const assetDir = path.join(dataDir, "assets");
   const videoDir = path.join(dataDir, "videos");
+  const videoRendersDir = path.join(dataDir, "video-renders");
 
   const results: Array<{
     success: boolean;
@@ -188,7 +189,12 @@ export async function POST(request: Request, context: Context) {
       let fileBuffer: Buffer | null = null;
       let filename = `asset-${Date.now()}`;
       let mimeType = item.contentType === "video" ? "video/mp4" : "image/png";
-      const candidateId = item.assetId?.trim() || "";
+      const uuidRegex = /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i;
+      let candidateId = item.assetId?.trim() || "";
+      if (!candidateId && item.mediaUrl) {
+        const match = item.mediaUrl.match(uuidRegex);
+        if (match) candidateId = match[0];
+      }
 
       if (candidateId) {
         // Try local asset first from .data/assets
@@ -216,11 +222,18 @@ export async function POST(request: Request, context: Context) {
         }
 
         if (!fileBuffer) {
-          const vidPath = path.join(videoDir, `${candidateId}.mp4`);
-          if (fs.existsSync(vidPath)) {
-            fileBuffer = fs.readFileSync(vidPath);
-            filename = `video-${candidateId}.mp4`;
-            mimeType = "video/mp4";
+          const candExt = candidateId.endsWith(".mp4") ? candidateId : `${candidateId}.mp4`;
+          for (const vPath of [
+            path.join(videoRendersDir, candExt),
+            path.join(videoDir, candExt),
+            path.join(dataDir, candExt),
+          ]) {
+            if (fs.existsSync(vPath)) {
+              fileBuffer = fs.readFileSync(vPath);
+              filename = `video-${candidateId}.mp4`;
+              mimeType = "video/mp4";
+              break;
+            }
           }
         }
 
@@ -247,8 +260,13 @@ export async function POST(request: Request, context: Context) {
       // Fallback: download remote mediaUrl
       if (!fileBuffer && item.mediaUrl) {
         if (item.mediaUrl.startsWith("/")) {
-          const localPath = path.join(process.cwd(), "public", item.mediaUrl.replace(/^\//, ""));
-          if (fs.existsSync(localPath)) fileBuffer = fs.readFileSync(localPath);
+          const directPublic = path.join(process.cwd(), "public", item.mediaUrl.replace(/^\//, ""));
+          const dataDirPublic = path.join(dataDir, item.mediaUrl.replace(/^\//, ""));
+          if (fs.existsSync(directPublic)) {
+            fileBuffer = fs.readFileSync(directPublic);
+          } else if (fs.existsSync(dataDirPublic)) {
+            fileBuffer = fs.readFileSync(dataDirPublic);
+          }
         } else if (item.mediaUrl.startsWith("http")) {
           const res = await fetch(item.mediaUrl);
           if (res.ok) {
@@ -309,6 +327,9 @@ export async function POST(request: Request, context: Context) {
             try { fs.unlinkSync(tmpVideoPath); } catch {}
 
             if (!browserRes.ok) {
+              if (browserRes.need_login) {
+                throw new Error("TikTok tarayıcı oturumu kapalı! Lütfen Hesaplar sayfasından TikTok girişini tamamlayın.");
+              }
               throw new Error(browserRes.error || "TikTok tarayıcı yüklemesi başarısız oldu.");
             }
 
