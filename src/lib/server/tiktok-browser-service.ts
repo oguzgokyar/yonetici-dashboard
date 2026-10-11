@@ -28,7 +28,7 @@ export async function checkTikTokBrowserSession(): Promise<{ ok: boolean; logged
 
     for (const bUrl of bridgeUrls) {
       try {
-        const res = await fetch(bUrl, { signal: AbortSignal.timeout(2500) });
+        const res = await fetch(bUrl, { signal: AbortSignal.timeout(15000) });
         if (res.ok) {
           const data = (await res.json()) as { ok?: boolean; logged_in?: boolean };
           if (data.ok && typeof data.logged_in === "boolean") {
