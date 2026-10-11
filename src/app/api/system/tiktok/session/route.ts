@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
-const PYTHON_PATH = "/opt/hermes/.venv/bin/python";
+const PYTHON_PATH = "/opt/data/crawl4ai_test/.venv/bin/python";
 const MANAGER_PATH = "/opt/data/scripts/tiktok_browser_manager.py";
 
 export const runtime = "nodejs";

@@ -943,6 +943,29 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
                     Postiz API kısıtlamalarını atlayarak TikTok Creator Studio web arayüzünden doğrudan herkese açık video paylaşır.
                   </p>
 
+                  {/* 1. Projeye Bağlı Hesap Durumu */}
+                  {data?.connected.some((a) => a.identifier.includes("tiktok")) && (
+                    <div
+                      style={{
+                        padding: "8px 12px",
+                        background: "#f0fdf4",
+                        border: "1px solid #bbf7d0",
+                        borderRadius: "8px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        fontSize: "11px",
+                        color: "#166534",
+                        fontWeight: 600,
+                      }}
+                    >
+                      <CheckCircle2 size={14} color="#16a34a" />
+                      <span>
+                        Projeye bağlı aktif TikTok hesabı: <strong>@{data.connected.find((a) => a.identifier.includes("tiktok"))?.profile || "Bağlı"}</strong>
+                      </span>
+                    </div>
+                  )}
+
                   <div style={{ display: "flex", gap: "6px", alignItems: "center", marginTop: "2px" }}>
                     <button
                       type="button"

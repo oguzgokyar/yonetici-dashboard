@@ -6,7 +6,7 @@ import fs from "node:fs";
 const execFileAsync = promisify(execFile);
 
 const SCRIPT_PATH = "/opt/data/scripts/tiktok_browser_uploader.py";
-const PYTHON_PATH = "/opt/hermes/.venv/bin/python";
+const PYTHON_PATH = "/opt/data/crawl4ai_test/.venv/bin/python";
 
 export type TikTokBrowserUploadResult = {
   ok: boolean;
@@ -19,12 +19,32 @@ export type TikTokBrowserUploadResult = {
 
 export async function checkTikTokBrowserSession(): Promise<{ ok: boolean; logged_in: boolean; error?: string }> {
   try {
+    // 1. Host :8080 köprüsü üzerinden açık olan CDP oturumunu kontrol et
+    const bridgeUrls = [
+      "http://10.0.1.1:8080/api/internal/tiktok/session",
+      "http://127.0.0.1:8080/api/internal/tiktok/session",
+      "http://10.0.1.8:8080/api/internal/tiktok/session",
+    ];
+
+    for (const bUrl of bridgeUrls) {
+      try {
+        const res = await fetch(bUrl, { signal: AbortSignal.timeout(2500) });
+        if (res.ok) {
+          const data = (await res.json()) as { ok?: boolean; logged_in?: boolean };
+          if (data.ok && typeof data.logged_in === "boolean") {
+            return { ok: true, logged_in: data.logged_in };
+          }
+        }
+      } catch {}
+    }
+
+    // 2. Fallback: Python scripti doğrudan çağır
     if (!fs.existsSync(SCRIPT_PATH)) {
       return { ok: false, logged_in: false, error: "TikTok yükleme scripti bulunamadı." };
     }
 
-    const { stdout } = await execFileAsync(PYTHON_PATH, [SCRIPT_PATH, "--video", "dummy", "--caption", "dummy", "--check-session"], {
-      timeout: 45_000,
+    const { stdout } = await execFileAsync(PYTHON_PATH, [SCRIPT_PATH, "--check-session"], {
+      timeout: 15_000,
     });
 
     const parsed = JSON.parse(stdout.trim());
