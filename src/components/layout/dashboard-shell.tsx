@@ -6,11 +6,12 @@ import { useState, useEffect } from "react";
 import {
   Bell, ChevronDown, Clapperboard, Compass, Film, FolderKanban, Image, LayoutDashboard, PanelsTopLeft,
   Menu, Palette, PanelLeftClose, PanelLeftOpen, Pin, Plus, Search, Send, Settings, Share2, Sparkles, X,
-  Layers,
-} from "lucide-react";
-import { useProjects } from "@/features/projects/projects-context";
-import { ProductionQueueDrawer } from "./production-queue-drawer";
-import { QuickIdeasDrawer } from "./quick-ideas-drawer";
+ Layers, Bot,
+ } from "lucide-react";
+ import { useProjects } from "@/features/projects/projects-context";
+ import { ProductionQueueDrawer } from "./production-queue-drawer";
+ import { QuickIdeasDrawer } from "./quick-ideas-drawer";
+ import { AiAssistantDrawer } from "./ai-assistant-drawer";
 
 type DashboardShellProps = {
   children: React.ReactNode;
@@ -42,6 +43,7 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
   const [activeQueueCount, setActiveQueueCount] = useState(0);
   const [ideasDrawerOpen, setIdeasDrawerOpen] = useState(false);
   const [totalIdeasCount, setTotalIdeasCount] = useState(0);
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   useEffect(() => {
     function handleQueueUpdate(e: Event) {
@@ -122,7 +124,7 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
   );
 
   return (
-    <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
+    <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""} ${assistantOpen ? "assistant-open" : ""}`}>
       <aside className="sidebar desktop-sidebar">{sidebar}</aside>
       {mobileOpen && <><button className="mobile-overlay" onClick={() => setMobileOpen(false)} aria-label="Menüyü kapat" /><aside className="sidebar mobile-sidebar">{sidebar}</aside></>}
 
@@ -195,11 +197,29 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
               </button>
             )}
 
+            <button
+              type="button"
+              className={`icon-button queue-button ${assistantOpen ? "has-active-jobs" : ""}`}
+              style={assistantOpen ? { borderColor: "#6d5dfc", background: "#f3f0ff", color: "#6d5dfc" } : {}}
+              onClick={() => setAssistantOpen((prev) => !prev)}
+              title="AI Sistem Asistanı (Hermes)"
+              aria-label="AI sistem asistanını aç/kapat"
+            >
+              <Bot size={19} />
+            </button>
+
             <button className="icon-button notification-button"><Bell size={19} /><span /></button>
           </div>
         </header>
         <main className="content-area">{children}</main>
       </div>
+
+      {/* Right Docked AI System Assistant (Shrinks Page Width) */}
+      <AiAssistantDrawer
+        projectId={projectId}
+        isOpen={assistantOpen}
+        onClose={() => setAssistantOpen(false)}
+      />
 
       {/* Slide-over Production Queue Drawer */}
       <ProductionQueueDrawer

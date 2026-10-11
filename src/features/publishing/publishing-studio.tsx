@@ -161,7 +161,7 @@ export function PublishingStudio({
   const currentProject = getProject(projectId);
 
   // Main Page Navigation
-  const [mainTab, setMainTab] = useState<"composer" | "schedule">(
+  const [mainTab, setMainTab] = useState<"composer" | "bulk" | "schedule">(
     initialAssetId ? "composer" : "schedule"
   );
 
@@ -214,6 +214,27 @@ export function PublishingStudio({
   const [newSetName, setNewSetName] = useState("");
   const [newSetTags, setNewSetTags] = useState("");
   const [savingHashtagSet, setSavingHashtagSet] = useState(false);
+
+  // -------------------------------------------------------------
+  // BULK PUBLISHING STATE
+  // -------------------------------------------------------------
+  const [bulkSelectedAssets, setBulkSelectedAssets] = useState<RecentAsset[]>([]);
+  const [bulkScheduleMode, setBulkScheduleMode] = useState<"now" | "interval" | "daily_fixed" | "draft">("interval");
+  const [bulkIntervalHours, setBulkIntervalHours] = useState<number>(3);
+  const [bulkDailyTime, setBulkDailyTime] = useState<string>("18:00");
+  const [bulkStartDate, setBulkStartDate] = useState<string>("");
+  const [bulkItems, setBulkItems] = useState<Array<{
+    id: string;
+    asset: RecentAsset;
+    title: string;
+    caption: string;
+    hashtags: string;
+    scheduledAt: string;
+    isPrepared: boolean;
+  }>>([]);
+  const [bulkPreparing, setBulkPreparing] = useState(false);
+  const [bulkPrepareProgress, setBulkPrepareProgress] = useState<{ current: number; total: number } | null>(null);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
 
   // Live Preview Target
   const [previewIntegrationId, setPreviewIntegrationId] = useState<string>("");
@@ -577,7 +598,9 @@ export function PublishingStudio({
     loadRecentAssets(initialAssetId);
     // eslint-disable-next-line react-hooks/purity
     const d = new Date(Date.now() + 24 * 3600 * 1000);
-    setScheduledAt(toIstanbulDatetimeLocal(d));
+    const dStr = toIstanbulDatetimeLocal(d);
+    setScheduledAt(dStr);
+    setBulkStartDate(dStr);
 
     // Check for prefill from Strategy Studio
     try {
@@ -698,6 +721,272 @@ export function PublishingStudio({
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  // -------------------------------------------------------------
+  // BULK PUBLISHING HELPERS & HANDLERS
+  // -------------------------------------------------------------
+  function toggleBulkAssetSelection(asset: RecentAsset) {
+    setBulkSelectedAssets((prev) => {
+      const exists = prev.some((a) => a.id === asset.id);
+      if (exists) return prev.filter((a) => a.id !== asset.id);
+      return [...prev, asset];
+    });
+  }
+
+  function selectAllFilteredAssets() {
+    const filtered = recentAssets.filter((a) => {
+      if (mediaCategoryFilter === "all") return true;
+      if (mediaCategoryFilter === "image") return a.type === "image" && a.category !== "canva_package";
+      if (mediaCategoryFilter === "canva_package") return a.category === "canva_package";
+      if (mediaCategoryFilter === "video") return a.type === "video" && a.category !== "stock" && a.category !== "stock_render";
+      if (mediaCategoryFilter === "stock") return a.category === "stock" || a.category === "stock_render";
+      return true;
+    });
+    setBulkSelectedAssets((prev) => {
+      const map = new Map(prev.map((a) => [a.id, a]));
+      for (const item of filtered) map.set(item.id, item);
+      return Array.from(map.values());
+    });
+  }
+
+  function clearBulkSelection() {
+    setBulkSelectedAssets([]);
+    setBulkItems([]);
+  }
+
+  function calculateBulkItemTime(index: number, baseLocalStr: string): string {
+    if (bulkScheduleMode === "now" || bulkScheduleMode === "draft") {
+      return baseLocalStr;
+    }
+    try {
+      const baseDate = new Date(baseLocalStr.includes("T") ? baseLocalStr : `${baseLocalStr}T00:00:00`);
+      if (isNaN(baseDate.getTime())) return baseLocalStr;
+
+      if (bulkScheduleMode === "interval") {
+        const offsetMs = index * bulkIntervalHours * 3600 * 1000;
+        const targetDate = new Date(baseDate.getTime() + offsetMs);
+        return toIstanbulDatetimeLocal(targetDate);
+      }
+
+      if (bulkScheduleMode === "daily_fixed") {
+        const [hh, mm] = (bulkDailyTime || "18:00").split(":").map(Number);
+        const targetDate = new Date(baseDate);
+        targetDate.setDate(targetDate.getDate() + index);
+        targetDate.setHours(hh || 18, mm || 0, 0, 0);
+        return toIstanbulDatetimeLocal(targetDate);
+      }
+    } catch {
+      // fallback
+    }
+    return baseLocalStr;
+  }
+
+  async function prepareBulkPostsWithAi() {
+    if (bulkSelectedAssets.length === 0) {
+      setError("Lütfen önce toplu yayınlanacak en az bir medya seçin.");
+      return;
+    }
+    if (selectedIntegrationIds.length === 0) {
+      setError("Lütfen en az bir hedef sosyal medya hesabı seçin.");
+      return;
+    }
+
+    setBulkPreparing(true);
+    setError(null);
+    setSuccess(null);
+    setBulkPrepareProgress({ current: 0, total: bulkSelectedAssets.length });
+
+    const platformByIntegration: Record<string, HashtagSet["platform"]> = {};
+    for (const intId of selectedIntegrationIds) {
+      platformByIntegration[intId] = platformForAccount(accounts.find((a) => a.integrationId === intId));
+    }
+    const platforms = [...new Set(Object.values(platformByIntegration))];
+    if (!platforms.length) platforms.push("instagram");
+
+    const brandName = currentProject?.brand.brandName || currentProject?.name;
+    const initialList: typeof bulkItems = [];
+
+    try {
+      for (let i = 0; i < bulkSelectedAssets.length; i++) {
+        const asset = bulkSelectedAssets[i];
+        setBulkPrepareProgress({ current: i + 1, total: bulkSelectedAssets.length });
+
+        const fallbackTitle = asset.idea?.title || asset.sourceTopic || (asset.prompt ? asset.prompt.split("\n")[0].trim() : "");
+        const fallbackDesc = asset.idea?.concept || asset.sourceTopic || fallbackTitle;
+        const extracted = extractStockPublishingMetadata(asset.metadata, {
+          title: fallbackTitle,
+          topic: fallbackDesc,
+          brandName,
+        });
+
+        const rawTitle = extracted.title || fallbackTitle;
+        const rawDesc = extracted.description || fallbackDesc;
+        const rawKeywords = extracted.hashtags ? extracted.hashtags.split(/\s+/) : [];
+        const scheduledTime = calculateBulkItemTime(i, bulkStartDate || scheduledAt);
+
+        let genTitle = rawTitle;
+        let genCaption = rawDesc || rawTitle;
+        let genHashtags = extracted.hashtags || "";
+
+        try {
+          const aiRes = await fetch("/api/ai/posts/generate-copy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              projectId,
+              platforms,
+              postType: asset.type === "video" ? "reel" : "post",
+              style: aiStyle,
+              idea: asset.idea,
+              sourceTopic: rawTitle || rawDesc,
+              includeHashtagSets,
+              selectedHashtagSetIds,
+              stockVideoMeta:
+                rawTitle || rawDesc || rawKeywords.length > 0
+                  ? { rawTitle, rawDescription: rawDesc, keywords: Array.isArray(rawKeywords) ? rawKeywords : [] }
+                  : undefined,
+            }),
+          });
+
+          if (aiRes.ok) {
+            const aiData = await aiRes.json();
+            const copy = aiData.copies?.[platforms[0]] || aiData.copy;
+            if (copy) {
+              if (copy.title) genTitle = copy.title.slice(0, 100);
+              if (copy.caption) genCaption = copy.caption;
+              if (copy.hashtags) genHashtags = copy.hashtags;
+            }
+          }
+        } catch {
+          // AI isteğinde hata olursa ham meta ile devam etsin
+        }
+
+        initialList.push({
+          id: `bulk_${asset.id}_${Date.now()}_${i}`,
+          asset,
+          title: genTitle,
+          caption: genCaption,
+          hashtags: genHashtags,
+          scheduledAt: scheduledTime,
+          isPrepared: true,
+        });
+      }
+
+      setBulkItems(initialList);
+      setSuccess(`${initialList.length} içerik AI ile incelendi ve sağ panelde önizlemeye hazırlandı.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBulkPreparing(false);
+      setBulkPrepareProgress(null);
+    }
+  }
+
+  function updateBulkItem(id: string, field: "title" | "caption" | "hashtags" | "scheduledAt", value: string) {
+    setBulkItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+    );
+  }
+
+  function removeBulkItem(id: string) {
+    setBulkItems((prev) => prev.filter((item) => item.id !== id));
+  }
+
+  async function submitBulkPublish() {
+    if (bulkItems.length === 0) {
+      setError("Önce sol panelden 'Yayına Hazırla' butonuna basarak içerikleri önizlemeye ekleyin.");
+      return;
+    }
+    if (selectedIntegrationIds.length === 0) {
+      setError("Lütfen en az bir hedef sosyal medya hesabı seçin.");
+      return;
+    }
+
+    setBulkSubmitting(true);
+    setError(null);
+    setSuccess(null);
+
+    const payloadItems = bulkItems.map((item) => {
+      const isVideo = item.asset.type === "video" || item.asset.url.endsWith(".mp4");
+      const isPackage = item.asset.category === "canva_package";
+      const formattedDate =
+        bulkScheduleMode === "draft"
+          ? undefined
+          : bulkScheduleMode === "now"
+          ? undefined
+          : parseIstanbulDatetimeLocalToUtc(item.scheduledAt);
+
+      const targets = selectedIntegrationIds.map((intId) => {
+        const acc = accounts.find((a) => a.integrationId === intId);
+        const isYt = Boolean(acc?.identifier?.includes("youtube"));
+        const isTt = Boolean(acc?.identifier?.includes("tiktok"));
+
+        return {
+          integrationId: intId,
+          title: item.title,
+          caption: item.caption,
+          hashtags: item.hashtags,
+          postType: (isVideo ? "reel" : "post") as "post" | "reel" | "story",
+          scheduleType: bulkScheduleMode === "draft" ? "draft" : bulkScheduleMode === "now" ? "now" : "schedule",
+          scheduledAt: formattedDate,
+          youtubeSettings: isYt
+            ? {
+                title: item.title.slice(0, 100),
+                type: "public" as const,
+                selfDeclaredMadeForKids: "no" as const,
+                tags: item.hashtags
+                  ? item.hashtags.split(/\s+/).map((t) => t.replace(/^#+/, "").trim()).filter(Boolean).slice(0, 15)
+                  : undefined,
+              }
+            : undefined,
+          tiktokSettings: isTt
+            ? {
+                title: item.title.slice(0, 90),
+                content_posting_method: "DIRECT_POST" as const,
+                privacy_level: "SELF_ONLY" as const,
+                video_made_with_ai: true,
+              }
+            : undefined,
+        };
+      });
+
+      return {
+        title: item.title,
+        contentType: isVideo ? ("video" as const) : ("image" as const),
+        mediaUrl: item.asset.url,
+        assetId: !isPackage ? item.asset.id : undefined,
+        mediaPackageId: isPackage ? item.asset.packageId : undefined,
+        caption: item.caption,
+        hashtags: item.hashtags,
+        scheduleType: bulkScheduleMode === "draft" ? ("draft" as const) : bulkScheduleMode === "now" ? ("now" as const) : ("schedule" as const),
+        scheduledAt: formattedDate,
+        targets,
+      };
+    });
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}/posts/bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: payloadItems }),
+      });
+
+      const resData = await response.json();
+      if (!response.ok || !resData.ok) {
+        throw new Error(resData.message || "Toplu gönderi oluşturulamadı.");
+      }
+
+      setSuccess(resData.message || `${bulkItems.length} içerik başarıyla paylaşıma eklendi.`);
+      setBulkSelectedAssets([]);
+      setBulkItems([]);
+      await loadData();
+      setMainTab("schedule");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBulkSubmitting(false);
     }
   }
 
@@ -977,6 +1266,19 @@ export function PublishingStudio({
         >
           <Send size={15} />
           İçerik Yayınla
+        </button>
+        <button
+          type="button"
+          className={`publishing-tab-btn ${mainTab === "bulk" ? "active" : ""}`}
+          onClick={() => setMainTab("bulk")}
+        >
+          <Layers size={15} />
+          Toplu Yayınla
+          {bulkSelectedAssets.length > 0 && (
+            <span className="queue-indicator active" style={{ marginLeft: "4px" }}>
+              {bulkSelectedAssets.length}
+            </span>
+          )}
         </button>
         <button
           type="button"
@@ -1803,7 +2105,584 @@ export function PublishingStudio({
       )}
 
       {/* ------------------------------------------------------------- */}
-      {/* TAB 2: PAYLAŞIM PLANI (KANAL BAZLI GRID & LİSTE)              */}
+      {/* TAB 2: TOPLU YAYINLA (BULK COMPOSER + PREVIEW CARDS)          */}
+      {/* ------------------------------------------------------------- */}
+      {mainTab === "bulk" && (
+        <div className="composer-layout bulk-layout">
+          {/* Sol Kolon: Hedef Hesaplar, Çoklu Medya Seçimi, Zamanlama & Yayına Hazırla */}
+          <div className="composer-form-panel">
+            {/* 1. Hedef Platformlar */}
+            <div className="composer-section">
+              <div className="composer-section-title">
+                <span>1. Hedef Platformları Seçin</span>
+                <small style={{ color: "var(--muted)", fontSize: "11px" }}>
+                  {selectedIntegrationIds.length} kanal seçildi
+                </small>
+              </div>
+              <div className="channel-multi-select-grid">
+                {accounts.map((acc) => {
+                  const isSelected = selectedIntegrationIds.includes(acc.integrationId);
+                  const isYt = acc.identifier.includes("youtube");
+                  const isTt = acc.identifier.includes("tiktok");
+                  const isFb = acc.identifier.includes("facebook");
+                  const cleanHandle = (acc.profile || acc.name || "").replace(/^@+/, "");
+
+                  return (
+                    <button
+                      key={acc.id}
+                      type="button"
+                      onClick={() => toggleIntegrationSelection(acc.integrationId)}
+                      className={`channel-chip-btn ${isSelected ? "selected" : ""}`}
+                    >
+                      {acc.picture ? (
+                        <img src={acc.picture} alt="" className="channel-chip-avatar" />
+                      ) : (
+                        <div className="channel-chip-placeholder">
+                          {isYt ? (
+                            <Youtube size={12} color="#ff0000" />
+                          ) : isTt ? (
+                            <TikTokIcon size={12} color="#000000" />
+                          ) : isFb ? (
+                            <FacebookIcon size={12} />
+                          ) : (
+                            <Instagram size={12} color="#612bd3" />
+                          )}
+                        </div>
+                      )}
+                      <span style={{ fontWeight: 700 }}>
+                        {isYt ? "YouTube" : isTt ? "TikTok" : isFb ? "Facebook" : "Instagram"}:
+                      </span>
+                      <span>@{cleanHandle}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 2. Çoklu Medya / Kreatif Seçimi */}
+            <div className="composer-section">
+              <div className="composer-section-title">
+                <span>2. Medyaları Toplu Seçin</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <button
+                    type="button"
+                    onClick={selectAllFilteredAssets}
+                    className="button compact secondary"
+                    style={{ fontSize: "10px", height: "24px", padding: "0 8px" }}
+                  >
+                    Tümünü Seç
+                  </button>
+                  {bulkSelectedAssets.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearBulkSelection}
+                      className="button compact ghost"
+                      style={{ fontSize: "10px", height: "24px", padding: "0 6px", color: "var(--danger)" }}
+                    >
+                      Temizle ({bulkSelectedAssets.length})
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Filtre sekmeleri */}
+              <div className="composer-media-selector">
+                <div className="composer-media-tabs">
+                  <button
+                    type="button"
+                    className={`composer-media-tab-btn ${mediaCategoryFilter === "all" ? "active" : ""}`}
+                    onClick={() => { setMediaCategoryFilter("all"); setMediaPage(1); }}
+                  >
+                    Tümü ({recentAssets.length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`composer-media-tab-btn ${mediaCategoryFilter === "image" ? "active" : ""}`}
+                    onClick={() => { setMediaCategoryFilter("image"); setMediaPage(1); }}
+                  >
+                    Görseller
+                  </button>
+                  <button
+                    type="button"
+                    className={`composer-media-tab-btn ${mediaCategoryFilter === "canva_package" ? "active" : ""}`}
+                    onClick={() => { setMediaCategoryFilter("canva_package"); setMediaPage(1); }}
+                  >
+                    Canva Paketleri
+                  </button>
+                  <button
+                    type="button"
+                    className={`composer-media-tab-btn ${mediaCategoryFilter === "video" ? "active" : ""}`}
+                    onClick={() => { setMediaCategoryFilter("video"); setMediaPage(1); }}
+                  >
+                    Videolar
+                  </button>
+                  <button
+                    type="button"
+                    className={`composer-media-tab-btn ${mediaCategoryFilter === "stock" ? "active" : ""}`}
+                    onClick={() => { setMediaCategoryFilter("stock"); setMediaPage(1); }}
+                  >
+                    Stok
+                  </button>
+                </div>
+
+                {/* Medya gridi (Checkbox'lı) */}
+                <div className="composer-media-grid" style={{ maxHeight: "240px", overflowY: "auto", padding: "4px" }}>
+                  {recentAssets
+                    .filter((a) => {
+                      if (mediaCategoryFilter === "all") return true;
+                      if (mediaCategoryFilter === "image") return a.type === "image" && a.category !== "canva_package";
+                      if (mediaCategoryFilter === "canva_package") return a.category === "canva_package";
+                      if (mediaCategoryFilter === "video") return a.type === "video" && a.category !== "stock" && a.category !== "stock_render";
+                      if (mediaCategoryFilter === "stock") return a.category === "stock" || a.category === "stock_render";
+                      return true;
+                    })
+                    .slice((mediaPage - 1) * MEDIA_PER_PAGE, mediaPage * MEDIA_PER_PAGE)
+                    .map((asset) => {
+                      const isSelected = bulkSelectedAssets.some((a) => a.id === asset.id);
+                      return (
+                        <div
+                          key={asset.id}
+                          onClick={() => toggleBulkAssetSelection(asset)}
+                          className={`composer-media-item ${isSelected ? "selected" : ""}`}
+                          style={{
+                            position: "relative",
+                            cursor: "pointer",
+                            borderColor: isSelected ? "var(--primary)" : undefined,
+                            boxShadow: isSelected ? "0 0 0 2px var(--primary)" : undefined,
+                          }}
+                        >
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: "6px",
+                              left: "6px",
+                              zIndex: 2,
+                              background: isSelected ? "var(--primary)" : "rgba(255,255,255,0.85)",
+                              color: isSelected ? "white" : "#64748b",
+                              borderRadius: "4px",
+                              width: "18px",
+                              height: "18px",
+                              display: "grid",
+                              placeItems: "center",
+                              fontSize: "11px",
+                              fontWeight: 700,
+                            }}
+                          >
+                            {isSelected ? "✓" : ""}
+                          </div>
+                          <img src={asset.thumbnailUrl || asset.url} alt="" loading="lazy" />
+                          <div className="composer-media-badge">
+                            {asset.category === "canva_package"
+                              ? `Canva (${asset.itemCount || 1}s)`
+                              : asset.type === "video"
+                              ? "Video"
+                              : "Görsel"}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Toplu Paylaşım Zamanlama Modu */}
+            <div className="composer-section">
+              <div className="composer-section-title">
+                <span>3. Toplu Zamanlama &amp; Yayılım Kuralı</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px" }}>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "8px 10px",
+                    borderRadius: "8px",
+                    border: "1px solid",
+                    borderColor: bulkScheduleMode === "interval" ? "var(--primary)" : "#e2e8f0",
+                    background: bulkScheduleMode === "interval" ? "#f5f3ff" : "white",
+                    cursor: "pointer",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="bulkScheduleMode"
+                    checked={bulkScheduleMode === "interval"}
+                    onChange={() => setBulkScheduleMode("interval")}
+                  />
+                  <span>Saat Aralığı ile Yay</span>
+                </label>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "8px 10px",
+                    borderRadius: "8px",
+                    border: "1px solid",
+                    borderColor: bulkScheduleMode === "daily_fixed" ? "var(--primary)" : "#e2e8f0",
+                    background: bulkScheduleMode === "daily_fixed" ? "#f5f3ff" : "white",
+                    cursor: "pointer",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="bulkScheduleMode"
+                    checked={bulkScheduleMode === "daily_fixed"}
+                    onChange={() => setBulkScheduleMode("daily_fixed")}
+                  />
+                  <span>Günde 1 (Sabit Saat)</span>
+                </label>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "8px 10px",
+                    borderRadius: "8px",
+                    border: "1px solid",
+                    borderColor: bulkScheduleMode === "now" ? "var(--primary)" : "#e2e8f0",
+                    background: bulkScheduleMode === "now" ? "#f5f3ff" : "white",
+                    cursor: "pointer",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="bulkScheduleMode"
+                    checked={bulkScheduleMode === "now"}
+                    onChange={() => setBulkScheduleMode("now")}
+                  />
+                  <span>Hepsini Şimdi Yayınla</span>
+                </label>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "8px 10px",
+                    borderRadius: "8px",
+                    border: "1px solid",
+                    borderColor: bulkScheduleMode === "draft" ? "var(--primary)" : "#e2e8f0",
+                    background: bulkScheduleMode === "draft" ? "#f5f3ff" : "white",
+                    cursor: "pointer",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="bulkScheduleMode"
+                    checked={bulkScheduleMode === "draft"}
+                    onChange={() => setBulkScheduleMode("draft")}
+                  />
+                  <span>Taslak Olarak Beklet</span>
+                </label>
+              </div>
+
+              {/* Ek Zaman Ayarları */}
+              {(bulkScheduleMode === "interval" || bulkScheduleMode === "daily_fixed") && (
+                <div style={{ display: "flex", gap: "10px", alignItems: "center", marginTop: "4px" }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: "10.5px", color: "var(--muted)", display: "block", marginBottom: "3px" }}>
+                      Başlangıç Tarihi:
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={bulkStartDate}
+                      onChange={(e) => setBulkStartDate(e.target.value)}
+                      className="custom-input"
+                      style={{ height: "32px", fontSize: "11px" }}
+                    />
+                  </div>
+                  {bulkScheduleMode === "interval" ? (
+                    <div style={{ width: "120px" }}>
+                      <label style={{ fontSize: "10.5px", color: "var(--muted)", display: "block", marginBottom: "3px" }}>
+                        Aralık (Saat):
+                      </label>
+                      <select
+                        value={bulkIntervalHours}
+                        onChange={(e) => setBulkIntervalHours(Number(e.target.value))}
+                        className="custom-select"
+                        style={{ height: "32px", fontSize: "11px" }}
+                      >
+                        <option value={1}>1 saatte bir</option>
+                        <option value={2}>2 saatte bir</option>
+                        <option value={3}>3 saatte bir</option>
+                        <option value={4}>4 saatte bir</option>
+                        <option value={6}>6 saatte bir</option>
+                        <option value={12}>12 saatte bir</option>
+                        <option value={24}>24 saatte bir</option>
+                      </select>
+                    </div>
+                  ) : (
+                    <div style={{ width: "120px" }}>
+                      <label style={{ fontSize: "10.5px", color: "var(--muted)", display: "block", marginBottom: "3px" }}>
+                        Sabit Saat:
+                      </label>
+                      <input
+                        type="time"
+                        value={bulkDailyTime}
+                        onChange={(e) => setBulkDailyTime(e.target.value)}
+                        className="custom-input"
+                        style={{ height: "32px", fontSize: "11px" }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 4. AI Stili & Hazır Etiketler */}
+            <div className="composer-section">
+              <div className="composer-section-title">
+                <span>4. Metin Stili &amp; Etiketler</span>
+              </div>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <select
+                  value={aiStyle}
+                  onChange={(e) => setAiStyle(e.target.value as "sales" | "story" | "educational" | "punchy")}
+                  className="custom-select"
+                  style={{ height: "32px", fontSize: "11px", flex: 1 }}
+                >
+                  <option value="sales">Satış &amp; Dönüşüm Odaklı</option>
+                  <option value="story">Hikâye &amp; Samimi</option>
+                  <option value="educational">Eğitici &amp; Değer Odaklı</option>
+                  <option value="punchy">Vurucu &amp; Kısa</option>
+                </select>
+                <label className="hashtag-set-toggle" style={{ fontSize: "10.5px" }}>
+                  <input
+                    type="checkbox"
+                    checked={includeHashtagSets}
+                    onChange={(e) => setIncludeHashtagSets(e.target.checked)}
+                  />
+                  <span>Kayıtlı Etiket Kümeleri</span>
+                </label>
+              </div>
+            </div>
+
+            {/* AKSİYON 1: YAYINA HAZIRLA BUTONU */}
+            <div style={{ marginTop: "6px" }}>
+              <button
+                type="button"
+                onClick={() => void prepareBulkPostsWithAi()}
+                disabled={bulkPreparing || bulkSelectedAssets.length === 0}
+                className="button primary"
+                style={{ width: "100%", height: "42px", fontSize: "13px", fontWeight: 700 }}
+              >
+                {bulkPreparing ? (
+                  <>
+                    <LoaderCircle size={16} className="spin" />
+                    <span>
+                      AI ile Hazırlanıyor... ({bulkPrepareProgress?.current || 0}/{bulkPrepareProgress?.total || 0})
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={16} />
+                    <span>✨ Yayına Hazırla ({bulkSelectedAssets.length} Medya)</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Sağ Kolon: Toplu Önizleme & Düzenleme Kartları & Onayla Butonu */}
+          <div className="composer-preview-column" style={{ minWidth: 0 }}>
+            <div
+              style={{
+                background: "white",
+                border: "1px solid var(--border)",
+                borderRadius: "18px",
+                padding: "20px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "16px",
+                boxShadow: "0 4px 18px rgba(36, 37, 61, 0.03)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                <div>
+                  <h3 style={{ margin: 0, font: "700 15px 'Manrope'", color: "var(--text)" }}>
+                    Toplu Paylaşım Önizleme &amp; Revize
+                  </h3>
+                  <small style={{ color: "var(--muted)", fontSize: "11px" }}>
+                    {bulkItems.length > 0
+                      ? `${bulkItems.length} içerik hazırlandı. Metinleri kontrol edin, düzenleyin ve onaylayın.`
+                      : "Sol panelden medyaları seçip 'Yayına Hazırla' butonuna basın."}
+                  </small>
+                </div>
+
+                {bulkItems.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => void submitBulkPublish()}
+                    disabled={bulkSubmitting}
+                    className="button primary"
+                    style={{ height: "36px", padding: "0 16px", fontSize: "12px", fontWeight: 700 }}
+                  >
+                    {bulkSubmitting ? (
+                      <>
+                        <LoaderCircle size={14} className="spin" />
+                        <span>Paylaşılıyor...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send size={14} />
+                        <span>🚀 Onayla ve Paylaşıma Gönder ({bulkItems.length})</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {/* Boş Durum */}
+              {bulkItems.length === 0 && (
+                <div
+                  style={{
+                    padding: "48px 24px",
+                    textAlign: "center",
+                    border: "1px dashed #cbd5e1",
+                    borderRadius: "12px",
+                    background: "#f8fafc",
+                    color: "var(--muted)",
+                  }}
+                >
+                  <Layers size={32} style={{ margin: "0 auto 10px", opacity: 0.5 }} />
+                  <p style={{ margin: 0, fontSize: "13px", fontWeight: 600 }}>Henüz yayına hazırlanan içerik yok</p>
+                  <small style={{ fontSize: "11px", display: "block", marginTop: "4px" }}>
+                    Sol panelden paylaşılacak medyaları seçip <strong>"Yayına Hazırla"</strong> butonuna basarak AI revizesini başlatın.
+                  </small>
+                </div>
+              )}
+
+              {/* Hazırlanan Kartlar Listesi */}
+              {bulkItems.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxHeight: "680px", overflowY: "auto", paddingRight: "4px" }}>
+                  {bulkItems.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        border: "1px solid #e2e8f0",
+                        borderRadius: "12px",
+                        padding: "12px 14px",
+                        background: "#fafafa",
+                        display: "flex",
+                        gap: "12px",
+                        alignItems: "flex-start",
+                        position: "relative",
+                      }}
+                    >
+                      {/* Sıra ve Çıkar butonu */}
+                      <button
+                        type="button"
+                        onClick={() => removeBulkItem(item.id)}
+                        title="Bu içeriği toplu listeden çıkar"
+                        style={{
+                          position: "absolute",
+                          top: "8px",
+                          right: "8px",
+                          background: "white",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: "6px",
+                          width: "22px",
+                          height: "22px",
+                          display: "grid",
+                          placeItems: "center",
+                          cursor: "pointer",
+                          color: "#94a3b8",
+                        }}
+                      >
+                        <X size={12} />
+                      </button>
+
+                      {/* Medya Küçük Resmi */}
+                      <div
+                        style={{
+                          width: "80px",
+                          height: "90px",
+                          borderRadius: "8px",
+                          overflow: "hidden",
+                          background: "#000",
+                          flexShrink: 0,
+                          position: "relative",
+                        }}
+                      >
+                        <img
+                          src={item.asset.thumbnailUrl || item.asset.url}
+                          alt=""
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        />
+                        <span
+                          style={{
+                            position: "absolute",
+                            bottom: "3px",
+                            left: "3px",
+                            background: "rgba(0,0,0,0.65)",
+                            color: "white",
+                            fontSize: "9px",
+                            padding: "1px 4px",
+                            borderRadius: "3px",
+                          }}
+                        >
+                          #{idx + 1}
+                        </span>
+                      </div>
+
+                      {/* Alanlar: Başlık, Açıklama, Etiketler, Tarih */}
+                      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <div style={{ display: "flex", gap: "8px", alignItems: "center", paddingRight: "26px" }}>
+                          <input
+                            type="text"
+                            value={item.title}
+                            onChange={(e) => updateBulkItem(item.id, "title", e.target.value)}
+                            placeholder="Başlık..."
+                            className="custom-input"
+                            style={{ height: "28px", fontSize: "11px", fontWeight: 700, flex: 1 }}
+                          />
+                          <input
+                            type="datetime-local"
+                            value={item.scheduledAt}
+                            onChange={(e) => updateBulkItem(item.id, "scheduledAt", e.target.value)}
+                            className="custom-input"
+                            style={{ height: "28px", fontSize: "10px", width: "160px" }}
+                          />
+                        </div>
+
+                        <textarea
+                          rows={2}
+                          value={item.caption}
+                          onChange={(e) => updateBulkItem(item.id, "caption", e.target.value)}
+                          placeholder="Açıklama / Metin..."
+                          className="custom-input"
+                          style={{ fontSize: "11px", resize: "vertical", padding: "6px 8px" }}
+                        />
+
+                        <input
+                          type="text"
+                          value={item.hashtags}
+                          onChange={(e) => updateBulkItem(item.id, "hashtags", e.target.value)}
+                          placeholder="#etiketler..."
+                          className="custom-input"
+                          style={{ height: "26px", fontSize: "10.5px", color: "var(--primary)" }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* TAB 3: PAYLAŞIM PLANI (KANAL BAZLI GRID & LİSTE)              */}
       {/* ------------------------------------------------------------- */}
       {mainTab === "schedule" && (
         <div>
