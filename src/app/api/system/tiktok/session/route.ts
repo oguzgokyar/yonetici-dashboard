@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const sessionStatus = await checkTikTokBrowserSession();
-  const novncUrl = "http://43.131.47.253:8080/novnc/vnc_auto.html?path=novnc/websockify%3Fservice%3Dtiktok";
+  const novncUrl = "http://43.131.47.253:8080/novnc/vnc.html?autoconnect=true&reconnect=true&path=novnc/websockify%3Fservice%3Dtiktok";
 
   return Response.json({
     ok: true,
