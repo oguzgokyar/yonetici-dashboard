@@ -31,11 +31,61 @@ import {
 import type { LucideIcon } from "lucide-react";
 import {
   type ColumnType,
-  type StrategyOverview,
-  type StrategyIdea,
   type IdeaType,
   IDEA_TYPE_LABELS,
-} from "@/lib/server/strategy-generator";
+} from "@/lib/strategy-constants";
+
+type StrategyOverview = {
+  brandIdentity: {
+    tone: string;
+    valueProposition: string;
+    positioning: string;
+    keyMessaging: string;
+  };
+  competitorAnalysis: {
+    contentGaps: string[];
+    viralPatternsToAdapt: string[];
+    differentiationAngle: string;
+    liveOutlierCount?: number;
+    liveOutlierSummary?: string;
+  };
+  audienceVoc: {
+    targetPersona: string;
+    painPoints: string[];
+    frequentQuestions: string[];
+    winningHooks: string[];
+  };
+  growthStrategy: {
+    primaryPillars: string[];
+    weeklyPostingPlan: string;
+    channelPriorities: string[];
+    conversionFunnel: string;
+    hashtagBank?: {
+      broad: string[];
+      niche: string[];
+      brand: string[];
+    };
+    dailySchedule?: Array<{
+      day: string;
+      format: string;
+      focus: string;
+    }>;
+  };
+};
+
+type StrategyIdea = {
+  id?: string;
+  columnType: ColumnType;
+  title: string;
+  hook: string;
+  description: string;
+  structure: string[];
+  targetChannel: string;
+  ideaType?: IdeaType | string;
+  skillSource?: string;
+  status?: "suggested" | "hidden";
+  createdAt?: string;
+};
 
 type ColumnData = {
   suggested: StrategyIdea[];

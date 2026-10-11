@@ -20,7 +20,21 @@ import {
   Compass,
   Plus,
 } from "lucide-react";
-import { type ColumnType, type StrategyIdea, IDEA_TYPE_LABELS } from "@/lib/server/strategy-generator";
+import { type ColumnType, IDEA_TYPE_LABELS } from "@/lib/strategy-constants";
+
+type StrategyIdea = {
+  id?: string;
+  columnType: ColumnType;
+  title: string;
+  hook: string;
+  description: string;
+  structure: string[];
+  targetChannel: string;
+  ideaType?: string;
+  skillSource?: string;
+  status?: "suggested" | "hidden";
+  createdAt?: string;
+};
 
 type ColumnData = {
   suggested: StrategyIdea[];
