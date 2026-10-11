@@ -135,6 +135,13 @@ export async function POST(request: Request, context: Context) {
             });
 
             const createdPostId = postizResult[0]?.postId || "";
+            const finalStatus =
+              targetScheduleType === "draft"
+                ? "draft"
+                : targetScheduleType === "now"
+                ? "published"
+                : "scheduled";
+
             database
               .prepare(`
                 INSERT INTO content_posts (
@@ -151,7 +158,7 @@ export async function POST(request: Request, context: Context) {
                 postizMediaList[0]?.path || "",
                 targetCaption,
                 targetHashtags,
-                targetScheduleType === "schedule" ? "scheduled" : "published",
+                finalStatus,
                 targetScheduleType,
                 targetScheduledAt || null,
                 target.integrationId,
@@ -182,14 +189,28 @@ export async function POST(request: Request, context: Context) {
       const candidateId = item.assetId?.trim() || "";
 
       if (candidateId) {
-        // Try local asset first
-        const assetRow = database
-          .prepare("SELECT * FROM assets WHERE id = ?")
-          .get(candidateId) as { file_path?: string; mime_type?: string } | undefined;
-        if (assetRow?.file_path && fs.existsSync(assetRow.file_path)) {
-          fileBuffer = fs.readFileSync(assetRow.file_path);
-          filename = path.basename(assetRow.file_path);
-          mimeType = assetRow.mime_type || "image/png";
+        // Try local asset first from .data/assets
+        const metaPath = path.join(assetDir, `${candidateId}.json`);
+        if (fs.existsSync(metaPath)) {
+          try {
+            const meta = JSON.parse(fs.readFileSync(metaPath, "utf8")) as { mimeType?: string; extension?: string };
+            const ext = meta.extension || "png";
+            const imgPath = path.join(assetDir, `${candidateId}.${ext}`);
+            if (fs.existsSync(imgPath)) {
+              fileBuffer = fs.readFileSync(imgPath);
+              filename = `creative-${candidateId}.${ext}`;
+              mimeType = meta.mimeType || (ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "image/png");
+            }
+          } catch {}
+        }
+
+        if (!fileBuffer) {
+          const directImg = path.join(assetDir, `${candidateId}.png`);
+          if (fs.existsSync(directImg)) {
+            fileBuffer = fs.readFileSync(directImg);
+            filename = `creative-${candidateId}.png`;
+            mimeType = "image/png";
+          }
         }
 
         if (!fileBuffer) {
@@ -287,6 +308,13 @@ export async function POST(request: Request, context: Context) {
           });
 
           const createdPostId = postizResult[0]?.postId || "";
+          const finalStatus =
+            targetScheduleType === "draft"
+              ? "draft"
+              : targetScheduleType === "now"
+              ? "published"
+              : "scheduled";
+
           database
             .prepare(`
               INSERT INTO content_posts (
@@ -304,7 +332,7 @@ export async function POST(request: Request, context: Context) {
               postizMedia.path,
               targetCaption,
               targetHashtags,
-              targetScheduleType === "schedule" ? "scheduled" : "published",
+              finalStatus,
               targetScheduleType,
               targetScheduledAt || null,
               target.integrationId,

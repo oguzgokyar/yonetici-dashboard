@@ -2,7 +2,12 @@ import { completeText, parseJsonResponse } from "@/lib/server/cliproxy-text";
 import { getDatabase } from "@/lib/server/database";
 import { brandConceptInstruction, type BrandConcept } from "@/lib/brand-concept";
 import { mergePlatformHashtags, normalizeHashtagList, type SocialPlatform } from "@/lib/social/hashtag-policy";
-import { PLATFORM_COPY_RULES, uniquePlatforms } from "@/lib/social/platform-copy-rules";
+import {
+  PLATFORM_COPY_RULES,
+  getPlatformFormatRule,
+  uniquePlatforms,
+  type ContentFormatKind,
+} from "@/lib/social/platform-copy-rules";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -35,18 +40,14 @@ function getEnabledSetHashtags(projectId: string, platform: SocialPlatform, sele
 
 async function generatePlatformCopy(input: {
   platform: SocialPlatform;
-  postType: "post" | "reel" | "story";
+  format: ContentFormatKind;
+  itemCount?: number;
   brand: Record<string, string>;
   brandConcept: Partial<BrandConcept>;
   style: CopyStyle;
   topicContext: string;
 }) {
-  const formatLabel =
-    input.postType === "reel"
-      ? "Dikey Kısa Video / Reels & Shorts (merak uyandırıcı kanca ve dinamik akış)"
-      : input.postType === "story"
-      ? "Hikâye / Story (çok kısa, samimi ve doğrudan etkileşime/DM'ye davet eden dil)"
-      : "Standart Akış Gönderisi / Feed Post (dengeli, okunabilir paragraflar ve net değer önerisi)";
+  const formatInstruction = getPlatformFormatRule(input.platform, input.format, input.itemCount);
 
   const prompt = `MARKA BİLGİLERİ:
 Marka Adı: ${input.brand.brandName || "Belirtilmedi"}
@@ -57,25 +58,25 @@ Varsayılan CTA: ${input.brand.defaultCta || "Detaylı bilgi için profil bağla
 ${brandConceptInstruction(input.brandConcept)}
 
 PLATFORM: ${input.platform}
-HEDEF FORMAT: ${formatLabel}
-PLATFORM KURALI: ${PLATFORM_COPY_RULES[input.platform]}
+${formatInstruction}
+GENEL PLATFORM KURALI: ${PLATFORM_COPY_RULES[input.platform]}
 İÇERİK STİLİ: ${styleDescriptions[input.style] || styleDescriptions.sales}
 ${input.topicContext}
 
 GÖREV:
-Bu platform için özgün Türkçe paylaşım metni üret. Başka platform adlarını veya alakasız etiketleri ekleme. Görsel üretim promptu, kamera açısı ya da sahne talimatı yazma.
+Bu platform ve içerik formatı için viral olmaya müsait, etkileşim ve izlenme odaklı, özgün Türkçe paylaşım metni üret. Başka platform adlarını veya alakasız etiketleri ekleme. Görsel üretim promptu, kamera açısı ya da sahne talimatı yazma.
 Yalnızca geçerli JSON döndür:
 {
-  "title": "platforma uygun başlık",
-  "caption": "tam paylaşım metni",
+  "title": "platforma ve formata uygun başlık (YouTube için 70-95 karakter arama niyetli kanca; Instagram/TikTok için kısa çarpıcı başlık)",
+  "caption": "tam paylaşım metni (ilk satırı kaydırmayı durduran güçlü kanca, gövdesi akıcı, sonunda net CTA)",
   "hashtags": ["#Etiket1", "#Etiket2"],
-  "tags": ["YouTube için backend arama etiketi; diğer platformlarda boş dizi"]
+  "tags": ["YouTube için 8-15 adet arka plan arama etiketi; diğer platformlarda boş dizi []"]
 }`;
 
   const { content } = await completeText(
-    "Sen kıdemli bir platform-özel sosyal medya stratejisti ve Türkçe kreatif metin yazarısın. Yalnızca geçerli JSON üret.",
+    "Sen viral sosyal medya kurguları ve platform algoritmaları konusunda uzman kıdemli bir sosyal medya direktörü ve Türkçe kreatif metin yazarısın. Yalnızca geçerli JSON üret.",
     prompt,
-    { temperature: 0.72, maxTokens: 1600 },
+    { temperature: 0.72, maxTokens: 1800 },
   );
   return parseJsonResponse<GeneratedCopy>(content);
 }
@@ -87,6 +88,8 @@ export async function POST(request: Request) {
       platforms?: string[];
       platform?: string;
       postType?: "post" | "reel" | "story";
+      format?: ContentFormatKind;
+      itemCount?: number;
       style?: CopyStyle;
       idea?: { title?: string; concept?: string };
       sourceTopic?: string;
@@ -116,13 +119,15 @@ export async function POST(request: Request) {
       topicContext += `\nHam Başlık: "${input.stockVideoMeta.rawTitle || ""}"\nHam Açıklama: "${input.stockVideoMeta.rawDescription || ""}"\nKaynak Kelimeler: ${(input.stockVideoMeta.keywords || []).join(", ")}`;
     }
 
-    const postType: "post" | "reel" | "story" =
-      input.postType === "reel" || input.postType === "story" ? input.postType : "post";
+    const resolvedFormat: ContentFormatKind =
+      input.format ||
+      (input.postType === "reel" ? "reel" : input.postType === "story" ? "story" : "post");
 
     const settled = await Promise.allSettled(requestedPlatforms.map(async (platform) => {
       const generated = await generatePlatformCopy({
         platform,
-        postType,
+        format: resolvedFormat,
+        itemCount: input.itemCount,
         brand,
         brandConcept,
         style: input.style || "sales",

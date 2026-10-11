@@ -235,6 +235,7 @@ export function PublishingStudio({
       title: string;
       caption: string;
       hashtags: string;
+      tags?: string[];
     }>;
   }>>([]);
   const [bulkPreparing, setBulkPreparing] = useState(false);
@@ -972,12 +973,17 @@ export function PublishingStudio({
         const scheduledTime = calculateBulkItemTime(i, bulkStartDate || scheduledAt);
 
         // Platform-specific content records
-        const platformData: Record<string, { title: string; caption: string; hashtags: string }> = {};
+        const isPackage = asset.category === "canva_package";
+        const isVideo = asset.type === "video" || asset.url.endsWith(".mp4");
+        const resolvedFormat = isPackage ? "carousel" : isVideo ? "reel" : "post";
+
+        const platformData: Record<string, { title: string; caption: string; hashtags: string; tags?: string[] }> = {};
         for (const p of platforms) {
           platformData[p] = {
             title: rawTitle,
             caption: rawDesc || rawTitle,
             hashtags: extracted.hashtags || "",
+            tags: [],
           };
         }
 
@@ -988,7 +994,8 @@ export function PublishingStudio({
             body: JSON.stringify({
               projectId,
               platforms,
-              postType: asset.type === "video" ? "reel" : "post",
+              format: resolvedFormat,
+              itemCount: isPackage ? asset.itemCount || 5 : 1,
               style: aiStyle,
               idea: asset.idea,
               sourceTopic: rawTitle || rawDesc,
@@ -1003,7 +1010,7 @@ export function PublishingStudio({
 
           if (aiRes.ok) {
             const aiData = await aiRes.json();
-            const copies = (aiData.copies || {}) as Record<string, { title?: string; caption?: string; hashtags?: string }>;
+            const copies = (aiData.copies || {}) as Record<string, { title?: string; caption?: string; hashtags?: string; tags?: string[] }>;
             for (const p of platforms) {
               const copy = copies[p] || (p === platforms[0] ? aiData.copy : undefined);
               if (copy) {
@@ -1011,6 +1018,7 @@ export function PublishingStudio({
                   title: copy.title ? copy.title.slice(0, 100) : rawTitle,
                   caption: copy.caption || rawDesc || rawTitle,
                   hashtags: copy.hashtags || extracted.hashtags || "",
+                  tags: Array.isArray(copy.tags) ? copy.tags : [],
                 };
               }
             }
@@ -1124,9 +1132,13 @@ export function PublishingStudio({
                 title: pContent.title.slice(0, 100),
                 type: "public" as const,
                 selfDeclaredMadeForKids: "no" as const,
-                tags: pContent.hashtags
-                  ? pContent.hashtags.split(/\s+/).map((t) => t.replace(/^#+/, "").trim()).filter(Boolean).slice(0, 15)
-                  : undefined,
+                tags: (() => {
+                  const aiTags = pContent.tags || [];
+                  const visibleTags = pContent.hashtags
+                    ? pContent.hashtags.split(/\s+/).map((t) => t.replace(/^#+/, "").trim()).filter(Boolean)
+                    : [];
+                  return [...new Set([...aiTags, ...visibleTags])].slice(0, 15);
+                })(),
               }
             : undefined,
           tiktokSettings: isTt
