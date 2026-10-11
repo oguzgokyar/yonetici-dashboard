@@ -46,11 +46,37 @@ export function runInFifoQueue<T>(jobId: string | undefined, fn: () => Promise<T
 }
 
 async function waitForCanvaCompletion(jobId: string): Promise<void> {
+  const startedAt = Date.now();
+  const MAX_WAIT_MS = 15 * 60 * 1000; // 15 dakika tavan bekleme süresi
+
   while (true) {
-    const job = getDatabase().prepare('SELECT status FROM generation_jobs WHERE id=?').get(jobId) as {status: string} | undefined;
-    if (job && ['complete', 'failed'].includes(job.status)) return;
-    // No age bypass: missing callback/restart requires verified operator recovery.
-    await new Promise(resolve => setTimeout(resolve, 500));
+    const db = getDatabase();
+    if (!db) return;
+
+    const job = db
+      .prepare('SELECT id, status, created_at FROM generation_jobs WHERE id=?')
+      .get(jobId) as { id: string; status: string; created_at?: string } | undefined;
+
+    // Görev silinmişse veya tamamlanmış/başarısızsa döngüyü derhal kır
+    if (!job || ['complete', 'failed'].includes(job.status)) return;
+
+    // 15 dakikadan uzun süredir takılı kalmış yetim işi zaman aşımına uğrat
+    const elapsed = Date.now() - startedAt;
+    const createdAtTime = new Date(job.created_at || 0).getTime();
+    const staleElapsed = Date.now() - createdAtTime;
+
+    if (elapsed > MAX_WAIT_MS || (createdAtTime > 0 && staleElapsed > MAX_WAIT_MS)) {
+      console.warn(`[Production Worker] Canva görevi (${jobId}) zaman aşımına uğradı, kilit serbest bırakılıyor.`);
+      const now = new Date().toISOString();
+      db.prepare(`
+        UPDATE generation_jobs
+        SET status = 'failed', error = 'İşlem zaman aşımına uğradı (otomatik kurtarma).', completed_at = ?
+        WHERE id = ?
+      `).run(now, jobId);
+      return;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
 }
 

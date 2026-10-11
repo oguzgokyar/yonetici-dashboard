@@ -200,7 +200,7 @@ export async function DELETE(
   }
 
   const now = new Date().toISOString();
-  if (["queued", "dispatching", "running", "rendering"].includes(row.status)) {
+  if (["queued", "dispatching", "running", "rendering", "exporting", "uploading", "video_exporting", "coordination_uncertain"].includes(row.status)) {
     db.prepare(`
       UPDATE generation_jobs
       SET status = 'failed', error = 'Kullanıcı tarafından iptal edildi.', completed_at = ?
@@ -209,6 +209,14 @@ export async function DELETE(
   } else {
     // Delete record if already completed/failed
     db.prepare("DELETE FROM generation_jobs WHERE id = ? AND project_id = ?").run(jobId, projectId);
+  }
+
+  // Release any lingering Canva coordination locks if applicable
+  if (row.id) {
+    try {
+      const { finishCanvaCoordination } = await import("@/lib/server/production-worker");
+      await finishCanvaCoordination(row.id);
+    } catch {}
   }
 
   return NextResponse.json({ ok: true, message: "Üretim kaydı güncellendi / iptal edildi." });
