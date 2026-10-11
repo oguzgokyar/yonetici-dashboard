@@ -199,7 +199,7 @@ export function PublishingStudio({
     "all" | "image" | "canva_package" | "video" | "stock"
   >("all");
   const [mediaPage, setMediaPage] = useState(1);
-  const MEDIA_PER_PAGE = 12;
+  const MEDIA_PER_PAGE = 15;
   const [recentAssets, setRecentAssets] = useState<RecentAsset[]>([]);
   const [loadingAssets, setLoadingAssets] = useState(false);
 
@@ -219,18 +219,23 @@ export function PublishingStudio({
   // BULK PUBLISHING STATE
   // -------------------------------------------------------------
   const [bulkSelectedAssets, setBulkSelectedAssets] = useState<RecentAsset[]>([]);
-  const [bulkScheduleMode, setBulkScheduleMode] = useState<"now" | "interval" | "daily_fixed" | "draft">("interval");
+  const [bulkScheduleMode, setBulkScheduleMode] = useState<"now" | "interval" | "daily_fixed" | "draft">("daily_fixed");
   const [bulkIntervalHours, setBulkIntervalHours] = useState<number>(3);
-  const [bulkDailyTime, setBulkDailyTime] = useState<string>("18:00");
+  const [bulkDailyCount, setBulkDailyCount] = useState<number>(1); // 1, 2, 3, 4
+  const [bulkDailySlots, setBulkDailySlots] = useState<string[]>(["18:00", "12:00", "15:00", "21:00"]);
   const [bulkStartDate, setBulkStartDate] = useState<string>("");
+  const [bulkActivePlatform, setBulkActivePlatform] = useState<HashtagSet["platform"]>("instagram");
   const [bulkItems, setBulkItems] = useState<Array<{
     id: string;
     asset: RecentAsset;
-    title: string;
-    caption: string;
-    hashtags: string;
     scheduledAt: string;
     isPrepared: boolean;
+    // Platform-specific content records
+    platformData: Record<string, {
+      title: string;
+      caption: string;
+      hashtags: string;
+    }>;
   }>>([]);
   const [bulkPreparing, setBulkPreparing] = useState(false);
   const [bulkPrepareProgress, setBulkPrepareProgress] = useState<{ current: number; total: number } | null>(null);
@@ -619,6 +624,89 @@ export function PublishingStudio({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, initialAssetId]);
 
+  // AI Asistanı ile Çift Yönlü Köprü (Context Sync & Action Listener)
+  useEffect(() => {
+    // 1. Asistana mevcut sayfa bağlamını bildir
+    const syncData = {
+      type: "publishing_studio_context",
+      mainTab,
+      bulkActivePlatform,
+      bulkItemsCount: bulkItems.length,
+      bulkItems: bulkItems.map((item, idx) => ({
+        index: idx,
+        id: item.id,
+        scheduledAt: item.scheduledAt,
+        currentPlatformContent: item.platformData[bulkActivePlatform] || { title: "", caption: "", hashtags: "" },
+        allPlatformData: item.platformData,
+      })),
+      singleComposer: {
+        title: globalTitle,
+        caption: globalCaption,
+        hashtags: globalHashtags,
+      },
+    };
+
+    try {
+      window.sessionStorage.setItem("hermes_assistant_page_context", JSON.stringify(syncData));
+      window.dispatchEvent(new CustomEvent("hermes_page_context_updated", { detail: syncData }));
+    } catch {}
+
+    // 2. Asistandan gelen güncellemeleri dinle ve sağ önizleme kartlarına uygula
+    function handleAssistantUpdate(e: Event) {
+      const customEvent = e as CustomEvent<{
+        action: "update_bulk_items" | "update_composer";
+        updates?: Array<{
+          index?: number;
+          id?: string;
+          platform?: string;
+          title?: string;
+          caption?: string;
+          hashtags?: string;
+        }>;
+        single?: { title?: string; caption?: string; hashtags?: string };
+      }>;
+
+      if (!customEvent.detail) return;
+
+      if (customEvent.detail.action === "update_bulk_items" && customEvent.detail.updates) {
+        const updates = customEvent.detail.updates;
+        setBulkItems((prev) =>
+          prev.map((item, idx) => {
+            const match = updates.find((u) => u.id === item.id || u.index === idx);
+            if (!match) return item;
+
+            const targetPlat = match.platform || bulkActivePlatform;
+            const currentPlat = item.platformData[targetPlat] || { title: "", caption: "", hashtags: "" };
+
+            return {
+              ...item,
+              platformData: {
+                ...item.platformData,
+                [targetPlat]: {
+                  title: match.title !== undefined ? match.title : currentPlat.title,
+                  caption: match.caption !== undefined ? match.caption : currentPlat.caption,
+                  hashtags: match.hashtags !== undefined ? match.hashtags : currentPlat.hashtags,
+                },
+              },
+            };
+          })
+        );
+        setSuccess("AI Asistanı tarafından hazırlanan içerik revizeleri başarıyla önizlemeye uygulandı!");
+        setTimeout(() => setSuccess(null), 3500);
+      } else if (customEvent.detail.action === "update_composer" && customEvent.detail.single) {
+        const s = customEvent.detail.single;
+        if (s.title !== undefined) setGlobalTitle(s.title);
+        if (s.caption !== undefined) setGlobalCaption(s.caption);
+        if (s.hashtags !== undefined) setGlobalHashtags(s.hashtags);
+        setSuccess("AI Asistanı metin revizesi uygulandı!");
+        setTimeout(() => setSuccess(null), 3000);
+      }
+    }
+
+    window.addEventListener("hermes_apply_assistant_action", handleAssistantUpdate);
+    return () => window.removeEventListener("hermes_apply_assistant_action", handleAssistantUpdate);
+  }, [mainTab, bulkActivePlatform, bulkItems, globalTitle, globalCaption, globalHashtags]);
+
   // Channel Selection Toggle
   function toggleIntegrationSelection(intId: string) {
     setSelectedIntegrationIds((prev) => {
@@ -771,9 +859,13 @@ export function PublishingStudio({
       }
 
       if (bulkScheduleMode === "daily_fixed") {
-        const [hh, mm] = (bulkDailyTime || "18:00").split(":").map(Number);
+        const activeSlots = bulkDailySlots.slice(0, Math.max(1, bulkDailyCount));
+        const dayOffset = Math.floor(index / activeSlots.length);
+        const slotTime = activeSlots[index % activeSlots.length] || "18:00";
+        const [hh, mm] = slotTime.split(":").map(Number);
+
         const targetDate = new Date(baseDate);
-        targetDate.setDate(targetDate.getDate() + index);
+        targetDate.setDate(targetDate.getDate() + dayOffset);
         targetDate.setHours(hh || 18, mm || 0, 0, 0);
         return toIstanbulDatetimeLocal(targetDate);
       }
@@ -781,6 +873,59 @@ export function PublishingStudio({
       // fallback
     }
     return baseLocalStr;
+  }
+
+  function handleDailySlotChange(slotIdx: number, val: string) {
+    setBulkDailySlots((prev) => {
+      const next = [...prev];
+      next[slotIdx] = val;
+      return next;
+    });
+    // Mevcut hazırlanmış bulkItems tarihlerini anında güncelle
+    if (bulkItems.length > 0) {
+      const nextSlots = [...bulkDailySlots];
+      nextSlots[slotIdx] = val;
+      const activeSlots = nextSlots.slice(0, Math.max(1, bulkDailyCount));
+      setBulkItems((prev) =>
+        prev.map((item, idx) => {
+          try {
+            const baseDate = new Date(bulkStartDate || scheduledAt);
+            const dayOffset = Math.floor(idx / activeSlots.length);
+            const slotTime = activeSlots[idx % activeSlots.length] || "18:00";
+            const [hh, mm] = slotTime.split(":").map(Number);
+            const targetDate = new Date(baseDate);
+            targetDate.setDate(targetDate.getDate() + dayOffset);
+            targetDate.setHours(hh || 18, mm || 0, 0, 0);
+            return { ...item, scheduledAt: toIstanbulDatetimeLocal(targetDate) };
+          } catch {
+            return item;
+          }
+        })
+      );
+    }
+  }
+
+  function handleDailyCountChange(count: number) {
+    setBulkDailyCount(count);
+    if (bulkItems.length > 0) {
+      const activeSlots = bulkDailySlots.slice(0, count);
+      setBulkItems((prev) =>
+        prev.map((item, idx) => {
+          try {
+            const baseDate = new Date(bulkStartDate || scheduledAt);
+            const dayOffset = Math.floor(idx / activeSlots.length);
+            const slotTime = activeSlots[idx % activeSlots.length] || "18:00";
+            const [hh, mm] = slotTime.split(":").map(Number);
+            const targetDate = new Date(baseDate);
+            targetDate.setDate(targetDate.getDate() + dayOffset);
+            targetDate.setHours(hh || 18, mm || 0, 0, 0);
+            return { ...item, scheduledAt: toIstanbulDatetimeLocal(targetDate) };
+          } catch {
+            return item;
+          }
+        })
+      );
+    }
   }
 
   async function prepareBulkPostsWithAi() {
@@ -826,9 +971,15 @@ export function PublishingStudio({
         const rawKeywords = extracted.hashtags ? extracted.hashtags.split(/\s+/) : [];
         const scheduledTime = calculateBulkItemTime(i, bulkStartDate || scheduledAt);
 
-        let genTitle = rawTitle;
-        let genCaption = rawDesc || rawTitle;
-        let genHashtags = extracted.hashtags || "";
+        // Platform-specific content records
+        const platformData: Record<string, { title: string; caption: string; hashtags: string }> = {};
+        for (const p of platforms) {
+          platformData[p] = {
+            title: rawTitle,
+            caption: rawDesc || rawTitle,
+            hashtags: extracted.hashtags || "",
+          };
+        }
 
         try {
           const aiRes = await fetch("/api/ai/posts/generate-copy", {
@@ -852,11 +1003,16 @@ export function PublishingStudio({
 
           if (aiRes.ok) {
             const aiData = await aiRes.json();
-            const copy = aiData.copies?.[platforms[0]] || aiData.copy;
-            if (copy) {
-              if (copy.title) genTitle = copy.title.slice(0, 100);
-              if (copy.caption) genCaption = copy.caption;
-              if (copy.hashtags) genHashtags = copy.hashtags;
+            const copies = (aiData.copies || {}) as Record<string, { title?: string; caption?: string; hashtags?: string }>;
+            for (const p of platforms) {
+              const copy = copies[p] || (p === platforms[0] ? aiData.copy : undefined);
+              if (copy) {
+                platformData[p] = {
+                  title: copy.title ? copy.title.slice(0, 100) : rawTitle,
+                  caption: copy.caption || rawDesc || rawTitle,
+                  hashtags: copy.hashtags || extracted.hashtags || "",
+                };
+              }
             }
           }
         } catch {
@@ -866,15 +1022,16 @@ export function PublishingStudio({
         initialList.push({
           id: `bulk_${asset.id}_${Date.now()}_${i}`,
           asset,
-          title: genTitle,
-          caption: genCaption,
-          hashtags: genHashtags,
           scheduledAt: scheduledTime,
           isPrepared: true,
+          platformData,
         });
       }
 
       setBulkItems(initialList);
+      if (platforms.length > 0 && !platforms.includes(bulkActivePlatform)) {
+        setBulkActivePlatform(platforms[0]);
+      }
       setSuccess(`${initialList.length} içerik AI ile incelendi ve sağ panelde önizlemeye hazırlandı.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -884,9 +1041,33 @@ export function PublishingStudio({
     }
   }
 
-  function updateBulkItem(id: string, field: "title" | "caption" | "hashtags" | "scheduledAt", value: string) {
+  function updateBulkItem(
+    id: string,
+    platform: string,
+    field: "title" | "caption" | "hashtags",
+    value: string
+  ) {
     setBulkItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const currentPlat = item.platformData[platform] || { title: "", caption: "", hashtags: "" };
+        return {
+          ...item,
+          platformData: {
+            ...item.platformData,
+            [platform]: {
+              ...currentPlat,
+              [field]: value,
+            },
+          },
+        };
+      })
+    );
+  }
+
+  function updateBulkItemDate(id: string, scheduledAt: string) {
+    setBulkItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, scheduledAt } : item))
     );
   }
 
@@ -920,30 +1101,37 @@ export function PublishingStudio({
 
       const targets = selectedIntegrationIds.map((intId) => {
         const acc = accounts.find((a) => a.integrationId === intId);
-        const isYt = Boolean(acc?.identifier?.includes("youtube"));
-        const isTt = Boolean(acc?.identifier?.includes("tiktok"));
+        const pKey = platformForAccount(acc);
+        const pContent = item.platformData[pKey] || item.platformData["instagram"] || Object.values(item.platformData)[0] || {
+          title: "İçerik",
+          caption: "",
+          hashtags: "",
+        };
+
+        const isYt = pKey === "youtube";
+        const isTt = pKey === "tiktok";
 
         return {
           integrationId: intId,
-          title: item.title,
-          caption: item.caption,
-          hashtags: item.hashtags,
+          title: pContent.title,
+          caption: pContent.caption,
+          hashtags: pContent.hashtags,
           postType: (isVideo ? "reel" : "post") as "post" | "reel" | "story",
           scheduleType: bulkScheduleMode === "draft" ? "draft" : bulkScheduleMode === "now" ? "now" : "schedule",
           scheduledAt: formattedDate,
           youtubeSettings: isYt
             ? {
-                title: item.title.slice(0, 100),
+                title: pContent.title.slice(0, 100),
                 type: "public" as const,
                 selfDeclaredMadeForKids: "no" as const,
-                tags: item.hashtags
-                  ? item.hashtags.split(/\s+/).map((t) => t.replace(/^#+/, "").trim()).filter(Boolean).slice(0, 15)
+                tags: pContent.hashtags
+                  ? pContent.hashtags.split(/\s+/).map((t) => t.replace(/^#+/, "").trim()).filter(Boolean).slice(0, 15)
                   : undefined,
               }
             : undefined,
           tiktokSettings: isTt
             ? {
-                title: item.title.slice(0, 90),
+                title: pContent.title.slice(0, 90),
                 content_posting_method: "DIRECT_POST" as const,
                 privacy_level: "SELF_ONLY" as const,
                 video_made_with_ai: true,
@@ -952,14 +1140,16 @@ export function PublishingStudio({
         };
       });
 
+      const firstContent = Object.values(item.platformData)[0] || { title: "İçerik", caption: "", hashtags: "" };
+
       return {
-        title: item.title,
+        title: firstContent.title,
         contentType: isVideo ? ("video" as const) : ("image" as const),
         mediaUrl: item.asset.url,
         assetId: !isPackage ? item.asset.id : undefined,
         mediaPackageId: isPackage ? item.asset.packageId : undefined,
-        caption: item.caption,
-        hashtags: item.hashtags,
+        caption: firstContent.caption,
+        hashtags: firstContent.hashtags,
         scheduleType: bulkScheduleMode === "draft" ? ("draft" as const) : bulkScheduleMode === "now" ? ("now" as const) : ("schedule" as const),
         scheduledAt: formattedDate,
         targets,
@@ -2335,7 +2525,7 @@ export function PublishingStudio({
                     checked={bulkScheduleMode === "daily_fixed"}
                     onChange={() => setBulkScheduleMode("daily_fixed")}
                   />
-                  <span>Günde 1 (Sabit Saat)</span>
+                  <span>Günde N Gönderi (Saat Slotları)</span>
                 </label>
                 <label
                   style={{
@@ -2421,17 +2611,39 @@ export function PublishingStudio({
                       </select>
                     </div>
                   ) : (
-                    <div style={{ width: "120px" }}>
-                      <label style={{ fontSize: "10.5px", color: "var(--muted)", display: "block", marginBottom: "3px" }}>
-                        Sabit Saat:
-                      </label>
-                      <input
-                        type="time"
-                        value={bulkDailyTime}
-                        onChange={(e) => setBulkDailyTime(e.target.value)}
-                        className="custom-input"
-                        style={{ height: "32px", fontSize: "11px" }}
-                      />
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--text)" }}>Günlük Adet:</span>
+                        {[1, 2, 3, 4].map((cnt) => (
+                          <button
+                            key={cnt}
+                            type="button"
+                            onClick={() => handleDailyCountChange(cnt)}
+                            className={`button compact ${bulkDailyCount === cnt ? "primary" : "ghost"}`}
+                            style={{ height: "24px", padding: "0 8px", fontSize: "10.5px" }}
+                          >
+                            Günde {cnt}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Dinamik Saat Slotları */}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
+                        {bulkDailySlots.slice(0, bulkDailyCount).map((slotVal, sIdx) => (
+                          <div key={sIdx} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                            <span style={{ fontSize: "10.5px", color: "var(--muted)", fontWeight: 600 }}>
+                              {sIdx + 1}. Saat:
+                            </span>
+                            <input
+                              type="time"
+                              value={slotVal}
+                              onChange={(e) => handleDailySlotChange(sIdx, e.target.value)}
+                              className="custom-input"
+                              style={{ height: "28px", fontSize: "11px", width: "95px" }}
+                            />
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2541,6 +2753,45 @@ export function PublishingStudio({
                 )}
               </div>
 
+              {/* Platform Seçim Sekmeleri (Hangi platformun metni düzenleniyor?) */}
+              {bulkItems.length > 0 && selectedIntegrationIds.length > 0 && (
+                <div style={{ display: "flex", gap: "6px", alignItems: "center", overflowX: "auto", paddingBottom: "4px" }}>
+                  {selectedIntegrationIds.map((intId) => {
+                    const acc = accounts.find((a) => a.integrationId === intId);
+                    const pKey = platformForAccount(acc);
+                    const isYt = pKey === "youtube";
+                    const isTt = pKey === "tiktok";
+                    const isFb = pKey === "facebook";
+                    const isCurrent = bulkActivePlatform === pKey;
+                    const cleanHandle = (acc?.profile || acc?.name || "").replace(/^@+/, "");
+
+                    return (
+                      <button
+                        key={intId}
+                        type="button"
+                        onClick={() => setBulkActivePlatform(pKey)}
+                        className={`button compact ${isCurrent ? "primary" : "secondary"}`}
+                        style={{
+                          height: "28px",
+                          fontSize: "11px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          fontWeight: isCurrent ? 700 : 500,
+                        }}
+                      >
+                        {isYt ? <Youtube size={12} color={isCurrent ? "white" : "#ef4444"} /> :
+                         isTt ? <TikTokIcon size={12} color={isCurrent ? "white" : "#000000"} /> :
+                         isFb ? <FacebookIcon size={12} /> :
+                         <Instagram size={12} color={isCurrent ? "white" : "#6d5dfc"} />}
+                        <span>{isYt ? "YouTube" : isTt ? "TikTok" : isFb ? "Facebook" : "Instagram"}</span>
+                        {cleanHandle && <small style={{ opacity: 0.8 }}>@{cleanHandle}</small>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* Boş Durum */}
               {bulkItems.length === 0 && (
                 <div
@@ -2564,116 +2815,122 @@ export function PublishingStudio({
               {/* Hazırlanan Kartlar Listesi */}
               {bulkItems.length > 0 && (
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxHeight: "680px", overflowY: "auto", paddingRight: "4px" }}>
-                  {bulkItems.map((item, idx) => (
-                    <div
-                      key={item.id}
-                      style={{
-                        border: "1px solid #e2e8f0",
-                        borderRadius: "12px",
-                        padding: "12px 14px",
-                        background: "#fafafa",
-                        display: "flex",
-                        gap: "12px",
-                        alignItems: "flex-start",
-                        position: "relative",
-                      }}
-                    >
-                      {/* Sıra ve Çıkar butonu */}
-                      <button
-                        type="button"
-                        onClick={() => removeBulkItem(item.id)}
-                        title="Bu içeriği toplu listeden çıkar"
-                        style={{
-                          position: "absolute",
-                          top: "8px",
-                          right: "8px",
-                          background: "white",
-                          border: "1px solid #e2e8f0",
-                          borderRadius: "6px",
-                          width: "22px",
-                          height: "22px",
-                          display: "grid",
-                          placeItems: "center",
-                          cursor: "pointer",
-                          color: "#94a3b8",
-                        }}
-                      >
-                        <X size={12} />
-                      </button>
+                  {bulkItems.map((item, idx) => {
+                    const activeContent = item.platformData[bulkActivePlatform] ||
+                      item.platformData["instagram"] ||
+                      Object.values(item.platformData)[0] || { title: "", caption: "", hashtags: "" };
 
-                      {/* Medya Küçük Resmi */}
+                    return (
                       <div
+                        key={item.id}
                         style={{
-                          width: "80px",
-                          height: "90px",
-                          borderRadius: "8px",
-                          overflow: "hidden",
-                          background: "#000",
-                          flexShrink: 0,
+                          border: "1px solid #e2e8f0",
+                          borderRadius: "12px",
+                          padding: "12px 14px",
+                          background: "#fafafa",
+                          display: "flex",
+                          gap: "12px",
+                          alignItems: "flex-start",
                           position: "relative",
                         }}
                       >
-                        <img
-                          src={item.asset.thumbnailUrl || item.asset.url}
-                          alt=""
-                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                        />
-                        <span
+                        {/* Sıra ve Çıkar butonu */}
+                        <button
+                          type="button"
+                          onClick={() => removeBulkItem(item.id)}
+                          title="Bu içeriği toplu listeden çıkar"
                           style={{
                             position: "absolute",
-                            bottom: "3px",
-                            left: "3px",
-                            background: "rgba(0,0,0,0.65)",
-                            color: "white",
-                            fontSize: "9px",
-                            padding: "1px 4px",
-                            borderRadius: "3px",
+                            top: "8px",
+                            right: "8px",
+                            background: "white",
+                            border: "1px solid #e2e8f0",
+                            borderRadius: "6px",
+                            width: "22px",
+                            height: "22px",
+                            display: "grid",
+                            placeItems: "center",
+                            cursor: "pointer",
+                            color: "#94a3b8",
                           }}
                         >
-                          #{idx + 1}
-                        </span>
-                      </div>
+                          <X size={12} />
+                        </button>
 
-                      {/* Alanlar: Başlık, Açıklama, Etiketler, Tarih */}
-                      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
-                        <div style={{ display: "flex", gap: "8px", alignItems: "center", paddingRight: "26px" }}>
-                          <input
-                            type="text"
-                            value={item.title}
-                            onChange={(e) => updateBulkItem(item.id, "title", e.target.value)}
-                            placeholder="Başlık..."
-                            className="custom-input"
-                            style={{ height: "28px", fontSize: "11px", fontWeight: 700, flex: 1 }}
+                        {/* Medya Küçük Resmi */}
+                        <div
+                          style={{
+                            width: "80px",
+                            height: "90px",
+                            borderRadius: "8px",
+                            overflow: "hidden",
+                            background: "#000",
+                            flexShrink: 0,
+                            position: "relative",
+                          }}
+                        >
+                          <img
+                            src={item.asset.thumbnailUrl || item.asset.url}
+                            alt=""
+                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
                           />
-                          <input
-                            type="datetime-local"
-                            value={item.scheduledAt}
-                            onChange={(e) => updateBulkItem(item.id, "scheduledAt", e.target.value)}
-                            className="custom-input"
-                            style={{ height: "28px", fontSize: "10px", width: "160px" }}
-                          />
+                          <span
+                            style={{
+                              position: "absolute",
+                              bottom: "3px",
+                              left: "3px",
+                              background: "rgba(0,0,0,0.65)",
+                              color: "white",
+                              fontSize: "9px",
+                              padding: "1px 4px",
+                              borderRadius: "3px",
+                            }}
+                          >
+                            #{idx + 1}
+                          </span>
                         </div>
 
-                        <textarea
-                          rows={2}
-                          value={item.caption}
-                          onChange={(e) => updateBulkItem(item.id, "caption", e.target.value)}
-                          placeholder="Açıklama / Metin..."
-                          className="custom-input"
-                          style={{ fontSize: "11px", resize: "vertical", padding: "6px 8px" }}
-                        />
+                        {/* Alanlar: Başlık, Açıklama, Etiketler, Tarih */}
+                        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
+                          <div style={{ display: "flex", gap: "8px", alignItems: "center", paddingRight: "26px" }}>
+                            <input
+                              type="text"
+                              value={activeContent.title}
+                              onChange={(e) => updateBulkItem(item.id, bulkActivePlatform, "title", e.target.value)}
+                              placeholder={`Başlık (${bulkActivePlatform})...`}
+                              className="custom-input"
+                              style={{ height: "28px", fontSize: "11px", fontWeight: 700, flex: 1 }}
+                            />
+                            <input
+                              type="datetime-local"
+                              value={item.scheduledAt}
+                              onChange={(e) => updateBulkItemDate(item.id, e.target.value)}
+                              className="custom-input"
+                              style={{ height: "28px", fontSize: "10px", width: "160px" }}
+                            />
+                          </div>
 
-                        <input
-                          type="text"
-                          value={item.hashtags}
-                          onChange={(e) => updateBulkItem(item.id, "hashtags", e.target.value)}
-                          placeholder="#etiketler..."
-                          className="custom-input"
-                          style={{ height: "26px", fontSize: "10.5px", color: "var(--primary)" }}
-                        />
+                          <textarea
+                            rows={2}
+                            value={activeContent.caption}
+                            onChange={(e) => updateBulkItem(item.id, bulkActivePlatform, "caption", e.target.value)}
+                            placeholder={`Açıklama / Metin (${bulkActivePlatform})...`}
+                            className="custom-input"
+                            style={{ fontSize: "11px", resize: "vertical", padding: "6px 8px" }}
+                          />
+
+                          <input
+                            type="text"
+                            value={activeContent.hashtags}
+                            onChange={(e) => updateBulkItem(item.id, bulkActivePlatform, "hashtags", e.target.value)}
+                            placeholder={`#etiketler (${bulkActivePlatform})...`}
+                            className="custom-input"
+                            style={{ height: "26px", fontSize: "10.5px", color: "var(--primary)" }}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -31,7 +31,24 @@ export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDra
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{
+    action: "update_bulk_items" | "update_composer";
+    updates?: Array<any>;
+    single?: any;
+    summary?: string;
+  } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Sayfa bağlamını oku
+  function getPageContext(): Record<string, unknown> | undefined {
+    if (typeof window === "undefined") return undefined;
+    try {
+      const raw = window.sessionStorage.getItem("hermes_assistant_page_context");
+      return raw ? JSON.parse(raw) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
 
   // Oturum hafızası: localStorage'dan yükle
   useEffect(() => {
@@ -87,12 +104,14 @@ export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDra
     setLoading(true);
 
     try {
+      const pageCtx = getPageContext();
       const res = await fetch("/api/ai/assistant/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId,
           messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
+          pageContext: pageCtx,
         }),
       });
 
@@ -110,6 +129,13 @@ export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDra
           createdAt: Date.now(),
         },
       ]);
+
+      // Eğer asistan sayfa güncelleme aksiyonu ürettiyse hazırla
+      if (data.action && (data.action.action === "update_bulk_items" || data.action.action === "update_composer")) {
+        setPendingAction(data.action);
+        // Doğrudan sayfaya da tetikleyebiliriz
+        window.dispatchEvent(new CustomEvent("hermes_apply_assistant_action", { detail: data.action }));
+      }
     } catch (err) {
       setMessages((prev) => [
         ...prev,
@@ -140,9 +166,9 @@ export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDra
   }
 
   const quickPrompts = [
-    { label: "Viral Kanca Öner", text: "Bu hafta Reels/Shorts için dikkat çeken 3 farklı soru kancası (hook) önerir misin?" },
+    { label: "Toplu Revize Et", text: "Toplu yayın önizlemesindeki içeriklerin başlıklarını daha merak uyandırıcı ve soru kancalı hale getir." },
+    { label: "Bio CTA Ekle", text: "Toplu yayınlanan tüm içeriklerin açıklama metinlerinin sonuna 'Detaylı bilgi için profilimizdeki bağlantıyı ziyaret edin.' ekle." },
     { label: "Format Stratejisi", text: "TikTok ve YouTube Shorts arasındaki algoritma ve açıklama farkları nelerdir?" },
-    { label: "Toplu Yayın Taktikleri", text: "Toplu yayın yaparken içerikler arası ideal saat aralığı ne olmalı?" },
   ];
 
   if (!isOpen) return null;
@@ -186,7 +212,7 @@ export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDra
       {/* Info Badge */}
       <div className="ai-assistant-info-pill">
         <Lightbulb size={13} style={{ flexShrink: 0 }} />
-        <span>Fikir ve rehberlik modu. Doğrudan sistem verisi silmez veya değiştirmez.</span>
+        <span>Paylaşım planı ve toplu yayın revizelerini doğrudan güncelleyebilir.</span>
       </div>
 
       {/* Message Stream */}
@@ -211,8 +237,42 @@ export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDra
             </div>
             <div className="ai-assistant-bubble loading">
               <LoaderCircle size={14} className="spin" />
-              <span>Hermes düşünüyor...</span>
+              <span>Hermes düşünüyor ve hazırlıyor...</span>
             </div>
+          </div>
+        )}
+
+        {/* Aksiyon Bildirim Kartı */}
+        {pendingAction && (
+          <div
+            style={{
+              padding: "10px 12px",
+              background: "#ede9fe",
+              border: "1px solid #c4b5fd",
+              borderRadius: "10px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "8px",
+              fontSize: "11px",
+              color: "#5b21b6",
+              fontWeight: 600,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <Sparkles size={14} />
+              <span>Değişiklikler sayfaya aktarıldı!</span>
+            </div>
+            <button
+              type="button"
+              className="button compact primary"
+              style={{ height: "24px", fontSize: "10px", padding: "0 8px" }}
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent("hermes_apply_assistant_action", { detail: pendingAction }));
+              }}
+            >
+              Yeniden Uygula
+            </button>
           </div>
         )}
       </div>

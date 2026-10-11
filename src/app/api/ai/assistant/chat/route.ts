@@ -16,6 +16,7 @@ export async function POST(request: Request) {
       projectId?: string;
       messages?: ChatMessage[];
       message?: string;
+      pageContext?: Record<string, unknown>;
     };
 
     const messages = Array.isArray(body.messages) && body.messages.length > 0
@@ -65,15 +66,54 @@ ${brandConceptInstruction(concept)}
       }
     }
 
+    let pageContextInfo = "";
+    if (body.pageContext && typeof body.pageContext === "object") {
+      try {
+        pageContextInfo = `
+[MEVCUT PAYLAŞIM PLANLAMA SAYFASI VERİLERİ]:
+${JSON.stringify(body.pageContext, null, 2)}
+`;
+      } catch {}
+    }
+
     const systemPrompt = `Sen "Yönetici Dashboard" sisteminin kıdemli AI Sistem Asistanı ve Sosyal Medya Stratejistisin.
 Adın: Hermes Asistan.
-Görevin: Kullanıcıya sosyal medya stratejisi, video/kreatif kurguları, kanca (hook) cümleleri, YouTube Shorts/Instagram Reels içerik fikirleri, etiketleme taktikleri ve sistemin kullanımı hakkında profesyonel, samimi ve Türkçe rehberlik sunmaktır.
+Görevin: Kullanıcıya sosyal medya stratejisi, video/kreatif kurguları, kanca (hook) cümleleri, YouTube Shorts/Instagram Reels içerik fikirleri hakkında rehberlik sunmak ve İSTENDİĞİNDE Paylaşım Planlama sayfasındaki hazırlanan içerikleri (toplu yayın revizeleri veya tekil composer metinleri) doğrudan güncellemektir.
 
 KURALLAR:
-1. Şimdilik YALNIZCA danışmanlık, fikir, öneri ve bilgi veriyorsun. Doğrudan sistemde içerik silme, yayınlama veya veritabanını değiştirme yetkin yoktur. Kullanıcı bir işlem yapmanı isterse bunu paneldeki ilgili sekmeden (örn: "Görsel Üret", "Video Üret", "Paylaşım Planı") nasıl yapabileceğini açıkla.
-2. Cevapların net, okunabilir, madde imli ve doğrudan uygulanabilir olsun. Laf kalabalığı yapma.
-3. Marka bağlamı verilmişse yanıtlarını markanın sektörüne, hedef kitlesine ve ses tonuna göre kişiselleştir.
-${brandContext}`;
+1. Cevapların net, okunabilir, madde imli ve doğrudan uygulanabilir olsun.
+2. Marka bağlamı verilmişse yanıtlarını markanın sektörüne, hedef kitlesine ve ses tonuna göre kişiselleştir.
+3. ÖNEMLİ — SAYFA İÇERİĞİNİ GÜNCELLEME YETKİSİ:
+   Eğer kullanıcı "Toplu yayın önizlemesindeki içerikleri güncelle / başlıkları kısalt / açıklamaların sonuna CTA ekle / 2. içeriği değiştir" gibi bir revize talep ederse:
+   - Önce kullanıcıya yaptığın değişikliği kısaca açıkla.
+   - Ardından yanıtının EN SONUNA mutlaka aşağıdaki JSON kod bloğunu ekle (sistem bu bloğu okuyup sayfadaki kartları otomatik güncelleyecektir):
+\`\`\`json
+{
+  "action": "update_bulk_items",
+  "updates": [
+    {
+      "index": 0,
+      "platform": "instagram",
+      "title": "Yeni Başlık",
+      "caption": "Yeni Açıklama Metni",
+      "hashtags": "#YeniEtiket1 #YeniEtiket2"
+    }
+  ]
+}
+\`\`\`
+   Eğer tekil "İçerik Yayınla" (composer) sekmesindeki metni güncellemesi istenirse:
+\`\`\`json
+{
+  "action": "update_composer",
+  "single": {
+    "title": "Yeni Başlık",
+    "caption": "Yeni Açıklama",
+    "hashtags": "#Etiket1 #Etiket2"
+  }
+}
+\`\`\`
+${brandContext}
+${pageContextInfo}`;
 
     // Son 8 mesajı alarak prompt oluştur
     const conversationHistory = messages.slice(-8);
@@ -86,15 +126,30 @@ ${brandContext}`;
 
     const { content } = await completeText(systemPrompt, fullPrompt, {
       temperature: 0.7,
-      maxTokens: 1600,
+      maxTokens: 2000,
     });
+
+    // Yanıt içindeki JSON aksiyon bloğunu ayıkla
+    let extractedAction: Record<string, unknown> | null = null;
+    let cleanContent = content;
+    const jsonMatch = content.match(/```json\s*([\s\S]*?)```/i);
+    if (jsonMatch?.[1]) {
+      try {
+        const parsed = JSON.parse(jsonMatch[1].trim());
+        if (parsed && (parsed.action === "update_bulk_items" || parsed.action === "update_composer")) {
+          extractedAction = parsed;
+          cleanContent = content.replace(jsonMatch[0], "").trim();
+        }
+      } catch {}
+    }
 
     return Response.json({
       ok: true,
       message: {
         role: "assistant",
-        content,
+        content: cleanContent || "İstediğiniz revizeler hazırlandı ve sayfaya uygulandı.",
       },
+      action: extractedAction,
     });
   } catch (err) {
     return Response.json(

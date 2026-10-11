@@ -514,9 +514,9 @@ button { cursor:pointer; }
 
 .composer-media-grid {
   display: grid !important;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
   gap: 10px !important;
-  max-height: 480px !important;
+  max-height: 520px !important;
   overflow-y: auto !important;
   -webkit-overflow-scrolling: touch !important;
   padding: 10px !important;
@@ -527,10 +527,22 @@ button { cursor:pointer; }
   box-sizing: border-box !important;
 }
 
+@media (max-width: 1200px) {
+  .composer-media-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .composer-media-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
 @media (max-width: 640px) {
   .composer-media-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 10px !important;
+    gap: 8px !important;
     padding: 8px !important;
     max-height: 520px !important;
   }
