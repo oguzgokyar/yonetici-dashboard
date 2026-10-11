@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { appendMusicAttribution, resolveMusicAttribution } from "@/lib/music-attribution";
+import { uploadVideoViaTikTokBrowser } from "@/lib/server/tiktok-browser-service";
 import { getDatabase } from "@/lib/server/database";
 import { resolvePackageItemsForPublishing } from "@/lib/server/canva-package-service";
 import {
@@ -26,6 +27,7 @@ export type TargetSetting = {
   scheduledAt?: string;
   youtubeSettings?: YouTubePostSettings;
   tiktokSettings?: TikTokPostSettings;
+  tiktokMethod?: "postiz" | "browser";
 };
 
 export async function GET(request: Request, context: Context) {
@@ -477,6 +479,60 @@ export async function POST(request: Request, context: Context) {
       .prepare("SELECT identifier FROM project_social_accounts WHERE project_id=? AND integration_id=?")
       .get(projectId, target.integrationId) as { identifier?: string } | undefined;
     const platformIdentifier = targetAccount?.identifier || "instagram";
+
+    // TikTok Tarayıcı Yükleme Modu Kontrolü
+    if (platformIdentifier.includes("tiktok") && target.tiktokMethod === "browser" && resolvedContentType === "video") {
+      const tmpVideoPath = path.join("/tmp", `tiktok_single_${postId}.mp4`);
+      try {
+        fs.writeFileSync(tmpVideoPath, fileBuffer);
+        const browserRes = await uploadVideoViaTikTokBrowser({
+          videoPath: tmpVideoPath,
+          caption: fullCaption,
+          visibility: "PUBLIC",
+        });
+        try { fs.unlinkSync(tmpVideoPath); } catch {}
+
+        if (!browserRes.ok) {
+          throw new Error(browserRes.error || "TikTok tarayıcı yüklemesi başarısız oldu.");
+        }
+
+        database
+          .prepare(`
+            INSERT INTO content_posts (
+              id, project_id, title, content_type, media_url,
+              caption, hashtags, status, schedule_type, scheduled_at,
+              integration_id, post_type, postiz_post_id, postiz_media_id,
+              error_message, created_at, updated_at
+            ) VALUES (?, ?, ?, 'video', ?, ?, ?, 'published', 'now', NULL, ?, ?, ?, ?, NULL, ?, ?)
+          `)
+          .run(
+            postId,
+            projectId,
+            targetTitle,
+            postizMedia?.path || "",
+            targetCaption,
+            targetHashtags,
+            target.integrationId,
+            targetPostType,
+            `tiktok_browser_${postId.slice(0, 8)}`,
+            postizMedia?.id || "",
+            now,
+            now
+          );
+
+        createdPosts.push({
+          id: postId,
+          postizPostId: `tiktok_browser_${postId.slice(0, 8)}`,
+          status: "published",
+          mediaPath: postizMedia?.path || "",
+          integrationId: target.integrationId,
+        });
+        continue;
+      } catch (bErr) {
+        try { if (fs.existsSync(tmpVideoPath)) fs.unlinkSync(tmpVideoPath); } catch {}
+        console.error("TikTok browser upload error:", bErr);
+      }
+    }
 
     try {
       const postizResult = await createPostizPost({

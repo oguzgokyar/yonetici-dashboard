@@ -7,6 +7,7 @@ import {
   TikTokPostSettings,
 } from "@/lib/server/postiz-client";
 import { appendMusicAttribution, resolveMusicAttribution } from "@/lib/music-attribution";
+import { uploadVideoViaTikTokBrowser } from "@/lib/server/tiktok-browser-service";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -26,6 +27,7 @@ type TargetSetting = {
   scheduledAt?: string;
   youtubeSettings?: YouTubePostSettings;
   tiktokSettings?: TikTokPostSettings;
+  tiktokMethod?: "postiz" | "browser";
 };
 
 type BulkItemPayload = {
@@ -293,6 +295,59 @@ export async function POST(request: Request, context: Context) {
           .prepare("SELECT identifier FROM project_social_accounts WHERE project_id=? AND integration_id=?")
           .get(projectId, target.integrationId) as { identifier?: string } | undefined;
         const platformIdentifier = targetAccount?.identifier || "instagram";
+
+        // TikTok Tarayıcı Yükleme Modu Kontrolü
+        if (platformIdentifier.includes("tiktok") && target.tiktokMethod === "browser" && isVideo) {
+          const tmpVideoPath = path.join("/tmp", `tiktok_upload_${postId}.mp4`);
+          try {
+            fs.writeFileSync(tmpVideoPath, fileBuffer);
+            const browserRes = await uploadVideoViaTikTokBrowser({
+              videoPath: tmpVideoPath,
+              caption: fullCaption,
+              visibility: "PUBLIC",
+            });
+            try { fs.unlinkSync(tmpVideoPath); } catch {}
+
+            if (!browserRes.ok) {
+              throw new Error(browserRes.error || "TikTok tarayıcı yüklemesi başarısız oldu.");
+            }
+
+            database
+              .prepare(`
+                INSERT INTO content_posts (
+                  id, project_id, title, content_type, media_url,
+                  caption, hashtags, status, schedule_type, scheduled_at,
+                  integration_id, post_type, postiz_post_id, postiz_media_id,
+                  error_message, created_at, updated_at
+                ) VALUES (?, ?, ?, 'video', ?, ?, ?, 'published', 'now', NULL, ?, ?, ?, ?, NULL, ?, ?)
+              `)
+              .run(
+                postId,
+                projectId,
+                target.title || itemTitle,
+                postizMedia.path,
+                targetCaption,
+                targetHashtags,
+                target.integrationId,
+                targetPostType,
+                `tiktok_browser_${postId.slice(0, 8)}`,
+                postizMedia.id,
+                now,
+                now
+              );
+
+            results.push({ success: true, title: itemTitle, postId });
+            continue;
+          } catch (bErr) {
+            try { if (fs.existsSync(tmpVideoPath)) fs.unlinkSync(tmpVideoPath); } catch {}
+            results.push({
+              success: false,
+              title: itemTitle,
+              error: bErr instanceof Error ? bErr.message : "TikTok tarayıcı hatası",
+            });
+            continue;
+          }
+        }
 
         try {
           const postizResult = await createPostizPost({

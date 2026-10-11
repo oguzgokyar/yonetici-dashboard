@@ -214,6 +214,7 @@ export function PublishingStudio({
   const [newSetName, setNewSetName] = useState("");
   const [newSetTags, setNewSetTags] = useState("");
   const [savingHashtagSet, setSavingHashtagSet] = useState(false);
+  const [tiktokUploadMethod, setTiktokUploadMethod] = useState<"browser" | "postiz">("browser");
 
   // -------------------------------------------------------------
   // BULK PUBLISHING STATE
@@ -1149,6 +1150,7 @@ export function PublishingStudio({
                 video_made_with_ai: true,
               }
             : undefined,
+          tiktokMethod: isTt ? tiktokUploadMethod : undefined,
         };
       });
 
@@ -1268,6 +1270,7 @@ export function PublishingStudio({
               video_made_with_ai: true,
             }
           : undefined,
+        tiktokMethod: isTt ? tiktokUploadMethod : undefined,
       };
     });
 
@@ -1412,6 +1415,33 @@ export function PublishingStudio({
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <PublishingHealthBadge />
+          {accounts.some((a) => a.identifier.includes("tiktok")) && (
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "4px 8px",
+                borderRadius: "8px",
+                background: tiktokUploadMethod === "browser" ? "#fdf2f8" : "#f1f5f9",
+                border: `1px solid ${tiktokUploadMethod === "browser" ? "#fbcfe8" : "#cbd5e1"}`,
+                fontSize: "11px",
+              }}
+              title="TikTok video yükleme yöntemi tercihi"
+            >
+              <TikTokIcon size={12} color="#000" />
+              <span style={{ fontWeight: 600, color: "#475569" }}>TikTok Motoru:</span>
+              <select
+                value={tiktokUploadMethod}
+                onChange={(e) => setTiktokUploadMethod(e.target.value as "browser" | "postiz")}
+                className="custom-select"
+                style={{ height: "24px", fontSize: "10.5px", padding: "0 6px", border: "none", background: "transparent", fontWeight: 700 }}
+              >
+                <option value="browser">Tarayıcı (Herkese Açık)</option>
+                <option value="postiz">Postiz API (Taslak)</option>
+              </select>
+            </div>
+          )}
           <button
             type="button"
             onClick={() => {
