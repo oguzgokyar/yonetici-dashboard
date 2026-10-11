@@ -3,8 +3,54 @@ import "server-only";
 import { completeText, parseJsonResponse } from "@/lib/server/cliproxy-text";
 import { getCanvaConfig } from "@/lib/server/canva-config";
 import { dispatchHermesCanvaTask } from "@/lib/server/hermes-agent-client";
+import { getCompetitorOutlierInsights } from "@/lib/server/competitor-live-fetcher";
 
 export type ColumnType = "vertical_video" | "carousel" | "single_post" | "engagement";
+
+export type IdeaType =
+  | "benefit"
+  | "problem_solution"
+  | "brand_awareness"
+  | "service_promo"
+  | "campaign_discount";
+
+export const IDEA_TYPE_LABELS: Record<IdeaType, { label: string; badge: string; icon: string; color: string; bg: string }> = {
+  benefit: {
+    label: "Fayda Odaklı",
+    badge: "Fayda",
+    icon: "💡",
+    color: "#0284c7",
+    bg: "#f0f9ff",
+  },
+  problem_solution: {
+    label: "Problem & Çözüm",
+    badge: "Problem Çözüm",
+    icon: "🎯",
+    color: "#7c3aed",
+    bg: "#faf5ff",
+  },
+  brand_awareness: {
+    label: "Marka Bilinirliği",
+    badge: "Bilinirlik",
+    icon: "🌟",
+    color: "#d97706",
+    bg: "#fffbeb",
+  },
+  service_promo: {
+    label: "Hizmet / Ürün Tanıtımı",
+    badge: "Hizmet Tanıtımı",
+    icon: "🚀",
+    color: "#059669",
+    bg: "#ecfdf5",
+  },
+  campaign_discount: {
+    label: "Kampanya & İndirim",
+    badge: "Kampanya & Fırsat",
+    icon: "🏷️",
+    color: "#e11d48",
+    bg: "#fff1f2",
+  },
+};
 
 export type StrategyOverview = {
   brandIdentity: {
@@ -17,6 +63,8 @@ export type StrategyOverview = {
     contentGaps: string[];
     viralPatternsToAdapt: string[];
     differentiationAngle: string;
+    liveOutlierCount?: number;
+    liveOutlierSummary?: string;
   };
   audienceVoc: {
     targetPersona: string;
@@ -50,6 +98,7 @@ export type StrategyIdea = {
   description: string;
   structure: string[];
   targetChannel: string;
+  ideaType?: IdeaType | string;
   skillSource?: string;
   status?: "suggested" | "hidden";
   createdAt?: string;
@@ -77,6 +126,17 @@ export async function generateFullStrategyAndIdeas(input: {
   socialChannels: string[];
   competitors: string[];
 }): Promise<FullStrategyResult> {
+  // Faz 2: Canlı kazıyıcı havuzundan (scraped_media) gerçek outlier/viral rakip verilerini topla
+  const liveInsights = getCompetitorOutlierInsights(input.competitors);
+  const liveOutlierSummary = liveInsights.activeOutliers.length > 0
+    ? liveInsights.activeOutliers
+        .map(
+          (o, i) =>
+            `${i + 1}. [${o.platform.toUpperCase()} @${o.username}] "${o.title}" (${Number(o.views).toLocaleString("tr-TR")} izlenme, ${Number(o.likes).toLocaleString("tr-TR")} beğeni)`
+        )
+        .join("\n")
+    : "";
+
   // 1. Try dispatching via Hermes Agent with ScrapeCreators skills enabled
   const hermesPrompt = `Load skills: competitor-social-research, audience-research, comment-mining, outlier-post-finder, creator-profile-teardown, social-media-research.
 
@@ -84,6 +144,7 @@ Act as the Social Media Research & Brand Strategy Agent for brand '${input.brand
 Brand Description & Promise: ${input.brandDescription}
 Target Social Channels: ${input.socialChannels.join(", ") || "Instagram, TikTok, YouTube"}
 Competitor Handles: ${input.competitors.join(", ") || "None specified (use industry best practices)"}
+${liveOutlierSummary ? `\nLive Verified Competitor Outlier Posts Harvested from Pool:\n${liveOutlierSummary}\n` : ""}
 
 Using ScrapeCreators research frameworks (outlier post analysis, comment mining VOC, competitor gap analysis):
 Synthesize a comprehensive brand strategy and generate at least 3 distinct, high-performing ideas for each of the 4 content columns:
@@ -126,7 +187,8 @@ Output MUST be strictly valid JSON matching this schema (no markdown formatting,
         "hook": "string",
         "description": "string",
         "structure": ["string", "string"],
-        "targetChannel": "string"
+        "targetChannel": "string",
+        "ideaType": "benefit|problem_solution|brand_awareness|service_promo|campaign_discount"
       }
     ],
     "carousel": [...],
@@ -176,7 +238,14 @@ Output MUST be strictly valid JSON matching this schema (no markdown formatting,
               if (parsed?.overview && parsed?.ideas) {
                 console.log("[Hermes Strategy] Successfully synthesized strategy via Hermes Agent & ScrapeCreators skills!");
                 return {
-                  overview: parsed.overview,
+                  overview: {
+                    ...parsed.overview,
+                    competitorAnalysis: {
+                      ...parsed.overview.competitorAnalysis,
+                      liveOutlierCount: liveInsights.activeOutliers.length,
+                      liveOutlierSummary: liveInsights.summaryNote,
+                    },
+                  },
                   ideas: parsed.ideas,
                   engineType: "Hermes Agent (v1/runs)",
                   runId: dispatchRes.runId,
@@ -211,6 +280,7 @@ Yanıtını YALNIZCA geçerli ve hatasız bir JSON nesnesi olarak ver. Markdown 
 Marka Açıklaması & Değer Vaadi: ${input.brandDescription}
 Kullanılan Sosyal Medya Kanalları: ${input.socialChannels.join(", ") || "Instagram, TikTok, YouTube"}
 Takip Edilen Rakipler / Örnek Hesaplar: ${input.competitors.join(", ") || "Belirtilmedi (Sektör liderleri baz alınsın)"}
+${liveOutlierSummary ? `\nKazıyıcı Havuzundan Canlı Doğrulanmış Viral / Outlier Rakip İçerikleri:\n${liveOutlierSummary}\n` : ""}
 
 Lütfen tam JSON şemasına sadık kalarak stratejiyi ve 4 kolonluk içerik fikirlerini üret:
 {
@@ -221,7 +291,7 @@ Lütfen tam JSON şemasına sadık kalarak stratejiyi ve 4 kolonluk içerik fiki
     "growthStrategy": { "primaryPillars": ["..."], "weeklyPostingPlan": "...", "channelPriorities": ["..."], "conversionFunnel": "..." }
   },
   "ideas": {
-    "vertical_video": [{ "title": "...", "hook": "...", "description": "...", "structure": ["..."], "targetChannel": "..." }],
+    "vertical_video": [{ "title": "...", "hook": "...", "description": "...", "structure": ["..."], "targetChannel": "...", "ideaType": "benefit|problem_solution|brand_awareness|service_promo|campaign_discount" }],
     "carousel": [...],
     "single_post": [...],
     "engagement": [...]
@@ -231,7 +301,14 @@ Lütfen tam JSON şemasına sadık kalarak stratejiyi ve 4 kolonluk içerik fiki
   const { content } = await completeText(systemPrompt, userPrompt, { temperature: 0.7, maxTokens: 4000 });
   const fallbackResult = parseJsonResponse<any>(content);
   return {
-    overview: fallbackResult.overview,
+    overview: {
+      ...fallbackResult.overview,
+      competitorAnalysis: {
+        ...fallbackResult.overview?.competitorAnalysis,
+        liveOutlierCount: liveInsights.activeOutliers.length,
+        liveOutlierSummary: liveInsights.summaryNote,
+      },
+    },
     ideas: fallbackResult.ideas,
     engineType: "CliProxyAPI (gemini-3.8-flash-high)",
     runId: `local_${Date.now()}`,
@@ -245,6 +322,7 @@ export async function generateNewIdeasForColumn(input: {
   columnType: ColumnType;
   existingTitles: string[];
   focusTopic?: string;
+  ideaType?: IdeaType | string;
   strategyContext?: StrategyOverview;
 }): Promise<StrategyIdea[]> {
   const columnLabels: Record<ColumnType, string> = {
@@ -254,13 +332,30 @@ export async function generateNewIdeasForColumn(input: {
     engagement: "Etkileşim & Topluluk (Story, Anket, Soru-Cevap)",
   };
 
-  const topicInstruction = input.focusTopic
-    ? `ÖZEL ODAK / AÇI: Üreteceğin fikirler doğrudan şu rakip açığına veya müşteri acı noktasına çözüm getirmeli: "${input.focusTopic}".`
-    : "";
+  const selectedTypeInfo = input.ideaType && (IDEA_TYPE_LABELS as any)[input.ideaType]
+    ? (IDEA_TYPE_LABELS as any)[input.ideaType].label
+    : input.ideaType || "";
+
+  // 4 Kombinasyon Durum Mantığı
+  let dynamicAngleInstruction = "";
+  if (selectedTypeInfo && input.focusTopic) {
+    // Durum 4: Hem Tip hem Konu var
+    dynamicAngleInstruction = `İÇERİK FORMATI AMACI (TİP): "${selectedTypeInfo}".\nÖZEL KONU / BAĞLAM: "${input.focusTopic}".\nKural: Üreteceğin 3 fikir doğrudan "${input.focusTopic}" konusunu ele almalı ve net şekilde "${selectedTypeInfo}" amacına hizmet etmelidir.`;
+  } else if (selectedTypeInfo && !input.focusTopic) {
+    // Durum 2: Sadece Tip seçili
+    dynamicAngleInstruction = `İÇERİK FORMATI AMACI (TİP): "${selectedTypeInfo}".\nKural: Markanın nişine, hedef kitlesine ve acı noktalarına bakarak bu amaca en uygun 3 farklı konuyu SEN belirle ve fikirleri "${selectedTypeInfo}" psikolojisinde üret.`;
+  } else if (!selectedTypeInfo && input.focusTopic) {
+    // Durum 3: Sadece Konu var
+    dynamicAngleInstruction = `ÖZEL ODAK KONUSU: "${input.focusTopic}".\nKural: 3 fikrin tamamı "${input.focusTopic}" konusunu işlemeli, ancak her fikir FARKLI bir amaca hizmet etmelidir (örneğin 1. fikir fayda odaklı, 2. fikir problem & çözüm, 3. fikir marka bilinirliği veya hizmet tanıtımı).`;
+  } else {
+    // Durum 1: Ne tip ne konu var (Mevcut akış)
+    dynamicAngleInstruction = `Kural: Markanın genel stratejisine, kanca laboratuvarına ve sektör açıklarına uygun 3 taze fikir üret.`;
+  }
 
   const systemPrompt = `Sen sosyal medya içerik stratejisi uzmanısın (ScrapeCreators outlier & hook metodolojisi).
 Kullanıcı senden sadece '${columnLabels[input.columnType]}' kolonu için 3 YENİ ve TAZE içerik fikri istiyor.
-${topicInstruction}
+${dynamicAngleInstruction}
+
 Önemli Kurallar:
 - Önceden üretilmiş şu başlıklardan ve konulardan KESİNLİKLE farklı, tekrara düşmeyen yepyeni kancalar üret:
 ${input.existingTitles.map((t) => `- ${t}`).join("\n")}
@@ -269,6 +364,7 @@ ${input.existingTitles.map((t) => `- ${t}`).join("\n")}
   const userPrompt = `Marka Adı: ${input.brandName}
 Marka Açıklaması: ${input.brandDescription}
 İçerik Türü Kolonu: ${columnLabels[input.columnType]}
+${input.ideaType ? `İçerik Amacı / Tipi: ${selectedTypeInfo}` : ""}
 ${input.focusTopic ? `Özel Odak Konusu: ${input.focusTopic}` : ""}
 Hedef Kitle & Strateji Özeti: ${input.strategyContext ? JSON.stringify(input.strategyContext.audienceVoc) : "Belirtilmedi"}
 
@@ -279,11 +375,84 @@ Lütfen 3 yeni fikir içeren JSON formatını üret:
     "hook": "...",
     "description": "...",
     "structure": ["1. Adım...", "2. Adım..."],
-    "targetChannel": "..."
+    "targetChannel": "...",
+    "ideaType": "${input.ideaType || "problem_solution"}"
   }
 ]`;
 
   const { content } = await completeText(systemPrompt, userPrompt, { temperature: 0.8, maxTokens: 2000 });
   const parsed = parseJsonResponse<StrategyIdea[]>(content);
-  return parsed.map((item) => ({ ...item, columnType: input.columnType, status: "suggested" }));
+  return parsed.map((item) => ({
+    ...item,
+    columnType: input.columnType,
+    ideaType: item.ideaType || input.ideaType || "problem_solution",
+    status: "suggested",
+  }));
+}
+
+// Fikir Makinesi: 4 Kolonun Tamamına Birden Fikir Üretme
+export async function generateIdeasAcrossAllColumns(input: {
+  brandName: string;
+  brandDescription: string;
+  focusTopic?: string;
+  ideaType?: IdeaType | string;
+  strategyContext?: StrategyOverview;
+  existingTitlesByColumn?: Record<ColumnType, string[]>;
+}): Promise<Record<ColumnType, StrategyIdea[]>> {
+  const selectedTypeInfo = input.ideaType && (IDEA_TYPE_LABELS as any)[input.ideaType]
+    ? (IDEA_TYPE_LABELS as any)[input.ideaType].label
+    : input.ideaType || "";
+
+  let dynamicAngleInstruction = "";
+  if (selectedTypeInfo && input.focusTopic) {
+    dynamicAngleInstruction = `İÇERİK AMACI (TİP): "${selectedTypeInfo}".\nÖZEL KONU: "${input.focusTopic}".\nKural: 4 kolonun tamamındaki tüm içerikler doğrudan "${input.focusTopic}" konusunu "${selectedTypeInfo}" çerçevesinde işlemelidir.`;
+  } else if (selectedTypeInfo && !input.focusTopic) {
+    dynamicAngleInstruction = `İÇERİK AMACI (TİP): "${selectedTypeInfo}".\nKural: Markanın hedef kitlesine göre en uygun konuları belirle ve 4 kolondaki tüm içerikleri "${selectedTypeInfo}" psikolojisine odakla.`;
+  } else if (!selectedTypeInfo && input.focusTopic) {
+    dynamicAngleInstruction = `ÖZEL ODAK KONUSU: "${input.focusTopic}".\nKural: Tüm içerikler "${input.focusTopic}" konusunu işlemeli, ancak formatlara göre farklı açılar (fayda, problem-çözüm, bilinirlik, hizmet tanıtımı) dağıtılmalıdır.`;
+  } else {
+    dynamicAngleInstruction = `Kural: Markanın genel büyüme ve kitle hedeflerine uygun taze ve etkileyici içerikler üret.`;
+  }
+
+  const systemPrompt = `Sen kıdemli bir Sosyal Medya Büyüme & Fikir Makinesi Motorusun (ScrapeCreators metodolojisi).
+Kullanıcı senden 4 format kolonunun ("vertical_video", "carousel", "single_post", "engagement") HER BİRİ İÇİN 2'şer adet çok güçlü ve uygulanabilir içerik fikri üretmeni istiyor.
+${dynamicAngleInstruction}
+
+JSON formatında çıktıyı strict bir nesne olarak ver:
+{
+  "vertical_video": [{ "title": "...", "hook": "...", "description": "...", "structure": ["..."], "targetChannel": "...", "ideaType": "..." }],
+  "carousel": [...],
+  "single_post": [...],
+  "engagement": [...]
+}`;
+
+  const userPrompt = `Marka Adı: ${input.brandName}
+Marka Açıklaması: ${input.brandDescription}
+${input.ideaType ? `İçerik Amacı / Tipi: ${selectedTypeInfo}` : ""}
+${input.focusTopic ? `Özel Odak Konusu: ${input.focusTopic}` : ""}
+Hedef Kitle & Strateji: ${input.strategyContext ? JSON.stringify(input.strategyContext.audienceVoc) : "Belirtilmedi"}
+
+Lütfen 4 kolon için 2'şer fikir içeren JSON nesnesini üret.`;
+
+  const { content } = await completeText(systemPrompt, userPrompt, { temperature: 0.8, maxTokens: 3500 });
+  const parsed = parseJsonResponse<Record<ColumnType, StrategyIdea[]>>(content);
+
+  const result: Record<ColumnType, StrategyIdea[]> = {
+    vertical_video: [],
+    carousel: [],
+    single_post: [],
+    engagement: [],
+  };
+
+  for (const col of ["vertical_video", "carousel", "single_post", "engagement"] as ColumnType[]) {
+    const list = parsed[col] || [];
+    result[col] = list.map((item) => ({
+      ...item,
+      columnType: col,
+      ideaType: item.ideaType || input.ideaType || "problem_solution",
+      status: "suggested",
+    }));
+  }
+
+  return result;
 }

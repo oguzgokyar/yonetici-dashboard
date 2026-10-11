@@ -20,7 +20,7 @@ import {
   Compass,
   Plus,
 } from "lucide-react";
-import type { ColumnType, StrategyIdea } from "@/lib/server/strategy-generator";
+import { type ColumnType, type StrategyIdea, IDEA_TYPE_LABELS } from "@/lib/server/strategy-generator";
 
 type ColumnData = {
   suggested: StrategyIdea[];
@@ -577,6 +577,20 @@ export function QuickIdeasDrawer({
                       <h5 className={`kanban-card-title ${isHidden ? "crossed" : ""}`}>
                         {idea.title}
                       </h5>
+                      {idea.ideaType && (IDEA_TYPE_LABELS as any)[idea.ideaType] && (
+                        <span
+                          className="kanban-type-badge"
+                          style={{
+                            background: (IDEA_TYPE_LABELS as any)[idea.ideaType].bg,
+                            color: (IDEA_TYPE_LABELS as any)[idea.ideaType].color,
+                            borderColor: (IDEA_TYPE_LABELS as any)[idea.ideaType].color + "33",
+                          }}
+                          title={(IDEA_TYPE_LABELS as any)[idea.ideaType].label}
+                        >
+                          <span>{(IDEA_TYPE_LABELS as any)[idea.ideaType].icon}</span>
+                          <span>{(IDEA_TYPE_LABELS as any)[idea.ideaType].badge}</span>
+                        </span>
+                      )}
                     </div>
 
                     {/* Kanca Kutusu */}

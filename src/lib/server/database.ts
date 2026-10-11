@@ -22,6 +22,12 @@ function runMigrations(database: DatabaseSync) {
   const postColumns = database.prepare("PRAGMA table_info(content_posts)").all() as unknown as { name: string }[];
   if (postColumns.length && !postColumns.some((column) => column.name === "media_package_id")) database.exec("ALTER TABLE content_posts ADD COLUMN media_package_id TEXT");
   if (postColumns.length && !postColumns.some((column) => column.name === "media_json")) database.exec("ALTER TABLE content_posts ADD COLUMN media_json TEXT NOT NULL DEFAULT '[]'");
+  const strategyIdeaColumns = database.prepare("PRAGMA table_info(project_strategy_ideas)").all() as unknown as { name: string }[];
+  if (strategyIdeaColumns.length && !strategyIdeaColumns.some((column) => column.name === "idea_type")) {
+    try {
+      database.exec("ALTER TABLE project_strategy_ideas ADD COLUMN idea_type TEXT NOT NULL DEFAULT ''");
+    } catch {}
+  }
   database.exec(`
     CREATE TABLE IF NOT EXISTS content_ideas (
       id TEXT PRIMARY KEY,
@@ -570,6 +576,9 @@ export function getDatabase() {
     } catch {}
     try {
      database.exec("ALTER TABLE project_strategy_ideas ADD COLUMN skill_source TEXT NOT NULL DEFAULT '';");
+    } catch {}
+    try {
+     database.exec("ALTER TABLE project_strategy_ideas ADD COLUMN idea_type TEXT NOT NULL DEFAULT '';");
     } catch {}
     try {
      database.exec("ALTER TABLE google_vids_accounts ADD COLUMN profile_directory TEXT NOT NULL DEFAULT 'Default';");

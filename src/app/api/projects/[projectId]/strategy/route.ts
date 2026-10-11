@@ -45,6 +45,7 @@ export async function GET(
         description: row.description,
         structure: JSON.parse(row.structure_json || "[]"),
         targetChannel: row.target_channel,
+        ideaType: row.idea_type || "problem_solution",
         skillSource: row.skill_source || "outlier-post-finder",
         status: row.status,
         createdAt: row.created_at,
@@ -257,8 +258,8 @@ export async function POST(
     // Insert ideas
     const insertIdeaStmt = db.prepare(`
       INSERT INTO project_strategy_ideas (
-        id, project_id, column_type, title, hook, description, structure_json, target_channel, skill_source, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'outlier-post-finder', 'suggested', ?, ?)
+        id, project_id, column_type, title, hook, description, structure_json, target_channel, idea_type, skill_source, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'outlier-post-finder', 'suggested', ?, ?)
     `);
 
     for (const [colType, items] of Object.entries(fullResult.ideas)) {
@@ -272,6 +273,7 @@ export async function POST(
           item.description || "",
           JSON.stringify(item.structure || []),
           item.targetChannel || "",
+          item.ideaType || "problem_solution",
           now,
           now
         );
