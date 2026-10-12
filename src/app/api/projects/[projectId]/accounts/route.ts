@@ -12,7 +12,7 @@ export async function GET(_request: Request, context: Context) {
 
   const connectedRows = database
     .prepare(`
-      SELECT id, project_id, service, integration_id, name, identifier, profile, picture, disabled, created_at
+      SELECT id, project_id, service, integration_id, name, identifier, profile, picture, disabled, tiktok_method, created_at
       FROM project_social_accounts
       WHERE project_id = ?
       ORDER BY created_at DESC
@@ -27,6 +27,7 @@ export async function GET(_request: Request, context: Context) {
       profile: string;
       picture: string;
       disabled: number;
+      tiktok_method?: string;
       created_at: string;
     }[];
 
@@ -64,6 +65,7 @@ export async function GET(_request: Request, context: Context) {
       profile: row.profile,
       picture: row.picture,
       disabled: Boolean(row.disabled),
+      tiktokMethod: (row.tiktok_method as "browser" | "postiz") || "browser",
       createdAt: row.created_at,
     })),
     available: availableIntegrations,
@@ -165,4 +167,46 @@ export async function DELETE(request: Request, context: Context) {
     .run(projectId, accountId, accountId);
 
   return Response.json({ ok: true, message: "Hesap bağlantısı kaldırıldı." });
+}
+
+export async function PATCH(request: Request, context: Context) {
+  const { projectId } = await context.params;
+  const body = (await request.json().catch(() => ({}))) as {
+    tiktokMethod?: "browser" | "postiz";
+    integrationId?: string;
+  };
+
+  if (body.tiktokMethod !== "browser" && body.tiktokMethod !== "postiz") {
+    return Response.json({ ok: false, message: "Geçersiz TikTok yükleme yöntemi." }, { status: 400 });
+  }
+
+  const database = getDatabase();
+  const now = new Date().toISOString();
+
+  if (body.integrationId) {
+    database
+      .prepare(`
+        UPDATE project_social_accounts
+        SET tiktok_method = ?, updated_at = ?
+        WHERE project_id = ? AND integration_id = ?
+      `)
+      .run(body.tiktokMethod, now, projectId, body.integrationId);
+  } else {
+    database
+      .prepare(`
+        UPDATE project_social_accounts
+        SET tiktok_method = ?, updated_at = ?
+        WHERE project_id = ? AND identifier LIKE '%tiktok%'
+      `)
+      .run(body.tiktokMethod, now, projectId);
+  }
+
+  return Response.json({
+    ok: true,
+    tiktokMethod: body.tiktokMethod,
+    message:
+      body.tiktokMethod === "browser"
+        ? "TikTok yayın motoru 'Tarayıcı (TikTok Studio Doğrudan)' olarak kaydedildi."
+        : "TikTok yayın motoru 'Postiz API (Gelen Kutusu / Taslak)' olarak kaydedildi.",
+  });
 }

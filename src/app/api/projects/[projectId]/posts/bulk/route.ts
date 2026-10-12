@@ -310,12 +310,13 @@ export async function POST(request: Request, context: Context) {
         }
 
         const targetAccount = database
-          .prepare("SELECT identifier FROM project_social_accounts WHERE project_id=? AND integration_id=?")
-          .get(projectId, target.integrationId) as { identifier?: string } | undefined;
+          .prepare("SELECT identifier, tiktok_method FROM project_social_accounts WHERE project_id=? AND integration_id=?")
+          .get(projectId, target.integrationId) as { identifier?: string; tiktok_method?: string } | undefined;
         const platformIdentifier = targetAccount?.identifier || "instagram";
+        const effectiveTiktokMethod = target.tiktokMethod || targetAccount?.tiktok_method || "browser";
 
         // TikTok Tarayıcı Yükleme Modu Kontrolü
-        if (platformIdentifier.includes("tiktok") && target.tiktokMethod === "browser" && isVideo) {
+        if (platformIdentifier.includes("tiktok") && effectiveTiktokMethod === "browser" && isVideo) {
           const tmpVideoPath = path.join("/tmp", `tiktok_upload_${postId}.mp4`);
           try {
             fs.writeFileSync(tmpVideoPath, fileBuffer);

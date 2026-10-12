@@ -28,6 +28,7 @@ type ConnectedAccount = {
   profile: string;
   picture: string;
   disabled: boolean;
+  tiktokMethod?: "browser" | "postiz";
   createdAt: string;
 };
 
@@ -97,6 +98,28 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
   const [tiktokSession, setTiktokSession] = useState<{ loggedIn?: boolean; novncUrl?: string } | null>(null);
   const [loadingTiktokSession, setLoadingTiktokSession] = useState(false);
   const [startingTiktokBrowser, setStartingTiktokBrowser] = useState(false);
+
+  const [savingTiktokMethod, setSavingTiktokMethod] = useState(false);
+
+  async function handleUpdateTiktokMethod(method: "browser" | "postiz", integrationId?: string) {
+    setSavingTiktokMethod(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/accounts`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tiktokMethod: method, integrationId }),
+      });
+      const resJson = await res.json();
+      if (!res.ok) throw new Error(resJson.message || "Ayar kaydedilemedi.");
+      setSuccessMessage(resJson.message);
+      setTimeout(() => setSuccessMessage(null), 4000);
+      await loadAccounts();
+    } catch (e) {
+      alert("Hata: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setSavingTiktokMethod(false);
+    }
+  }
 
   async function loadTiktokSession() {
     setLoadingTiktokSession(true);
@@ -379,7 +402,7 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
                     <span className="account-meta">
                       {account.profile ? `@${account.profile}` : account.identifier}
                     </span>
-                    <div style={{ marginTop: "4px", display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                    <div style={{ marginTop: "4px", display: "flex", gap: "4px", flexWrap: "wrap", alignItems: "center" }}>
                       <span className="badge-pill success">
                         <CheckCircle2 size={10} /> Bağlı
                       </span>
@@ -389,6 +412,41 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
                       >
                         {meta.label} · {meta.description}
                       </span>
+                      {account.identifier.includes("tiktok") && (
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            marginLeft: "4px",
+                            padding: "2px 6px",
+                            borderRadius: "6px",
+                            background: (account.tiktokMethod || "browser") === "browser" ? "#fdf2f8" : "#f1f5f9",
+                            border: `1px solid ${(account.tiktokMethod || "browser") === "browser" ? "#fbcfe8" : "#cbd5e1"}`,
+                            fontSize: "11px",
+                          }}
+                        >
+                          <span style={{ fontWeight: 600, color: "#475569" }}>Yayın Motoru:</span>
+                          <select
+                            value={account.tiktokMethod || "browser"}
+                            onChange={(e) => void handleUpdateTiktokMethod(e.target.value as "browser" | "postiz", account.integrationId)}
+                            disabled={savingTiktokMethod}
+                            style={{
+                              height: "22px",
+                              fontSize: "10.5px",
+                              padding: "0 4px",
+                              border: "none",
+                              background: "transparent",
+                              fontWeight: 700,
+                              cursor: "pointer",
+                              color: (account.tiktokMethod || "browser") === "browser" ? "#be185d" : "#0f172a",
+                            }}
+                          >
+                            <option value="browser">🖥️ Tarayıcı (TikTok Studio Doğrudan)</option>
+                            <option value="postiz">⚡ Postiz API (Gelen Kutusu / Taslak)</option>
+                          </select>
+                        </div>
+                      )}
                     </div>
                   </div>
 

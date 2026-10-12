@@ -586,6 +586,9 @@ export function getDatabase() {
     try {
      database.exec("ALTER TABLE projects ADD COLUMN target_url TEXT;");
     } catch {}
+    try {
+     database.exec("ALTER TABLE project_social_accounts ADD COLUMN tiktok_method TEXT NOT NULL DEFAULT 'browser';");
+    } catch {}
   } catch (err) {
     console.error("[Migration Strategy Tables Error]", err);
   }

@@ -42,6 +42,7 @@ type ConnectedAccount = {
   identifier: string; // "instagram", "youtube", "tiktok", "facebook" etc.
   profile: string;
   picture: string;
+  tiktokMethod?: "browser" | "postiz";
 };
 
 type PostRecord = {
@@ -214,7 +215,7 @@ export function PublishingStudio({
   const [newSetName, setNewSetName] = useState("");
   const [newSetTags, setNewSetTags] = useState("");
   const [savingHashtagSet, setSavingHashtagSet] = useState(false);
-  const [tiktokUploadMethod, setTiktokUploadMethod] = useState<"browser" | "postiz">("postiz");
+  const [tiktokUploadMethod, setTiktokUploadMethod] = useState<"browser" | "postiz">("browser");
 
   // -------------------------------------------------------------
   // BULK PUBLISHING STATE
@@ -288,6 +289,12 @@ export function PublishingStudio({
         const aJson = await accRes.json();
         const connectedList: ConnectedAccount[] = aJson.connected || [];
         setAccounts(connectedList);
+
+        // Hesaplar sayfasında kaydedilmiş kalıcı TikTok motoru ayarını yükle
+        const ttAcc = connectedList.find((a) => a.identifier.includes("tiktok"));
+        if (ttAcc?.tiktokMethod) {
+          setTiktokUploadMethod(ttAcc.tiktokMethod);
+        }
 
         if (connectedList.length > 0 && selectedIntegrationIds.length === 0) {
           setSelectedIntegrationIds([connectedList[0].integrationId]);
@@ -1423,31 +1430,31 @@ export function PublishingStudio({
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <PublishingHealthBadge />
           {accounts.some((a) => a.identifier.includes("tiktok")) && (
-            <div
+            <Link
+              href={`/projects/${projectId}/accounts`}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "6px",
-                padding: "4px 8px",
+                padding: "4px 10px",
                 borderRadius: "8px",
                 background: tiktokUploadMethod === "browser" ? "#fdf2f8" : "#f1f5f9",
                 border: `1px solid ${tiktokUploadMethod === "browser" ? "#fbcfe8" : "#cbd5e1"}`,
                 fontSize: "11px",
+                textDecoration: "none",
+                color: tiktokUploadMethod === "browser" ? "#be185d" : "#475569",
+                fontWeight: 600,
               }}
-              title="TikTok video yükleme yöntemi tercihi"
+              title="TikTok yayın motorunu Hesaplar sayfasından değiştirebilirsiniz"
             >
               <TikTokIcon size={12} color="#000" />
-              <span style={{ fontWeight: 600, color: "#475569" }}>TikTok Motoru:</span>
-              <select
-                value={tiktokUploadMethod}
-                onChange={(e) => setTiktokUploadMethod(e.target.value as "browser" | "postiz")}
-                className="custom-select"
-                style={{ height: "24px", fontSize: "10.5px", padding: "0 6px", border: "none", background: "transparent", fontWeight: 700 }}
-              >
-                <option value="postiz">Postiz API (Gelen Kutusu / Taslak)</option>
-                <option value="browser">Tarayıcı (TikTok Studio Doğrudan)</option>
-              </select>
-            </div>
+              <span>
+                TikTok Motoru:{" "}
+                <strong>
+                  {tiktokUploadMethod === "browser" ? "Tarayıcı (Doğrudan)" : "Postiz API"}
+                </strong>
+              </span>
+            </Link>
           )}
           <button
             type="button"
