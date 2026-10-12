@@ -41,6 +41,12 @@ type StrategyOverview = {
     valueProposition: string;
     positioning: string;
     keyMessaging: string;
+    brandArchetype?: string;
+    visualDirectives?: {
+      primaryAesthetic: string;
+      forbiddenCliches: string[];
+      photoStyle: string;
+    };
   };
   competitorAnalysis: {
     contentGaps: string[];
@@ -48,18 +54,31 @@ type StrategyOverview = {
     differentiationAngle: string;
     liveOutlierCount?: number;
     liveOutlierSummary?: string;
+    competitorWeaknesses?: string[];
   };
   audienceVoc: {
     targetPersona: string;
     painPoints: string[];
     frequentQuestions: string[];
     winningHooks: string[];
+    unspokenDesires?: string[];
   };
   growthStrategy: {
     primaryPillars: string[];
     weeklyPostingPlan: string;
     channelPriorities: string[];
     conversionFunnel: string;
+    leadMagnetOffer?: {
+      hook: string;
+      deliverable: string;
+      ctaTrigger: string;
+    };
+    contentDistributionRatio?: {
+      tofuAwareness: string;
+      mofuTrust: string;
+      bofuConversion: string;
+    };
+    aiSearchAeoDirective?: string;
     hashtagBank?: {
       broad: string[];
       niche: string[];
@@ -978,6 +997,45 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                       &ldquo;{overview.brandIdentity.keyMessaging}&rdquo;
                     </div>
                   </div>
+
+                  {overview.brandIdentity.brandArchetype && (
+                    <div className="cockpit-detail-card highlight" style={{ background: "#fefce8", borderColor: "#fef08a" }}>
+                      <div className="cockpit-detail-title" style={{ color: "#854d0e" }}>
+                        <span>🛡️</span>
+                        <span>Marka Arketipi (Agency Brand Guardian)</span>
+                      </div>
+                      <div className="cockpit-detail-body" style={{ color: "#713f12", fontWeight: 700, fontSize: "13px" }}>
+                        {overview.brandIdentity.brandArchetype}
+                      </div>
+                    </div>
+                  )}
+
+                  {overview.brandIdentity.visualDirectives && (
+                    <div className="cockpit-detail-card" style={{ gridColumn: "1 / -1", background: "#f8fafc" }}>
+                      <div className="cockpit-detail-title">
+                        <span>🎨</span>
+                        <span>Görsel Kimlik &amp; Tasarım Direktifleri</span>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "12px", marginTop: "4px" }}>
+                        <div>
+                          <strong>Estetik Yaklaşım:</strong> {overview.brandIdentity.visualDirectives.primaryAesthetic}
+                        </div>
+                        <div>
+                          <strong>Fotoğrafik Stil:</strong> {overview.brandIdentity.visualDirectives.photoStyle}
+                        </div>
+                        {overview.brandIdentity.visualDirectives.forbiddenCliches?.length > 0 && (
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "2px" }}>
+                            <span style={{ fontSize: "11px", color: "#dc2626", fontWeight: 700 }}>⛔ Kaçınılacak Klişeler:</span>
+                            {overview.brandIdentity.visualDirectives.forbiddenCliches.map((cliche, cIdx) => (
+                              <span key={cIdx} style={{ fontSize: "10.5px", background: "#fee2e2", color: "#991b1b", padding: "1px 6px", borderRadius: "4px", border: "1px solid #fecaca" }}>
+                                {cliche}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8 text-sm text-gray-500">
@@ -1078,6 +1136,22 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                       {overview.competitorAnalysis.differentiationAngle}
                     </div>
                   </div>
+
+                  {overview.competitorAnalysis.competitorWeaknesses && overview.competitorAnalysis.competitorWeaknesses.length > 0 && (
+                    <div className="cockpit-detail-card" style={{ gridColumn: "1 / -1", background: "#fff1f2", borderColor: "#fecdd3" }}>
+                      <div className="cockpit-detail-title" style={{ color: "#9f1239" }}>
+                        <span>⚠️</span>
+                        <span>Rakiplerin En Çok Eleştirilen Eksiklikleri (Comment Mining)</span>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "5px", marginTop: "4px" }}>
+                        {overview.competitorAnalysis.competitorWeaknesses.map((weakness, wIdx) => (
+                          <div key={wIdx} style={{ fontSize: "12px", color: "#881337" }}>
+                            • {weakness}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8 text-sm text-gray-500">
@@ -1199,6 +1273,22 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                       })}
                     </div>
                   </div>
+
+                  {overview.audienceVoc.unspokenDesires && overview.audienceVoc.unspokenDesires.length > 0 && (
+                    <div className="cockpit-detail-card highlight" style={{ gridColumn: "1 / -1", background: "#f0fdf4", borderColor: "#bbf7d0" }}>
+                      <div className="cockpit-detail-title" style={{ color: "#166534" }}>
+                        <span>💎</span>
+                        <span>Dile Getirilmeyen Derin Müşteri Arzuları (Statü &amp; Duygu Tetikleyicileri)</span>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "5px", marginTop: "4px" }}>
+                        {overview.audienceVoc.unspokenDesires.map((desire, dIdx) => (
+                          <div key={dIdx} style={{ fontSize: "12px", color: "#14532d", fontWeight: 600 }}>
+                            ✦ {desire}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8 text-sm text-gray-500">
@@ -1255,6 +1345,64 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                       </div>
                     </div>
                   </div>
+
+                  {/* Karşı Konulamaz Teklif (Lead Magnet) & AEO Bilgisi */}
+                  {overview.growthStrategy.leadMagnetOffer && (
+                    <div className="cockpit-detail-card highlight" style={{ background: "#fefce8", borderColor: "#fef08a" }}>
+                      <div className="cockpit-detail-title" style={{ color: "#854d0e" }}>
+                        <span>🧲</span>
+                        <span>Karşı Konulamaz Teklif (Agency Lead Magnet Kurgusu)</span>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px", color: "#713f12" }}>
+                        <div><strong>Teklif Kancası:</strong> &ldquo;{overview.growthStrategy.leadMagnetOffer.hook}&rdquo;</div>
+                        <div><strong>Teslim Edilecek Değer:</strong> {overview.growthStrategy.leadMagnetOffer.deliverable}</div>
+                        <div style={{ background: "#fef08a", padding: "4px 8px", borderRadius: "6px", fontWeight: 700, width: "fit-content" }}>
+                          DM / Yorum Tetikleyici: {overview.growthStrategy.leadMagnetOffer.ctaTrigger}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {overview.growthStrategy.contentDistributionRatio && (
+                    <div className="cockpit-detail-card" style={{ background: "#f8fafc" }}>
+                      <div className="cockpit-detail-title">
+                        <span>📊</span>
+                        <span>İçerik Dağıtım Matrisi (ToFu / MoFu / BoFu)</span>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px", marginTop: "6px" }}>
+                        <div style={{ padding: "8px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "6px" }}>
+                          <div style={{ fontSize: "10px", fontWeight: 700, color: "#166534" }}>TOFU (KEŞFET &amp; VİRAL)</div>
+                          <div style={{ fontSize: "11.5px", fontWeight: 600, color: "#14532d", marginTop: "2px" }}>
+                            {overview.growthStrategy.contentDistributionRatio.tofuAwareness}
+                          </div>
+                        </div>
+                        <div style={{ padding: "8px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "6px" }}>
+                          <div style={{ fontSize: "10px", fontWeight: 700, color: "#1e40af" }}>MOFU (GÜVEN &amp; REHBER)</div>
+                          <div style={{ fontSize: "11.5px", fontWeight: 600, color: "#1e3a8a", marginTop: "2px" }}>
+                            {overview.growthStrategy.contentDistributionRatio.mofuTrust}
+                          </div>
+                        </div>
+                        <div style={{ padding: "8px", background: "#faf5ff", border: "1px solid #e9d5ff", borderRadius: "6px" }}>
+                          <div style={{ fontSize: "10px", fontWeight: 700, color: "#6b21a8" }}>BOFU (SATIŞ &amp; DÖNÜŞÜM)</div>
+                          <div style={{ fontSize: "11.5px", fontWeight: 600, color: "#581c87", marginTop: "2px" }}>
+                            {overview.growthStrategy.contentDistributionRatio.bofuConversion}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {overview.growthStrategy.aiSearchAeoDirective && (
+                    <div className="cockpit-detail-card" style={{ gridColumn: "1 / -1", background: "#eff6ff", borderColor: "#bfdbfe" }}>
+                      <div className="cockpit-detail-title" style={{ color: "#1e40af" }}>
+                        <span>🌐</span>
+                        <span>Yapay Zeka Arama Motoru Görünürlüğü (Agency AEO Stratejisi)</span>
+                      </div>
+                      <div style={{ fontSize: "12px", color: "#1e3a8a", lineHeight: "1.5" }}>
+                        {overview.growthStrategy.aiSearchAeoDirective}
+                      </div>
+                    </div>
+                  )}
 
                   {/* 7 Günlük Paylaşım Rutini Şablonu */}
                   <div className="cockpit-detail-card" style={{ background: "#fbfbfd" }}>
@@ -1511,11 +1659,37 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                               )
                             )}
 
-                            {/* Alt Çubuk: Hedef Kanal & Aksiyon Butonları (PLANLA KALDIRILDI) */}
+                            {/* Alt Çubuk: Hedef Kanal, Agency Ajanı Rozeti & Aksiyon Butonları */}
                             <div className="kanban-card-footer">
-                              <span className="kanban-channel-badge" title={idea.targetChannel}>
-                                {idea.targetChannel}
-                              </span>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                                <span className="kanban-channel-badge" title={idea.targetChannel}>
+                                  {idea.targetChannel}
+                                </span>
+                                {idea.skillSource && (
+                                  <span
+                                    style={{
+                                      fontSize: "9px",
+                                      fontWeight: 700,
+                                      padding: "1px 6px",
+                                      borderRadius: "4px",
+                                      background: "#f1f5f9",
+                                      color: "#334155",
+                                      border: "1px solid #cbd5e1",
+                                    }}
+                                    title={`Üreten Agency Uzmanı: ${idea.skillSource}`}
+                                  >
+                                    {idea.skillSource === "marketing-tiktok-strategist"
+                                      ? "⚡ TikTok Strategist"
+                                      : idea.skillSource === "marketing-carousel-growth-engine"
+                                      ? "📚 Carousel Engine"
+                                      : idea.skillSource === "marketing-content-creator"
+                                      ? "🎨 Content Creator"
+                                      : idea.skillSource === "marketing-twitter-engager"
+                                      ? "💬 Community Engager"
+                                      : "Agency Specialist"}
+                                  </span>
+                                )}
+                              </div>
 
                               <div className="kanban-card-actions">
                                 <button

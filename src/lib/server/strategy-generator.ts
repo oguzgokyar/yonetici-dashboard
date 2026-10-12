@@ -18,6 +18,12 @@ export type StrategyOverview = {
     valueProposition: string;
     positioning: string;
     keyMessaging: string;
+    brandArchetype?: string;
+    visualDirectives?: {
+      primaryAesthetic: string;
+      forbiddenCliches: string[];
+      photoStyle: string;
+    };
   };
   competitorAnalysis: {
     contentGaps: string[];
@@ -25,18 +31,31 @@ export type StrategyOverview = {
     differentiationAngle: string;
     liveOutlierCount?: number;
     liveOutlierSummary?: string;
+    competitorWeaknesses?: string[];
   };
   audienceVoc: {
     targetPersona: string;
     painPoints: string[];
     frequentQuestions: string[];
     winningHooks: string[];
+    unspokenDesires?: string[];
   };
   growthStrategy: {
     primaryPillars: string[];
     weeklyPostingPlan: string;
     channelPriorities: string[];
     conversionFunnel: string;
+    leadMagnetOffer?: {
+      hook: string;
+      deliverable: string;
+      ctaTrigger: string;
+    };
+    contentDistributionRatio?: {
+      tofuAwareness: string;
+      mofuTrust: string;
+      bofuConversion: string;
+    };
+    aiSearchAeoDirective?: string;
     hashtagBank?: {
       broad: string[];
       niche: string[];
@@ -133,13 +152,48 @@ export const COLUMN_AGENCY_SPECS: Record<
 };
 
 const DEFAULT_SKILLS = [
-  { skill: "marketing-social-media-strategist", role: "Marka Konumlandırma & Büyüme Hunisi" },
-  { skill: "marketing-tiktok-strategist", role: "Dikey Video & Viral Kanca Motoru" },
+  { skill: "specialized/business-strategist", role: "Değer Vaadi Kanvası & Pazar Konumlandırması" },
+  { skill: "design-brand-guardian", role: "Marka Arketipi & Görsel Dil Direktifleri" },
+  { skill: "sales-offer-lead-gen-strategist", role: "Grand Slam Lead Magnet & Dönüşüm Teklifi" },
+  { skill: "marketing-growth-hacker", role: "30-Günlük ToFu/MoFu/BoFu Dağıtım Matrisi" },
+  { skill: "marketing-aeo-foundations", role: "AI Motorlarında (ChatGPT/Perplexity) Alıntılanma Stratejisi" },
+  { skill: "marketing-tiktok-strategist", role: "Dikey Video & 3-Saniye Kanca Motoru" },
   { skill: "marketing-carousel-growth-engine", role: "6-Aşamalı Carousel Rehber Mimarisi" },
   { skill: "marketing-content-creator", role: "Tekil Gönderi & İnfografik Kurgusu" },
   { skill: "marketing-twitter-engager", role: "Topluluk & Etkileşim/DM Mıknatısı" },
   { skill: "outlier-post-finder", role: "Viral Kanca (Hook) & Pazar Kıyaslaması" },
 ];
+
+function formatFullStrategyContext(ctx?: StrategyOverview): string {
+  if (!ctx) return "Belirtilmedi";
+  const lines: string[] = [];
+  if (ctx.brandIdentity) {
+    lines.push(`• Marka Vaadi & Konumlandırma: ${ctx.brandIdentity.valueProposition || ""} (${ctx.brandIdentity.positioning || ""})`);
+    if (ctx.brandIdentity.brandArchetype) {
+      lines.push(`• Marka Arketipi: ${ctx.brandIdentity.brandArchetype}`);
+    }
+  }
+  if (ctx.competitorAnalysis) {
+    if (ctx.competitorAnalysis.differentiationAngle) {
+      lines.push(`• Rakiplerden Farklılaşma Açısı: ${ctx.competitorAnalysis.differentiationAngle}`);
+    }
+    if (ctx.competitorAnalysis.contentGaps?.length) {
+      lines.push(`• Sektör Açıkları: ${ctx.competitorAnalysis.contentGaps.slice(0, 3).join(", ")}`);
+    }
+  }
+  if (ctx.audienceVoc) {
+    if (ctx.audienceVoc.targetPersona) {
+      lines.push(`• Hedef Persona: ${ctx.audienceVoc.targetPersona}`);
+    }
+    if (ctx.audienceVoc.painPoints?.length) {
+      lines.push(`• En Büyük Acı Noktaları: ${ctx.audienceVoc.painPoints.slice(0, 4).join(", ")}`);
+    }
+  }
+  if (ctx.growthStrategy?.leadMagnetOffer?.hook) {
+    lines.push(`• Dönüşüm Teklifi (Lead Magnet): ${ctx.growthStrategy.leadMagnetOffer.hook} (${ctx.growthStrategy.leadMagnetOffer.ctaTrigger})`);
+  }
+  return lines.join("\n") || "Belirtilmedi";
+}
 
 export async function generateFullStrategyAndIdeas(input: {
   brandName: string;
@@ -310,13 +364,51 @@ Kullanılan Sosyal Medya Kanalları: ${input.socialChannels.join(", ") || "Insta
 Takip Edilen Rakipler / Örnek Hesaplar: ${input.competitors.join(", ") || "Belirtilmedi (Sektör liderleri baz alınsın)"}
 ${liveOutlierSummary ? `\nKazıyıcı Havuzundan Canlı Doğrulanmış Viral / Outlier Rakip İçerikleri:\n${liveOutlierSummary}\n` : ""}
 
-Lütfen tam JSON şemasına sadık kalarak stratejiyi ve 4 kolonluk içerik fikirlerini üret:
+The Agency uzmanlık standartlarında (Business Strategist, Brand Guardian, Sales Offer Architect, Growth Hacker, AEO Foundations) aşağıdaki zengin JSON şemasını üret:
 {
   "overview": {
-    "brandIdentity": { "tone": "...", "valueProposition": "...", "positioning": "...", "keyMessaging": "..." },
-    "competitorAnalysis": { "contentGaps": ["..."], "viralPatternsToAdapt": ["..."], "differentiationAngle": "..." },
-    "audienceVoc": { "targetPersona": "...", "painPoints": ["..."], "frequentQuestions": ["..."], "winningHooks": ["..."] },
-    "growthStrategy": { "primaryPillars": ["..."], "weeklyPostingPlan": "...", "channelPriorities": ["..."], "conversionFunnel": "..." }
+    "brandIdentity": {
+      "tone": "...",
+      "valueProposition": "...",
+      "positioning": "...",
+      "keyMessaging": "...",
+      "brandArchetype": "Örn: Bilge Rehber (Sage) / Yenilikçi Kaşif (Explorer) vb.",
+      "visualDirectives": {
+        "primaryAesthetic": "Temiz, yüksek kontrastlı kurumsal estetik...",
+        "forbiddenCliches": ["Stok el sıkışma görselleri", "Aşırı süslü yazı tipleri"],
+        "photoStyle": "Doğal stüdyo ışığı, 50mm derinlik hissi"
+      }
+    },
+    "competitorAnalysis": {
+      "contentGaps": ["..."],
+      "viralPatternsToAdapt": ["..."],
+      "differentiationAngle": "...",
+      "competitorWeaknesses": ["Rakiplerin en çok eleştirilen 2 eksikliği"]
+    },
+    "audienceVoc": {
+      "targetPersona": "...",
+      "painPoints": ["..."],
+      "frequentQuestions": ["..."],
+      "winningHooks": ["..."],
+      "unspokenDesires": ["Statü, hız veya güvenle ilgili içsel beklenti"]
+    },
+    "growthStrategy": {
+      "primaryPillars": ["..."],
+      "weeklyPostingPlan": "...",
+      "channelPriorities": ["..."],
+      "conversionFunnel": "...",
+      "leadMagnetOffer": {
+        "hook": "Yoruma X yazanlara verilecek ücretsiz teklif kancası",
+        "deliverable": "Ücretsiz rehber/araç/şablon",
+        "ctaTrigger": "Yoruma 'REHBER' yaz, DM'den gelsin"
+      },
+      "contentDistributionRatio": {
+        "tofuAwareness": "%60 (Viral & Keşfet)",
+        "mofuTrust": "%30 (Eğitici & Rehber)",
+        "bofuConversion": "%10 (Teklif & Satış)"
+      },
+      "aiSearchAeoDirective": "ChatGPT ve Perplexity'de markanın niş lideri olarak alıntılanma kuralı"
+    }
   },
   "ideas": {
     "vertical_video": [{ "title": "...", "hook": "...", "description": "...", "structure": ["..."], "targetChannel": "...", "ideaType": "benefit|problem_solution|brand_awareness|service_promo|campaign_discount" }],
@@ -326,7 +418,7 @@ Lütfen tam JSON şemasına sadık kalarak stratejiyi ve 4 kolonluk içerik fiki
   }
 }`;
 
-  const { content } = await completeText(systemPrompt, userPrompt, { temperature: 0.7, maxTokens: 4000 });
+  const { content } = await completeText(systemPrompt, userPrompt, { temperature: 0.7, maxTokens: 4200 });
   const fallbackResult = parseJsonResponse<any>(content);
   const ideasWithSkills: Record<ColumnType, StrategyIdea[]> = {
     vertical_video: [],
@@ -415,7 +507,8 @@ Marka Açıklaması: ${input.brandDescription}
 Atanan Agency Uzmanı: ${agencySpec.agentName} (${agencySpec.agentSlug})
 ${input.ideaType ? `İçerik Amacı / Tipi: ${selectedTypeInfo}` : ""}
 ${input.focusTopic ? `Özel Odak Konusu: ${input.focusTopic}` : ""}
-Hedef Kitle & Strateji Özeti: ${input.strategyContext ? JSON.stringify(input.strategyContext.audienceVoc) : "Belirtilmedi"}
+Hedef Kitle & Tam Strateji Özeti:
+${formatFullStrategyContext(input.strategyContext)}
 
 Lütfen 3 yeni fikir içeren JSON formatını üret:
 [
@@ -468,9 +561,23 @@ export async function generateIdeasAcrossAllColumns(input: {
     .map((col) => `=== [${col}] (${COLUMN_AGENCY_SPECS[col].agentName}) ===\n${COLUMN_AGENCY_SPECS[col].guidelines}`)
     .join("\n\n");
 
+  let forbiddenTitlesInstruction = "";
+  if (input.existingTitlesByColumn) {
+    const list: string[] = [];
+    for (const [col, titles] of Object.entries(input.existingTitlesByColumn)) {
+      if (titles && titles.length > 0) {
+        list.push(`- [${col.toUpperCase()}]: ${titles.slice(0, 10).map((t) => `"${t}"`).join(" | ")}`);
+      }
+    }
+    if (list.length > 0) {
+      forbiddenTitlesInstruction = `\nÖNEMLİ (SIFIR-TEKRAR KURALI): Daha önce üretilmiş aşağıdaki başlıklardan KESİNLİKLE farklı, yepyeni açılar ve kancalar üret:\n${list.join("\n")}\n`;
+    }
+  }
+
   const systemPrompt = `Sen kıdemli bir Sosyal Medya Büyüme & Fikir Makinesi Motorusun (The Agency Multi-Specialist Swarm).
 Kullanıcı senden 4 format kolonunun ("vertical_video", "carousel", "single_post", "engagement") HER BİRİ İÇİN 2'şer adet çok güçlü ve uygulanabilir içerik fikri üretmeni istiyor.
 ${dynamicAngleInstruction}
+${forbiddenTitlesInstruction}
 
 FORMAT BAZLI ZORUNLU AGENCY PROTOKOLÜ:
 ${agencyRulesBlock}
@@ -487,7 +594,8 @@ JSON formatında çıktıyı strict bir nesne olarak ver:
 Marka Açıklaması: ${input.brandDescription}
 ${input.ideaType ? `İçerik Amacı / Tipi: ${selectedTypeInfo}` : ""}
 ${input.focusTopic ? `Özel Odak Konusu: ${input.focusTopic}` : ""}
-Hedef Kitle & Strateji: ${input.strategyContext ? JSON.stringify(input.strategyContext.audienceVoc) : "Belirtilmedi"}
+Hedef Kitle & Tam Strateji Özeti:
+${formatFullStrategyContext(input.strategyContext)}
 
 Lütfen 4 kolon için 2'şer fikir içeren JSON nesnesini üret.`;
 

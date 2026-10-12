@@ -152,12 +152,31 @@ export async function POST(
 
     // SENARYO 1: TÜM KOLONLAR (FİKİR MAKİNESİ)
     if (scope === "all_columns") {
+      // 4 Kolonun tamamındaki mevcut başlıkları topla (sıfır-tekrar koruması)
+      const existingRows = db.prepare(`
+        SELECT column_type, title FROM project_strategy_ideas 
+        WHERE project_id = ?
+      `).all(projectId) as Array<{ column_type: ColumnType; title: string }>;
+
+      const existingTitlesByColumn: Record<ColumnType, string[]> = {
+        vertical_video: [],
+        carousel: [],
+        single_post: [],
+        engagement: [],
+      };
+      for (const row of existingRows) {
+        if (existingTitlesByColumn[row.column_type]) {
+          existingTitlesByColumn[row.column_type].push(row.title);
+        }
+      }
+
       const allNewIdeas = await generateIdeasAcrossAllColumns({
         brandName: strategyRow.brand_name,
         brandDescription: strategyRow.brand_description,
         focusTopic,
         ideaType,
         strategyContext,
+        existingTitlesByColumn,
       });
 
       const insertedMap: Record<ColumnType, any[]> = {
