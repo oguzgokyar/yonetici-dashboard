@@ -90,7 +90,13 @@ export function MultiPlatformPreview({
             {/* Background / Video */}
             <div className="preview-media-container">
               {isVideo && mediaUrl ? (
-                <video src={mediaUrl} poster={thumbnailUrl} autoPlay loop muted playsInline />
+                <video
+                  src={mediaUrl}
+                  poster={thumbnailUrl || `/api/media/thumbnail?url=${encodeURIComponent(mediaUrl)}`}
+                  controls
+                  preload="none"
+                  playsInline
+                />
               ) : (
                 <img src={thumbnailUrl || mediaUrl || "/placeholder.png"} alt="" />
               )}
@@ -208,7 +214,13 @@ export function MultiPlatformPreview({
 
           <div className="preview-media-container">
             {isVideo && mediaUrl ? (
-              <video src={mediaUrl} poster={thumbnailUrl} autoPlay loop muted playsInline />
+              <video
+                src={mediaUrl}
+                poster={thumbnailUrl || `/api/media/thumbnail?url=${encodeURIComponent(mediaUrl)}`}
+                controls
+                preload="none"
+                playsInline
+              />
             ) : (
               <img src={thumbnailUrl || mediaUrl || "/placeholder.png"} alt="" />
             )}
@@ -336,7 +348,13 @@ export function MultiPlatformPreview({
 
           <div className="preview-media-container">
             {isVideo && mediaUrl ? (
-              <video src={mediaUrl} poster={thumbnailUrl} autoPlay loop muted playsInline />
+              <video
+                src={mediaUrl}
+                poster={thumbnailUrl || `/api/media/thumbnail?url=${encodeURIComponent(mediaUrl)}`}
+                controls
+                preload="none"
+                playsInline
+              />
             ) : (
               <img src={thumbnailUrl || mediaUrl || "/placeholder.png"} alt="" />
             )}
@@ -409,7 +427,13 @@ export function MultiPlatformPreview({
 
       <div className="ig-media-box">
         {isVideo && mediaUrl ? (
-          <video src={mediaUrl} poster={thumbnailUrl} autoPlay loop muted playsInline />
+          <video
+            src={mediaUrl}
+            poster={thumbnailUrl || `/api/media/thumbnail?url=${encodeURIComponent(mediaUrl)}`}
+            controls
+            preload="none"
+            playsInline
+          />
         ) : (
           <img src={thumbnailUrl || mediaUrl || "/placeholder.png"} alt="" />
         )}

@@ -3200,9 +3200,9 @@ export function PublishingStudio({
                             minute: "2-digit",
                             timeZone: "Europe/Istanbul",
                           });
-                          const thumbUrl = post.mediaUrl.startsWith("/api/assets/")
-                            ? `${post.mediaUrl}?thumb=1`
-                            : post.mediaUrl.startsWith("/api/videos/")
+                          const thumbUrl = post.contentType === "video"
+                            ? `/api/media/thumbnail?url=${encodeURIComponent(post.mediaUrl)}`
+                            : post.mediaUrl.startsWith("/api/assets/")
                             ? `${post.mediaUrl}?thumb=1`
                             : post.mediaUrl;
 
@@ -3371,10 +3371,9 @@ export function PublishingStudio({
                   {editingPost.contentType === "video" ? (
                     <video
                       src={editingPost.mediaUrl}
+                      poster={`/api/media/thumbnail?url=${encodeURIComponent(editingPost.mediaUrl)}`}
                       controls
-                      autoPlay
-                      muted
-                      loop
+                      preload="none"
                       playsInline
                     />
                   ) : (
