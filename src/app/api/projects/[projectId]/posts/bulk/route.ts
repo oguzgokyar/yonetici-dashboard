@@ -282,11 +282,34 @@ export async function POST(request: Request, context: Context) {
         continue;
       }
 
-      const postizMedia = await uploadMediaToPostiz(fileBuffer, filename, mimeType);
       const isVideo = mimeType.startsWith("video/") || filename.endsWith(".mp4");
       const musicAttribution = resolveMusicAttribution(database, projectId, {
         assetId: candidateId, mediaUrl: item.mediaUrl,
       });
+
+      // Sadece TikTok (Tarayıcı modu) ise Postiz'e gereksiz yüklemeyi atla
+      const isOnlyTikTokBrowser = item.targets.every((t) => {
+        const acc = database
+          .prepare("SELECT identifier, tiktok_method FROM project_social_accounts WHERE project_id=? AND integration_id=?")
+          .get(projectId, t.integrationId) as { identifier?: string; tiktok_method?: string } | undefined;
+        const pId = acc?.identifier || "";
+        const m = t.tiktokMethod || acc?.tiktok_method || "browser";
+        return pId.includes("tiktok") && m === "browser" && isVideo;
+      });
+
+      let postizMedia: { id: string; path: string } | null = null;
+      if (!isOnlyTikTokBrowser) {
+        try {
+          postizMedia = await uploadMediaToPostiz(fileBuffer, filename, mimeType);
+        } catch (err) {
+          results.push({
+            success: false,
+            title: itemTitle,
+            error: `Postiz yükleme hatası: ${err instanceof Error ? err.message : String(err)}`
+          });
+          continue;
+        }
+      }
 
       for (const target of item.targets) {
         const postId = crypto.randomUUID();
@@ -294,6 +317,23 @@ export async function POST(request: Request, context: Context) {
         const targetScheduleType = target.scheduleType || item.scheduleType || "now";
         const targetScheduledAt = target.scheduledAt || item.scheduledAt;
         const targetPostType = target.postType || (isVideo ? "reel" : "post");
+        const targetTitle = target.title || itemTitle;
+
+        // 24 Saatlik Mükerrer Kontrolü (Deduplication Guard)
+        const existingRecent = database.prepare(`
+          SELECT id, status, created_at FROM content_posts
+          WHERE project_id = ? AND integration_id = ? AND (title = ? OR media_url = ?)
+            AND created_at >= datetime('now', '-24 hours')
+            AND status IN ('published', 'scheduled')
+          LIMIT 1
+        `).get(projectId, target.integrationId, targetTitle, item.mediaUrl || "") as { id: string; status: string } | undefined;
+
+        if (existingRecent) {
+          console.warn(`[Bulk Posts Deduplication] Aynı içerik son 24 saat içinde zaten paylaşıldı/zamanlandı: ${targetTitle}`);
+          results.push({ success: true, title: itemTitle, postId: existingRecent.id });
+          continue;
+        }
+
         const targetCaption = appendMusicAttribution(
           target.caption !== undefined ? target.caption.trim() : item.caption || "",
           musicAttribution
@@ -323,7 +363,8 @@ export async function POST(request: Request, context: Context) {
             const browserRes = await uploadVideoViaTikTokBrowser({
               videoPath: tmpVideoPath,
               caption: fullCaption,
-              visibility: "PUBLIC",
+              visibility: targetScheduleType === "draft" ? "SELF_ONLY" : "PUBLIC",
+              scheduleTime: targetScheduleType === "schedule" && targetScheduledAt ? targetScheduledAt : undefined,
             });
             try { fs.unlinkSync(tmpVideoPath); } catch {}
 
@@ -334,6 +375,9 @@ export async function POST(request: Request, context: Context) {
               throw new Error(browserRes.error || "TikTok tarayıcı yüklemesi başarısız oldu.");
             }
 
+            const finalStatus = browserRes.status === "scheduled" ? "scheduled" : "published";
+            const finalSchedType = browserRes.status === "scheduled" ? "schedule" : "now";
+
             database
               .prepare(`
                 INSERT INTO content_posts (
@@ -341,19 +385,22 @@ export async function POST(request: Request, context: Context) {
                   caption, hashtags, status, schedule_type, scheduled_at,
                   integration_id, post_type, postiz_post_id, postiz_media_id,
                   error_message, created_at, updated_at
-                ) VALUES (?, ?, ?, 'video', ?, ?, ?, 'published', 'now', NULL, ?, ?, ?, ?, NULL, ?, ?)
+                ) VALUES (?, ?, ?, 'video', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
               `)
               .run(
                 postId,
                 projectId,
-                target.title || itemTitle,
-                postizMedia.path,
+                targetTitle,
+                postizMedia?.path || item.mediaUrl || "",
                 targetCaption,
                 targetHashtags,
+                finalStatus,
+                finalSchedType,
+                targetScheduledAt || null,
                 target.integrationId,
                 targetPostType,
                 `tiktok_browser_${postId.slice(0, 8)}`,
-                postizMedia.id,
+                postizMedia?.id || "",
                 now,
                 now
               );
@@ -372,6 +419,9 @@ export async function POST(request: Request, context: Context) {
         }
 
         try {
+          if (!postizMedia) {
+            postizMedia = await uploadMediaToPostiz(fileBuffer, filename, mimeType);
+          }
           const postizResult = await createPostizPost({
             type: targetScheduleType,
             date: targetScheduledAt,
@@ -406,7 +456,7 @@ export async function POST(request: Request, context: Context) {
               projectId,
               target.title || itemTitle,
               isVideo ? "video" : "image",
-              postizMedia.path,
+              postizMedia ? postizMedia.path : item.mediaUrl || "",
               targetCaption,
               targetHashtags,
               finalStatus,
@@ -415,7 +465,7 @@ export async function POST(request: Request, context: Context) {
               target.integrationId,
               targetPostType,
               createdPostId,
-              postizMedia.id,
+              postizMedia ? postizMedia.id : null,
               now,
               now
             );

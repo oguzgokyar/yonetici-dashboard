@@ -445,13 +445,25 @@ export async function POST(request: Request, context: Context) {
     assetId: candidateId, mediaUrl: body.mediaUrl,
   });
 
-  // Upload to Postiz once
-  let postizMedia: { id: string; path: string };
-  try {
-    postizMedia = await uploadMediaToPostiz(fileBuffer, filename, mimeType);
-  } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, message: `Medyayı Postiz'e yükleme başarısız: ${errMsg}` }, { status: 500 });
+  // Check if only TikTok (browser mode) is targeted -> bypass Postiz upload completely
+  const isOnlyTikTokBrowser = targets.every((t) => {
+    const acc = database
+      .prepare("SELECT identifier, tiktok_method FROM project_social_accounts WHERE project_id=? AND integration_id=?")
+      .get(projectId, t.integrationId) as { identifier?: string; tiktok_method?: string } | undefined;
+    const pId = acc?.identifier || "";
+    const m = t.tiktokMethod || acc?.tiktok_method || "browser";
+    return pId.includes("tiktok") && m === "browser" && (mimeType.startsWith("video/") || filename.endsWith(".mp4"));
+  });
+
+  // Upload to Postiz only when other platforms or Postiz mode is requested
+  let postizMedia: { id: string; path: string } | null = null;
+  if (!isOnlyTikTokBrowser) {
+    try {
+      postizMedia = await uploadMediaToPostiz(fileBuffer, filename, mimeType);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      return Response.json({ ok: false, message: `Medyayı Postiz'e yükleme başarısız: ${errMsg}` }, { status: 500 });
+    }
   }
 
   for (const target of targets) {
@@ -461,6 +473,30 @@ export async function POST(request: Request, context: Context) {
     const targetScheduledAt = target.scheduledAt || body.scheduledAt;
     const targetPostType = target.postType || defaultPostType;
     const targetTitle = target.title || body.title || "İsimsiz Gönderi";
+
+    // 24 Saatlik Mükerrer Kontrolü (Deduplication Guard)
+    const existingRecent = database.prepare(`
+      SELECT id, status, created_at FROM content_posts
+      WHERE project_id = ? AND integration_id = ? AND (title = ? OR media_url = ?)
+        AND created_at >= datetime('now', '-24 hours')
+        AND status IN ('published', 'scheduled')
+      LIMIT 1
+    `).get(projectId, target.integrationId, targetTitle, body.mediaUrl || "") as { id: string; status: string } | undefined;
+
+    if (existingRecent) {
+      console.warn(`[Posts Deduplication] Aynı içerik son 24 saat içinde zaten paylaşıldı/zamanlandı: ${targetTitle}`);
+      createdPosts.push({
+        id: existingRecent.id,
+        status: existingRecent.status,
+        integrationId: target.integrationId,
+      });
+      continue;
+    }
+
+    if (!isOnlyTikTokBrowser && !postizMedia) {
+      postizMedia = await uploadMediaToPostiz(fileBuffer, filename, mimeType);
+    }
+
     const targetCaption = appendMusicAttribution(
       target.caption !== undefined ? target.caption.trim() : defaultCaption, musicAttribution,
     );
@@ -489,13 +525,17 @@ export async function POST(request: Request, context: Context) {
         const browserRes = await uploadVideoViaTikTokBrowser({
           videoPath: tmpVideoPath,
           caption: fullCaption,
-          visibility: "PUBLIC",
+          visibility: targetScheduleType === "draft" ? "SELF_ONLY" : "PUBLIC",
+          scheduleTime: targetScheduleType === "schedule" && targetScheduledAt ? targetScheduledAt : undefined,
         });
         try { fs.unlinkSync(tmpVideoPath); } catch {}
 
         if (!browserRes.ok) {
           throw new Error(browserRes.error || "TikTok tarayıcı yüklemesi başarısız oldu.");
         }
+
+        const finalStatus = browserRes.status === "scheduled" ? "scheduled" : "published";
+        const finalSchedType = browserRes.status === "scheduled" ? "schedule" : "now";
 
         database
           .prepare(`
@@ -504,15 +544,18 @@ export async function POST(request: Request, context: Context) {
               caption, hashtags, status, schedule_type, scheduled_at,
               integration_id, post_type, postiz_post_id, postiz_media_id,
               error_message, created_at, updated_at
-            ) VALUES (?, ?, ?, 'video', ?, ?, ?, 'published', 'now', NULL, ?, ?, ?, ?, NULL, ?, ?)
+            ) VALUES (?, ?, ?, 'video', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
           `)
           .run(
             postId,
             projectId,
             targetTitle,
-            postizMedia?.path || "",
+            postizMedia?.path || body.mediaUrl || "",
             targetCaption,
             targetHashtags,
+            finalStatus,
+            finalSchedType,
+            targetScheduledAt || null,
             target.integrationId,
             targetPostType,
             `tiktok_browser_${postId.slice(0, 8)}`,
@@ -524,18 +567,25 @@ export async function POST(request: Request, context: Context) {
         createdPosts.push({
           id: postId,
           postizPostId: `tiktok_browser_${postId.slice(0, 8)}`,
-          status: "published",
-          mediaPath: postizMedia?.path || "",
+          status: finalStatus,
+          mediaPath: postizMedia?.path || body.mediaUrl || "",
           integrationId: target.integrationId,
         });
         continue;
       } catch (bErr) {
         try { if (fs.existsSync(tmpVideoPath)) fs.unlinkSync(tmpVideoPath); } catch {}
         console.error("TikTok browser upload error:", bErr);
+        return Response.json({
+          ok: false,
+          message: `TikTok tarayıcı yükleme hatası: ${bErr instanceof Error ? bErr.message : String(bErr)}`
+        }, { status: 500 });
       }
     }
 
     try {
+      if (!postizMedia) {
+        postizMedia = await uploadMediaToPostiz(fileBuffer, filename, mimeType);
+      }
       const postizResult = await createPostizPost({
         type: targetScheduleType,
         date: targetScheduledAt,
@@ -577,7 +627,7 @@ export async function POST(request: Request, context: Context) {
           projectId,
           targetTitle,
           resolvedContentType,
-          postizMedia.path,
+          postizMedia ? postizMedia.path : body.mediaUrl || "",
           targetCaption,
           targetHashtags,
           finalStatus,
@@ -586,7 +636,7 @@ export async function POST(request: Request, context: Context) {
           target.integrationId,
           targetPostType,
           createdPostId,
-          postizMedia.id,
+          postizMedia ? postizMedia.id : null,
           JSON.stringify(postizMedia ? [{ id: postizMedia.id, path: postizMedia.path }] : []),
           sourceMediaUrl,
           now,
@@ -597,7 +647,7 @@ export async function POST(request: Request, context: Context) {
         id: postId,
         postizPostId: createdPostId,
         status: finalStatus,
-        mediaPath: postizMedia.path,
+        mediaPath: postizMedia ? postizMedia.path : body.mediaUrl || "",
         integrationId: target.integrationId,
       });
     } catch (error) {
@@ -615,14 +665,14 @@ export async function POST(request: Request, context: Context) {
           projectId,
           targetTitle,
           resolvedContentType,
-          postizMedia.path,
+          postizMedia ? postizMedia.path : body.mediaUrl || "",
           targetCaption,
           targetHashtags,
           targetScheduleType,
           targetScheduledAt || null,
           target.integrationId,
           targetPostType,
-          postizMedia.id,
+          postizMedia ? postizMedia.id : null,
           sourceMediaUrl,
           `Postiz Gönderi Hatası: ${errMsg}`,
           now,

@@ -38,16 +38,28 @@ function getEnabledSetHashtags(projectId: string, platform: SocialPlatform, sele
     .flatMap((row) => JSON.parse(row.hashtags_json || "[]") as string[]);
 }
 
-async function generatePlatformCopy(input: {
-  platform: SocialPlatform;
+async function generateMultiPlatformCopy(input: {
+  platforms: SocialPlatform[];
   format: ContentFormatKind;
   itemCount?: number;
   brand: Record<string, string>;
   brandConcept: Partial<BrandConcept>;
   style: CopyStyle;
   topicContext: string;
-}) {
-  const formatInstruction = getPlatformFormatRule(input.platform, input.format, input.itemCount);
+}): Promise<Record<string, GeneratedCopy>> {
+  const platformSpecs = input.platforms
+    .map((p) => {
+      const rule = getPlatformFormatRule(p, input.format, input.itemCount);
+      return `--- [${p.toUpperCase()}] ---\n${rule}\nKURAL: ${PLATFORM_COPY_RULES[p]}`;
+    })
+    .join("\n\n");
+
+  const expectedKeys = input.platforms
+    .map(
+      (p) =>
+        `  "${p}": {\n    "title": "başlık",\n    "caption": "açıklama metni",\n    "hashtags": ["#Etiket1", "#Etiket2"],\n    "tags": ${p === "youtube" ? '["etiket1", "etiket2"]' : "[]"}\n  }`
+    )
+    .join(",\n");
 
   const prompt = `MARKA BİLGİLERİ:
 Marka Adı: ${input.brand.brandName || "Belirtilmedi"}
@@ -57,28 +69,25 @@ Hedef Kitle: ${input.brand.audience || "Genel kitle"}
 Varsayılan CTA: ${input.brand.defaultCta || "Detaylı bilgi için profil bağlantısını inceleyin"}
 ${brandConceptInstruction(input.brandConcept)}
 
-PLATFORM: ${input.platform}
-${formatInstruction}
-GENEL PLATFORM KURALI: ${PLATFORM_COPY_RULES[input.platform]}
 İÇERİK STİLİ: ${styleDescriptions[input.style] || styleDescriptions.sales}
 ${input.topicContext}
 
+HEDEF PLATFORMLAR VE ÖZEL KURALLAR:
+${platformSpecs}
+
 GÖREV:
-Bu platform ve içerik formatı için viral olmaya müsait, etkileşim ve izlenme odaklı, özgün Türkçe paylaşım metni üret. Başka platform adlarını veya alakasız etiketleri ekleme. Görsel üretim promptu, kamera açısı ya da sahne talimatı yazma.
+Yukarıdaki her bir platform için ayrı ayrı optimize edilmiş, viral olmaya müsait, özgün Türkçe paylaşım metinlerini TEK BİR JSON nesnesi içinde üret.
 Yalnızca geçerli JSON döndür:
 {
-  "title": "platforma ve formata uygun başlık (YouTube için 70-95 karakter arama niyetli kanca; Instagram/TikTok için kısa çarpıcı başlık)",
-  "caption": "tam paylaşım metni (ilk satırı kaydırmayı durduran güçlü kanca, gövdesi akıcı, sonunda net CTA)",
-  "hashtags": ["#Etiket1", "#Etiket2"],
-  "tags": ["YouTube için 8-15 adet arka plan arama etiketi; diğer platformlarda boş dizi []"]
+${expectedKeys}
 }`;
 
   const { content } = await completeText(
     "Sen viral sosyal medya kurguları ve platform algoritmaları konusunda uzman kıdemli bir sosyal medya direktörü ve Türkçe kreatif metin yazarısın. Yalnızca geçerli JSON üret.",
     prompt,
-    { temperature: 0.72, maxTokens: 1800 },
+    { temperature: 0.7, maxTokens: 2200 }
   );
-  return parseJsonResponse<GeneratedCopy>(content);
+  return parseJsonResponse<Record<string, GeneratedCopy>>(content);
 }
 
 export async function POST(request: Request) {
@@ -123,9 +132,11 @@ export async function POST(request: Request) {
       input.format ||
       (input.postType === "reel" ? "reel" : input.postType === "story" ? "story" : "post");
 
-    const settled = await Promise.allSettled(requestedPlatforms.map(async (platform) => {
-      const generated = await generatePlatformCopy({
-        platform,
+    // Tek birleşik LLM çağrısıyla tüm platformların metnini tek seferde üret
+    let rawMultiCopies: Record<string, GeneratedCopy> = {};
+    try {
+      rawMultiCopies = await generateMultiPlatformCopy({
+        platforms: requestedPlatforms,
         format: resolvedFormat,
         itemCount: input.itemCount,
         brand,
@@ -133,6 +144,20 @@ export async function POST(request: Request) {
         style: input.style || "sales",
         topicContext,
       });
+    } catch (e) {
+      console.error("[generateMultiPlatformCopy Error]", e);
+    }
+
+    const copies: Record<string, unknown> = {};
+    const errors: Record<string, string> = {};
+
+    for (const platform of requestedPlatforms) {
+      const generated = rawMultiCopies[platform] || rawMultiCopies[platform.toLowerCase()] || {};
+      if (!generated.caption && !generated.title) {
+        errors[platform] = "Platform için metin üretilemedi.";
+        continue;
+      }
+
       const aiHashtags = normalizeHashtagList(generated.hashtags || []);
       const setHashtags = input.includeHashtagSets
         ? getEnabledSetHashtags(input.projectId!, platform, input.selectedHashtagSetIds?.[platform])
@@ -140,28 +165,19 @@ export async function POST(request: Request) {
       const merged = mergePlatformHashtags({ platform, aiHashtags, setHashtags, includeSets: Boolean(input.includeHashtagSets) });
       const aiTags = normalizeHashtagList(generated.tags || []).map((tag) => tag.replace(/^#/, ""));
       const tags = platform === "youtube" ? [...new Set([...merged.tags, ...aiTags])].slice(0, 15) : [];
-      return {
-        platform,
-        copy: {
-          title: generated.title || input.idea?.title || input.sourceTopic || "Sosyal Medya Gönderisi",
-          caption: generated.caption || "",
-          hashtags: merged.visible.join(" "),
-          tags,
-          hashtagMeta: {
-            ai: merged.aiAdded, savedSet: merged.setAdded,
-            removedDuplicates: merged.removedDuplicates, removedInvalid: merged.removedInvalid,
-          },
+
+      copies[platform] = {
+        title: generated.title || input.idea?.title || input.sourceTopic || "Sosyal Medya Gönderisi",
+        caption: generated.caption || "",
+        hashtags: merged.visible.join(" "),
+        tags,
+        hashtagMeta: {
+          ai: merged.aiAdded, savedSet: merged.setAdded,
+          removedDuplicates: merged.removedDuplicates, removedInvalid: merged.removedInvalid,
         },
       };
-    }));
+    }
 
-    const copies: Record<string, unknown> = {};
-    const errors: Record<string, string> = {};
-    settled.forEach((result, index) => {
-      const platform = requestedPlatforms[index];
-      if (result.status === "fulfilled") copies[platform] = result.value.copy;
-      else errors[platform] = result.reason instanceof Error ? result.reason.message : "Metin üretilemedi.";
-    });
     const firstCopy = copies[requestedPlatforms[0]];
     return Response.json({ ok: Object.keys(copies).length > 0, copy: firstCopy, copies, errors });
   } catch (error) {
