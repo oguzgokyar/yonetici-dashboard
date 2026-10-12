@@ -8,6 +8,11 @@ import {
 } from "@/lib/server/postiz-client";
 import { appendMusicAttribution, resolveMusicAttribution } from "@/lib/music-attribution";
 import { uploadVideoViaTikTokBrowser } from "@/lib/server/tiktok-browser-service";
+import {
+  scheduleExactTikTokPost,
+  getTikTokQueueDir,
+  ensureTikTokSchedulersRehydrated,
+} from "@/lib/server/tiktok-exact-scheduler";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -55,6 +60,7 @@ export async function POST(request: Request, context: Context) {
   }
 
   const database = getDatabase();
+  ensureTikTokSchedulersRehydrated();
   const dataDir = path.join(process.cwd(), ".data");
   const assetDir = path.join(dataDir, "assets");
   const videoDir = path.join(dataDir, "videos");
@@ -357,6 +363,53 @@ export async function POST(request: Request, context: Context) {
 
         // TikTok Tarayıcı Yükleme Modu Kontrolü
         if (platformIdentifier.includes("tiktok") && effectiveTiktokMethod === "browser" && isVideo) {
+          // 1. İLERİ TARİHLİ ZAMANLAMA (Kullanıcı Talebi: TikTok arayüzü yerine kuyrukta beklet, saati gelince 'Şimdi Paylaş' ile yükle)
+          if (targetScheduleType === "schedule" && targetScheduledAt) {
+            try {
+              const queueDir = getTikTokQueueDir();
+              const queueFilePath = path.join(queueDir, `${postId}.mp4`);
+              fs.writeFileSync(queueFilePath, fileBuffer);
+
+              database
+                .prepare(`
+                  INSERT INTO content_posts (
+                    id, project_id, title, content_type, media_url,
+                    caption, hashtags, status, schedule_type, scheduled_at,
+                    integration_id, post_type, postiz_post_id, postiz_media_id,
+                    local_path, error_message, created_at, updated_at
+                  ) VALUES (?, ?, ?, 'video', ?, ?, ?, 'scheduled', 'schedule', ?, ?, ?, NULL, NULL, ?, NULL, ?, ?)
+                `)
+                .run(
+                  postId,
+                  projectId,
+                  targetTitle,
+                  item.mediaUrl || "",
+                  targetCaption,
+                  targetHashtags,
+                  targetScheduledAt,
+                  target.integrationId,
+                  targetPostType,
+                  queueFilePath,
+                  now,
+                  now
+                );
+
+              // Saati geldiğinde otomatik uyanacak tam-zamanlı alarmı kur
+              scheduleExactTikTokPost(postId, targetScheduledAt);
+
+              results.push({ success: true, title: itemTitle, postId });
+              continue;
+            } catch (qErr) {
+              results.push({
+                success: false,
+                title: itemTitle,
+                error: qErr instanceof Error ? qErr.message : "TikTok zamanlama kuyruğuna eklenemedi",
+              });
+              continue;
+            }
+          }
+
+          // 2. HEMEN PAYLAŞ ("now") VEYA TASLAK ("draft")
           const tmpVideoPath = path.join("/tmp", `tiktok_upload_${postId}.mp4`);
           try {
             fs.writeFileSync(tmpVideoPath, fileBuffer);
@@ -364,7 +417,6 @@ export async function POST(request: Request, context: Context) {
               videoPath: tmpVideoPath,
               caption: fullCaption,
               visibility: targetScheduleType === "draft" ? "SELF_ONLY" : "PUBLIC",
-              scheduleTime: targetScheduleType === "schedule" && targetScheduledAt ? targetScheduledAt : undefined,
             });
             try { fs.unlinkSync(tmpVideoPath); } catch {}
 
@@ -375,12 +427,8 @@ export async function POST(request: Request, context: Context) {
               throw new Error(browserRes.error || "TikTok tarayıcı yüklemesi başarısız oldu.");
             }
 
-            if (targetScheduleType === "schedule" && browserRes.status !== "scheduled") {
-              throw new Error("TikTok zamanlaması açılamadı. Videonun hemen canlıya düşmesini önlemek için işlem durduruldu.");
-            }
-
-            const finalStatus = browserRes.status === "scheduled" ? "scheduled" : "published";
-            const finalSchedType = browserRes.status === "scheduled" ? "schedule" : "now";
+            const finalStatus = targetScheduleType === "draft" ? "draft" : "published";
+            const finalSchedType = targetScheduleType === "draft" ? "draft" : "now";
 
             database
               .prepare(`
@@ -389,8 +437,7 @@ export async function POST(request: Request, context: Context) {
                   caption, hashtags, status, schedule_type, scheduled_at,
                   integration_id, post_type, postiz_post_id, postiz_media_id,
                   error_message, created_at, updated_at
-                ) VALUES (?, ?, ?, 'video', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
-              `)
+                ) VALUES (?, ?, ?, 'video', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)\n              `)
               .run(
                 postId,
                 projectId,
@@ -400,7 +447,7 @@ export async function POST(request: Request, context: Context) {
                 targetHashtags,
                 finalStatus,
                 finalSchedType,
-                targetScheduledAt || null,
+                null,
                 target.integrationId,
                 targetPostType,
                 `tiktok_browser_${postId.slice(0, 8)}`,

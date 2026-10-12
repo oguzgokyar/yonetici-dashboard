@@ -225,7 +225,7 @@ export function PublishingStudio({
   const [bulkScheduleMode, setBulkScheduleMode] = useState<"now" | "interval" | "daily_fixed" | "draft">("daily_fixed");
   const [bulkIntervalHours, setBulkIntervalHours] = useState<number>(3);
   const [bulkDailyCount, setBulkDailyCount] = useState<number>(1); // 1, 2, 3, 4
-  const [bulkDailySlots, setBulkDailySlots] = useState<string[]>(["18:00", "12:00", "15:00", "21:00"]);
+  const [bulkDailySlots, setBulkDailySlots] = useState<string[]>(["12:00", "18:00", "15:00", "21:00"]);
   const [bulkStartDate, setBulkStartDate] = useState<string>("");
   const [bulkActivePlatform, setBulkActivePlatform] = useState<HashtagSet["platform"]>("instagram");
   const [bulkItems, setBulkItems] = useState<Array<{
@@ -869,15 +869,28 @@ export function PublishingStudio({
       }
 
       if (bulkScheduleMode === "daily_fixed") {
-        const activeSlots = bulkDailySlots.slice(0, Math.max(1, bulkDailyCount));
-        const dayOffset = Math.floor(index / activeSlots.length);
-        const slotTime = activeSlots[index % activeSlots.length] || "18:00";
-        const [hh, mm] = slotTime.split(":").map(Number);
+        const activeSlots = [...bulkDailySlots.slice(0, Math.max(1, bulkDailyCount))].sort();
+        const nowTime = Date.now();
+        let foundSlots = 0;
+        let dayCursor = 0;
 
-        const targetDate = new Date(baseDate);
-        targetDate.setDate(targetDate.getDate() + dayOffset);
-        targetDate.setHours(hh || 18, mm || 0, 0, 0);
-        return toIstanbulDatetimeLocal(targetDate);
+        while (dayCursor < 180) {
+          for (const slotTime of activeSlots) {
+            const [hh, mm] = slotTime.split(":").map(Number);
+            const candidate = new Date(baseDate);
+            candidate.setDate(candidate.getDate() + dayCursor);
+            candidate.setHours(hh || 18, mm || 0, 0, 0);
+
+            // Geçmiş saatleri atla (en az 10 dakika ileri olmalı)
+            if (candidate.getTime() > nowTime + 600_000) {
+              if (foundSlots === index) {
+                return toIstanbulDatetimeLocal(candidate);
+              }
+              foundSlots++;
+            }
+          }
+          dayCursor++;
+        }
       }
     } catch {
       // fallback
@@ -885,32 +898,41 @@ export function PublishingStudio({
     return baseLocalStr;
   }
 
+  function recalculateAllBulkSlots(slots: string[], count: number, baseStr: string) {
+    const activeSlots = [...slots.slice(0, Math.max(1, count))].sort();
+    const baseDate = new Date(baseStr.includes("T") ? baseStr : `${baseStr}T00:00:00`);
+    const nowTime = Date.now();
+    const validTimes: string[] = [];
+    let dayCursor = 0;
+
+    while (validTimes.length < 50 && dayCursor < 180) {
+      for (const slotTime of activeSlots) {
+        const [hh, mm] = slotTime.split(":").map(Number);
+        const candidate = new Date(baseDate);
+        candidate.setDate(candidate.getDate() + dayCursor);
+        candidate.setHours(hh || 18, mm || 0, 0, 0);
+
+        if (candidate.getTime() > nowTime + 600_000) {
+          validTimes.push(toIstanbulDatetimeLocal(candidate));
+        }
+      }
+      dayCursor++;
+    }
+    return validTimes;
+  }
+
   function handleDailySlotChange(slotIdx: number, val: string) {
-    setBulkDailySlots((prev) => {
-      const next = [...prev];
-      next[slotIdx] = val;
-      return next;
-    });
-    // Mevcut hazırlanmış bulkItems tarihlerini anında güncelle
+    const nextSlots = [...bulkDailySlots];
+    nextSlots[slotIdx] = val;
+    setBulkDailySlots(nextSlots);
+
     if (bulkItems.length > 0) {
-      const nextSlots = [...bulkDailySlots];
-      nextSlots[slotIdx] = val;
-      const activeSlots = nextSlots.slice(0, Math.max(1, bulkDailyCount));
+      const validTimes = recalculateAllBulkSlots(nextSlots, bulkDailyCount, bulkStartDate || scheduledAt);
       setBulkItems((prev) =>
-        prev.map((item, idx) => {
-          try {
-            const baseDate = new Date(bulkStartDate || scheduledAt);
-            const dayOffset = Math.floor(idx / activeSlots.length);
-            const slotTime = activeSlots[idx % activeSlots.length] || "18:00";
-            const [hh, mm] = slotTime.split(":").map(Number);
-            const targetDate = new Date(baseDate);
-            targetDate.setDate(targetDate.getDate() + dayOffset);
-            targetDate.setHours(hh || 18, mm || 0, 0, 0);
-            return { ...item, scheduledAt: toIstanbulDatetimeLocal(targetDate) };
-          } catch {
-            return item;
-          }
-        })
+        prev.map((item, idx) => ({
+          ...item,
+          scheduledAt: validTimes[idx] || item.scheduledAt,
+        }))
       );
     }
   }
@@ -918,22 +940,12 @@ export function PublishingStudio({
   function handleDailyCountChange(count: number) {
     setBulkDailyCount(count);
     if (bulkItems.length > 0) {
-      const activeSlots = bulkDailySlots.slice(0, count);
+      const validTimes = recalculateAllBulkSlots(bulkDailySlots, count, bulkStartDate || scheduledAt);
       setBulkItems((prev) =>
-        prev.map((item, idx) => {
-          try {
-            const baseDate = new Date(bulkStartDate || scheduledAt);
-            const dayOffset = Math.floor(idx / activeSlots.length);
-            const slotTime = activeSlots[idx % activeSlots.length] || "18:00";
-            const [hh, mm] = slotTime.split(":").map(Number);
-            const targetDate = new Date(baseDate);
-            targetDate.setDate(targetDate.getDate() + dayOffset);
-            targetDate.setHours(hh || 18, mm || 0, 0, 0);
-            return { ...item, scheduledAt: toIstanbulDatetimeLocal(targetDate) };
-          } catch {
-            return item;
-          }
-        })
+        prev.map((item, idx) => ({
+          ...item,
+          scheduledAt: validTimes[idx] || item.scheduledAt,
+        }))
       );
     }
   }
