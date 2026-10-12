@@ -1429,33 +1429,6 @@ export function PublishingStudio({
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <PublishingHealthBadge />
-          {accounts.some((a) => a.identifier.includes("tiktok")) && (
-            <Link
-              href={`/projects/${projectId}/accounts`}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "4px 10px",
-                borderRadius: "8px",
-                background: tiktokUploadMethod === "browser" ? "#fdf2f8" : "#f1f5f9",
-                border: `1px solid ${tiktokUploadMethod === "browser" ? "#fbcfe8" : "#cbd5e1"}`,
-                fontSize: "11px",
-                textDecoration: "none",
-                color: tiktokUploadMethod === "browser" ? "#be185d" : "#475569",
-                fontWeight: 600,
-              }}
-              title="TikTok yayın motorunu Hesaplar sayfasından değiştirebilirsiniz"
-            >
-              <TikTokIcon size={12} color="#000" />
-              <span>
-                TikTok Motoru:{" "}
-                <strong>
-                  {tiktokUploadMethod === "browser" ? "Tarayıcı (Doğrudan)" : "Postiz API"}
-                </strong>
-              </span>
-            </Link>
-          )}
           <button
             type="button"
             onClick={() => {
