@@ -12,7 +12,14 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-type CopyStyle = "sales" | "story" | "educational" | "punchy";
+export type CopyStyle =
+  | "sales"
+  | "story"
+  | "educational"
+  | "punchy"
+  | "negative_curiosity"
+  | "contrarian_hack"
+  | "show_dont_tell";
 
 type GeneratedCopy = {
   title?: string;
@@ -22,10 +29,13 @@ type GeneratedCopy = {
 };
 
 const styleDescriptions: Record<CopyStyle, string> = {
-  sales: "Dönüşüm / Satış & Kampanya (güçlü CTA, teklif ve müşteri faydası)",
-  story: "Hikâye Anlatımı / Samimi (insan odaklı ve merak uyandıran)",
-  educational: "Eğitici & Bilgilendirici (uygulanabilir ipuçları ve rehber)",
-  punchy: "Kısa & Çarpıcı (hızlı tüketilen dikey video dili)",
+  negative_curiosity: "Uyarı / Negatif Merak Kancası (Agency Agents: 'Bunu yapmadan önce sakın...', hata önleme ve kaybetme korkusu tetikleyici)",
+  contrarian_hack: "Ters Köşe / Sıfır Maliyet Kancası (Agency Agents: 'Herkes pahalı set gerekir sanıyor ama 0 TL'ye...', ezber bozan hile)",
+  show_dont_tell: "Şok Edici Sonuç Kancası (Agency Agents: 'Bunun çalıştığına kimse inanmadı...', 'Sonundaki tepkiye bakın', saf merak)",
+  educational: "Eğitici & 6-Aşamalı Rehber (Adım adım uygulanabilir değer, kaydetmeye ve denemeye yönlendiren format)",
+  punchy: "Kısa & Çarpıcı (Maksimum 120-140 karakter, doğrudan 3 saniyede kanca atan dikey video dili)",
+  sales: "Dönüşüm / Teklif & Fayda (Net müşteri kazanımı ve profile/DM'ye yönlendiren eylem çağrısı)",
+  story: "Hikâye Anlatımı / Samimi (Deneyim, hata yapıp öğrenme ve topluluk odaklı samimi dil)",
 };
 
 function getEnabledSetHashtags(projectId: string, platform: SocialPlatform, selectedSetIds?: string[]) {
@@ -75,8 +85,12 @@ ${input.topicContext}
 HEDEF PLATFORMLAR VE ÖZEL KURALLAR:
 ${platformSpecs}
 
-GÖREV:
-Yukarıdaki her bir platform için ayrı ayrı optimize edilmiş, viral olmaya müsait, özgün Türkçe paylaşım metinlerini TEK BİR JSON nesnesi içinde üret.
+GÖREV (THE AGENCY VIRAL PRODUCTION PROTOCOL):
+Yukarıdaki her bir platform için ayrı ayrı optimize edilmiş, birbirinin kopyası OLMAYAN, ilgili platformun algoritmasına %100 uyumlu Türkçe paylaşım metinlerini TEK BİR JSON nesnesi içinde üret:
+1. TIKTOK için: Asla uzun metin yazma! Maksimum 2 kısa cümle + izleyiciyi yoruma çekecek 1 tartışmalı soru (Örn: 'Sence 10 üzerinden kaç puan?').
+2. INSTAGRAM için: İlk satırı kaydırmayı durduran kanca yap, gövdeyi madde imleriyle okunabilir kur, sonuna mutlaka 'Daha sonra denemek için kaydet 📌 / Arkadaşına gönder 🚀' ekle.
+3. YOUTUBE için: Başlık 70-90 karakter arası arama niyetli (SEO) + merak kancalı olsun ve '#Shorts' içersin; 'tags' dizisine 10-12 adet aranabilir anahtar kelime ekle.
+
 Yalnızca geçerli JSON döndür:
 {
 ${expectedKeys}

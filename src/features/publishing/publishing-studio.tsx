@@ -34,6 +34,7 @@ import {
   FacebookIcon,
 } from "./platform-previews";
 import { PublishingHealthBadge } from "./publishing-health-badge";
+import type { CopyStyle } from "@/app/api/ai/posts/generate-copy/route";
 
 type ConnectedAccount = {
   id: string;
@@ -205,7 +206,7 @@ export function PublishingStudio({
   const [loadingAssets, setLoadingAssets] = useState(false);
 
   // AI Copy Generation
-  const [aiStyle, setAiStyle] = useState<"sales" | "story" | "educational" | "punchy">("sales");
+  const [aiStyle, setAiStyle] = useState<CopyStyle>("negative_curiosity");
   const [generatingCopy, setGeneratingCopy] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [hashtagSets, setHashtagSets] = useState<HashtagSet[]>([]);
@@ -1947,14 +1948,17 @@ export function PublishingStudio({
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                     <select
                       value={aiStyle}
-                      onChange={(e) => setAiStyle(e.target.value as "sales" | "story" | "educational" | "punchy")}
+                      onChange={(e) => setAiStyle(e.target.value as CopyStyle)}
                       className="custom-select"
                       style={{ height: "28px", fontSize: "10px", padding: "0 8px" }}
                     >
-                      <option value="sales">Satış &amp; Dönüşüm Odaklı</option>
-                      <option value="story">Hikâye &amp; Samimi</option>
-                      <option value="educational">Eğitici &amp; Değer Odaklı</option>
-                      <option value="punchy">Vurucu &amp; Kısa</option>
+                      <option value="negative_curiosity">🔥 Uyarı &amp; Negatif Merak Kancası</option>
+                      <option value="contrarian_hack">⚡ Ters Köşe &amp; Sıfır Maliyet Hilesi</option>
+                      <option value="show_dont_tell">😱 Şok Edici Sonuç &amp; Merak</option>
+                      <option value="educational">📚 Eğitici &amp; 6-Aşamalı Rehber</option>
+                      <option value="punchy">🎯 Vurucu &amp; Kısa (3-Saniye)</option>
+                      <option value="sales">💼 Satış &amp; Dönüşüm Odaklı</option>
+                      <option value="story">🤝 Hikâye &amp; Samimi</option>
                     </select>
                     <button
                       type="button"
@@ -2687,14 +2691,17 @@ export function PublishingStudio({
               <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                 <select
                   value={aiStyle}
-                  onChange={(e) => setAiStyle(e.target.value as "sales" | "story" | "educational" | "punchy")}
+                  onChange={(e) => setAiStyle(e.target.value as CopyStyle)}
                   className="custom-select"
                   style={{ height: "32px", fontSize: "11px", flex: 1 }}
                 >
-                  <option value="sales">Satış &amp; Dönüşüm Odaklı</option>
-                  <option value="story">Hikâye &amp; Samimi</option>
-                  <option value="educational">Eğitici &amp; Değer Odaklı</option>
-                  <option value="punchy">Vurucu &amp; Kısa</option>
+                  <option value="negative_curiosity">🔥 Uyarı &amp; Negatif Merak Kancası</option>
+                  <option value="contrarian_hack">⚡ Ters Köşe &amp; Sıfır Maliyet Hilesi</option>
+                  <option value="show_dont_tell">😱 Şok Edici Sonuç &amp; Merak</option>
+                  <option value="educational">📚 Eğitici &amp; 6-Aşamalı Rehber</option>
+                  <option value="punchy">🎯 Vurucu &amp; Kısa (3-Saniye)</option>
+                  <option value="sales">💼 Satış &amp; Dönüşüm Odaklı</option>
+                  <option value="story">🤝 Hikâye &amp; Samimi</option>
                 </select>
                 <label className="hashtag-set-toggle" style={{ fontSize: "10.5px" }}>
                   <input
