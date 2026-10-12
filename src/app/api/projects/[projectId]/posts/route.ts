@@ -534,6 +534,10 @@ export async function POST(request: Request, context: Context) {
           throw new Error(browserRes.error || "TikTok tarayıcı yüklemesi başarısız oldu.");
         }
 
+        if (targetScheduleType === "schedule" && browserRes.status !== "scheduled") {
+          throw new Error("TikTok zamanlaması açılamadı. Videonun hemen canlıya düşmesini önlemek için işlem durduruldu.");
+        }
+
         const finalStatus = browserRes.status === "scheduled" ? "scheduled" : "published";
         const finalSchedType = browserRes.status === "scheduled" ? "schedule" : "now";
 
