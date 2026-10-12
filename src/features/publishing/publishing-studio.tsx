@@ -2862,12 +2862,13 @@ export function PublishingStudio({
                         style={{
                           border: "1px solid #e2e8f0",
                           borderRadius: "12px",
-                          padding: "12px 14px",
-                          background: "#fafafa",
+                          padding: "14px 16px",
+                          background: "#ffffff",
                           display: "flex",
-                          gap: "12px",
+                          gap: "14px",
                           alignItems: "flex-start",
                           position: "relative",
+                          boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
                         }}
                       >
                         {/* Sıra ve Çıkar butonu */}
@@ -2888,81 +2889,154 @@ export function PublishingStudio({
                             placeItems: "center",
                             cursor: "pointer",
                             color: "#94a3b8",
+                            zIndex: 2,
                           }}
                         >
                           <X size={12} />
                         </button>
 
-                        {/* Medya Küçük Resmi */}
+                        {/* SOL KOLON: Medya Küçük Resmi + Paylaşım Tarihi */}
                         <div
                           style={{
-                            width: "80px",
-                            height: "90px",
-                            borderRadius: "8px",
-                            overflow: "hidden",
-                            background: "#000",
+                            width: "115px",
                             flexShrink: 0,
-                            position: "relative",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "8px",
                           }}
                         >
-                          <img
-                            src={item.asset.thumbnailUrl || item.asset.url}
-                            alt=""
-                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                          />
-                          <span
+                          {/* Medya Küçük Resmi */}
+                          <div
                             style={{
-                              position: "absolute",
-                              bottom: "3px",
-                              left: "3px",
-                              background: "rgba(0,0,0,0.65)",
-                              color: "white",
-                              fontSize: "9px",
-                              padding: "1px 4px",
-                              borderRadius: "3px",
+                              width: "115px",
+                              height: "110px",
+                              borderRadius: "8px",
+                              overflow: "hidden",
+                              background: "#000",
+                              position: "relative",
                             }}
                           >
-                            #{idx + 1}
-                          </span>
-                        </div>
-
-                        {/* Alanlar: Başlık, Açıklama, Etiketler, Tarih */}
-                        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
-                          <div style={{ display: "flex", gap: "8px", alignItems: "center", paddingRight: "26px" }}>
-                            <input
-                              type="text"
-                              value={activeContent.title}
-                              onChange={(e) => updateBulkItem(item.id, bulkActivePlatform, "title", e.target.value)}
-                              placeholder={`Başlık (${bulkActivePlatform})...`}
-                              className="custom-input"
-                              style={{ height: "28px", fontSize: "11px", fontWeight: 700, flex: 1 }}
+                            <img
+                              src={item.asset.thumbnailUrl || item.asset.url}
+                              alt=""
+                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
                             />
+                            <span
+                              style={{
+                                position: "absolute",
+                                bottom: "4px",
+                                left: "4px",
+                                background: "rgba(0,0,0,0.75)",
+                                color: "white",
+                                fontSize: "10px",
+                                fontWeight: 700,
+                                padding: "1px 6px",
+                                borderRadius: "4px",
+                              }}
+                            >
+                              #{idx + 1}
+                            </span>
+                          </div>
+
+                          {/* Paylaşım Tarihi Seçici (Görselin Altında) */}
+                          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                            <span style={{ fontSize: "9px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.4px" }}>
+                              📅 Paylaşım Zamanı
+                            </span>
                             <input
                               type="datetime-local"
                               value={item.scheduledAt}
                               onChange={(e) => updateBulkItemDate(item.id, e.target.value)}
                               className="custom-input"
-                              style={{ height: "28px", fontSize: "10px", width: "160px" }}
+                              style={{
+                                height: "28px",
+                                fontSize: "10px",
+                                width: "100%",
+                                padding: "2px 4px",
+                                borderRadius: "6px",
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* SAĞ KOLON: Başlık, Açıklama, Etiketler (Tam Genişlik & Tam Okunabilir) */}
+                        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "10px", paddingRight: "18px" }}>
+                          {/* BAŞLIK */}
+                          <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <label style={{ fontSize: "10px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.4px" }}>
+                                Başlık ({bulkActivePlatform})
+                              </label>
+                              <span style={{ fontSize: "9.5px", color: "var(--muted)" }}>
+                                {activeContent.title?.length || 0} karakter
+                              </span>
+                            </div>
+                            <textarea
+                              rows={2}
+                              value={activeContent.title}
+                              onChange={(e) => updateBulkItem(item.id, bulkActivePlatform, "title", e.target.value)}
+                              placeholder={`Başlık (${bulkActivePlatform})...`}
+                              className="custom-input"
+                              style={{
+                                minHeight: "38px",
+                                fontSize: "12px",
+                                fontWeight: 700,
+                                lineHeight: "1.4",
+                                padding: "6px 8px",
+                                resize: "vertical",
+                                color: "#0f172a",
+                              }}
                             />
                           </div>
 
-                          <textarea
-                            rows={2}
-                            value={activeContent.caption}
-                            onChange={(e) => updateBulkItem(item.id, bulkActivePlatform, "caption", e.target.value)}
-                            placeholder={`Açıklama / Metin (${bulkActivePlatform})...`}
-                            className="custom-input"
-                            style={{ fontSize: "11px", resize: "vertical", padding: "6px 8px" }}
-                          />
+                          {/* AÇIKLAMA */}
+                          <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <label style={{ fontSize: "10px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.4px" }}>
+                                Açıklama / Gövde Metni
+                              </label>
+                              <span style={{ fontSize: "9.5px", color: "var(--muted)" }}>
+                                {activeContent.caption?.length || 0} karakter
+                              </span>
+                            </div>
+                            <textarea
+                              rows={4}
+                              value={activeContent.caption}
+                              onChange={(e) => updateBulkItem(item.id, bulkActivePlatform, "caption", e.target.value)}
+                              placeholder={`Açıklama / Metin (${bulkActivePlatform})...`}
+                              className="custom-input"
+                              style={{
+                                minHeight: "85px",
+                                fontSize: "11.5px",
+                                lineHeight: "1.5",
+                                resize: "vertical",
+                                padding: "7px 9px",
+                                color: "#1e293b",
+                              }}
+                            />
+                          </div>
 
-                          <input
-                            type="text"
-                            value={activeContent.hashtags}
-                            onChange={(e) => updateBulkItem(item.id, bulkActivePlatform, "hashtags", e.target.value)}
-                            placeholder={`#etiketler (${bulkActivePlatform})...`}
-                            className="custom-input"
-                            style={{ height: "26px", fontSize: "10.5px", color: "var(--primary)" }}
-                          />
+                          {/* ETİKETLER */}
+                          <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                            <label style={{ fontSize: "10px", fontWeight: 700, color: "var(--primary)", textTransform: "uppercase", letterSpacing: "0.4px" }}>
+                              Hashtag Etiketleri
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={activeContent.hashtags}
+                              onChange={(e) => updateBulkItem(item.id, bulkActivePlatform, "hashtags", e.target.value)}
+                              placeholder={`#etiketler (${bulkActivePlatform})...`}
+                              className="custom-input"
+                              style={{
+                                minHeight: "42px",
+                                fontSize: "11px",
+                                lineHeight: "1.4",
+                                color: "var(--primary)",
+                                padding: "6px 8px",
+                                resize: "vertical",
+                              }}
+                            />
+                          </div>
                         </div>
                       </div>
                     );
