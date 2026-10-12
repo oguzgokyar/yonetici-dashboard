@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Sparkles,
   X,
@@ -10,15 +11,42 @@ import {
   User,
   Trash2,
   Lightbulb,
-  HelpCircle,
   Flame,
+  Zap,
+  Palette,
+  Briefcase,
+  Layers,
+  ArrowRight,
+  CheckCircle2,
 } from "lucide-react";
 
 type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  specialistBadge?: string;
   createdAt: number;
+};
+
+type SpecialistOption = "auto" | "viral_growth" | "creative_design" | "paid_growth" | "ops_assistant";
+
+const SPECIALIST_CONFIG: Record<
+  SpecialistOption,
+  { label: string; badge: string; icon: typeof Zap; color: string }
+> = {
+  auto: { label: "Otomatik (Akıllı Algılama)", badge: "Agency Router", icon: Sparkles, color: "#7c3aed" },
+  viral_growth: { label: "Viral Büyüme & Kanca", badge: "⚡ Agency Viral", icon: Zap, color: "#db2777" },
+  creative_design: { label: "Kreatif & Tasarım", badge: "🎨 Agency Design", icon: Palette, color: "#0891b2" },
+  paid_growth: { label: "Satış & Reklam", badge: "💼 Agency Paid", icon: Briefcase, color: "#059669" },
+  ops_assistant: { label: "Sistem & Yayın Planı", badge: "🤖 Hermes Ops", icon: Layers, color: "#4f46e5" },
+};
+
+type PendingAction = {
+  action: "update_bulk_items" | "update_composer" | "add_strategy_idea";
+  updates?: Array<any>;
+  single?: any;
+  idea?: any;
+  summary?: string;
 };
 
 type AiAssistantDrawerProps = {
@@ -28,15 +56,13 @@ type AiAssistantDrawerProps = {
 };
 
 export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDrawerProps) {
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [pendingAction, setPendingAction] = useState<{
-    action: "update_bulk_items" | "update_composer";
-    updates?: Array<any>;
-    single?: any;
-    summary?: string;
-  } | null>(null);
+  const [specialistMode, setSpecialistMode] = useState<SpecialistOption>("auto");
+  const [currentSpecialist, setCurrentSpecialist] = useState<{ name: string; badge: string } | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Sayfa bağlamını oku
@@ -63,7 +89,8 @@ export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDra
           {
             id: "welcome",
             role: "assistant",
-            content: "Merhaba! Ben Hermes AI Sistem Asistanınızım. Sosyal medya stratejiniz, video kurguları, kanca cümleleri, YouTube Shorts fikirleri veya sistem kullanımı hakkında size danışmanlık yapabilirim. Bugün ne üzerine çalışıyoruz?",
+            specialistBadge: "⚡ Agency Viral Growth",
+            content: "Merhaba! Ben The Agency & Hermes Asistanınızım. Sosyal medya stratejiniz, viral kancalar, 6-aşamalı Carousel planları, reklam metinleri veya yayın revizeleri için 267 uzmanlık kütüphanesinden yararlanabilirim. Bugün ne üzerine çalışıyoruz?",
             createdAt: Date.now(),
           },
         ]);
@@ -112,6 +139,7 @@ export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDra
           projectId,
           messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
           pageContext: pageCtx,
+          agentSlug: specialistMode !== "auto" ? specialistMode : undefined,
         }),
       });
 
@@ -120,21 +148,34 @@ export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDra
         throw new Error(data.message || "Asistan yanıt veremedi.");
       }
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `a_${Date.now()}`,
-          role: "assistant",
-          content: data.message.content,
-          createdAt: Date.now(),
-        },
-      ]);
+      if (data.specialist) {
+        setCurrentSpecialist(data.specialist);
+      }
 
-      // Eğer asistan sayfa güncelleme aksiyonu ürettiyse hazırla
-      if (data.action && (data.action.action === "update_bulk_items" || data.action.action === "update_composer")) {
+      const assistantMsg: Message = {
+        id: `a_${Date.now()}`,
+        role: "assistant",
+        content: data.message.content,
+        specialistBadge: data.specialist?.badge || "Agency Specialist",
+        createdAt: Date.now(),
+      };
+
+      setMessages((prev) => [...prev, assistantMsg]);
+
+      // Eğer asistan aksiyon ürettiyse yönet
+      if (data.action) {
         setPendingAction(data.action);
-        // Doğrudan sayfaya da tetikleyebiliriz
-        window.dispatchEvent(new CustomEvent("hermes_apply_assistant_action", { detail: data.action }));
+
+        if (data.action.action === "update_bulk_items" || data.action.action === "update_composer") {
+          window.dispatchEvent(new CustomEvent("hermes_apply_assistant_action", { detail: data.action }));
+        } else if (data.action.action === "add_strategy_idea" && data.action.idea) {
+          // Strateji sayfasına anında ekleme sinyali gönder
+          window.dispatchEvent(
+            new CustomEvent("hermes_strategy_idea_added", {
+              detail: { idea: data.action.idea },
+            })
+          );
+        }
       }
     } catch (err) {
       setMessages((prev) => [
@@ -155,7 +196,8 @@ export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDra
     const defaultWelcome: Message = {
       id: "welcome",
       role: "assistant",
-      content: "Sohbet temizlendi. Yeni bir konu veya fikir hakkında konuşmaya hazırız!",
+      specialistBadge: "⚡ Agency Viral Growth",
+      content: "Sohbet temizlendi. Yeni bir strateji veya kanca üzerinde çalışmaya hazırız!",
       createdAt: Date.now(),
     };
     setMessages([defaultWelcome]);
@@ -166,9 +208,22 @@ export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDra
   }
 
   const quickPrompts = [
-    { label: "Toplu Revize Et", text: "Toplu yayın önizlemesindeki içeriklerin başlıklarını daha merak uyandırıcı ve soru kancalı hale getir." },
-    { label: "Bio CTA Ekle", text: "Toplu yayınlanan tüm içeriklerin açıklama metinlerinin sonuna 'Detaylı bilgi için profilimizdeki bağlantıyı ziyaret edin.' ekle." },
-    { label: "Format Stratejisi", text: "TikTok ve YouTube Shorts arasındaki algoritma ve açıklama farkları nelerdir?" },
+    {
+      label: "🔥 Viral Kanca",
+      text: "Bu proje için 'Uyarı / Negatif Merak' ve 'Ters Köşe Hilesi' formülleriyle 2 adet viral Reels kancası yaz ve açıkla.",
+    },
+    {
+      label: "📚 6-Adım Carousel",
+      text: "Bu markanın hedef kitlesi için 6 slaytlık kaydırmalı Canva Carousel anlatı mimarisi (Hook-Pain-Agitation-Solution-Value-CTA) kur.",
+    },
+    {
+      label: "💡 Stratejiye Ekle",
+      text: "Hedef kitlemizin en büyük problemini çözecek harika bir Dikey Video içerik fikri tasarla ve bunu doğrudan Strateji Masası panoma ekle.",
+    },
+    {
+      label: "🔄 Toplu Revize",
+      text: "Toplu yayın önizlemesindeki içeriklerin başlıklarını daha merak uyandırıcı ve soru kancalı hale getir.",
+    },
   ];
 
   if (!isOpen) return null;
@@ -178,12 +233,31 @@ export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDra
       {/* Header */}
       <div className="ai-assistant-header">
         <div className="ai-assistant-title-group">
-          <div className="ai-assistant-icon">
-            <Sparkles size={17} />
+          <div className="ai-assistant-icon" style={{ background: "linear-gradient(135deg, #7c3aed, #db2777)" }}>
+            <Sparkles size={17} color="#fff" />
           </div>
           <div>
-            <h3>AI Sistem Asistanı</h3>
-            <p>Hermes Strateji &amp; Bilgi Danışmanı</p>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 700 }}>Agency Danışmanı</h3>
+              {currentSpecialist && (
+                <span
+                  style={{
+                    fontSize: "9px",
+                    fontWeight: 700,
+                    padding: "1px 5px",
+                    borderRadius: "4px",
+                    background: "#f3e8ff",
+                    color: "#7c3aed",
+                    border: "1px solid #d8b4fe",
+                  }}
+                >
+                  {currentSpecialist.badge}
+                </span>
+              )}
+            </div>
+            <p style={{ margin: 0, fontSize: "11px", color: "var(--muted)" }}>
+              {currentSpecialist ? currentSpecialist.name : "The Agency 267 Uzman Ajan Havuzu"}
+            </p>
           </div>
         </div>
 
@@ -209,10 +283,38 @@ export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDra
         </div>
       </div>
 
+      {/* Specialist Selector Bar */}
+      <div
+        style={{
+          padding: "8px 12px",
+          background: "#f8fafc",
+          borderBottom: "1px solid var(--border-color)",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+        }}
+      >
+        <span style={{ fontSize: "10.5px", fontWeight: 600, color: "var(--muted)", whiteSpace: "nowrap" }}>
+          Uzman Modu:
+        </span>
+        <select
+          value={specialistMode}
+          onChange={(e) => setSpecialistMode(e.target.value as SpecialistOption)}
+          className="custom-select"
+          style={{ height: "26px", fontSize: "10.5px", padding: "0 8px", flex: 1 }}
+        >
+          {(Object.keys(SPECIALIST_CONFIG) as SpecialistOption[]).map((key) => (
+            <option key={key} value={key}>
+              {SPECIALIST_CONFIG[key].badge} — {SPECIALIST_CONFIG[key].label}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* Info Badge */}
       <div className="ai-assistant-info-pill">
         <Lightbulb size={13} style={{ flexShrink: 0 }} />
-        <span>Paylaşım planı ve toplu yayın revizelerini doğrudan güncelleyebilir.</span>
+        <span>Fikirleri Strateji Panosu&apos;na ekleyebilir, paylaşım planını anında revize edebilir.</span>
       </div>
 
       {/* Message Stream */}
@@ -223,7 +325,23 @@ export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDra
               {m.role === "assistant" ? <Bot size={14} /> : <User size={14} />}
             </div>
             <div className="ai-assistant-bubble">
-              <div className="ai-assistant-bubble-text">{m.content}</div>
+              {m.specialistBadge && m.role === "assistant" && (
+                <div
+                  style={{
+                    fontSize: "9px",
+                    fontWeight: 700,
+                    marginBottom: "4px",
+                    color: "#7c3aed",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  {m.specialistBadge}
+                </div>
+              )}
+              <div className="ai-assistant-bubble-text" style={{ whiteSpace: "pre-wrap" }}>
+                {m.content}
+              </div>
               <small className="ai-assistant-time">
                 {new Date(m.createdAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
               </small>
@@ -237,44 +355,90 @@ export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDra
             </div>
             <div className="ai-assistant-bubble loading">
               <LoaderCircle size={14} className="spin" />
-              <span>Hermes düşünüyor ve hazırlıyor...</span>
+              <span>Agency uzmanı düşünüyor ve kurguluyor...</span>
             </div>
           </div>
         )}
 
         {/* Aksiyon Bildirim Kartı */}
-        {pendingAction && (
+        {pendingAction && pendingAction.action === "add_strategy_idea" && pendingAction.idea && (
           <div
             style={{
               padding: "10px 12px",
-              background: "#ede9fe",
-              border: "1px solid #c4b5fd",
+              background: "#ecfdf5",
+              border: "1px solid #6ee7b7",
               borderRadius: "10px",
               display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "8px",
+              flexDirection: "column",
+              gap: "6px",
               fontSize: "11px",
-              color: "#5b21b6",
-              fontWeight: 600,
+              color: "#065f46",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <Sparkles size={14} />
-              <span>Değişiklikler sayfaya aktarıldı!</span>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 700 }}>
+                <CheckCircle2 size={15} color="#059669" />
+                <span>Fikir Strateji Panosu&apos;na Eklendi!</span>
+              </div>
+              {projectId && (
+                <button
+                  type="button"
+                  className="button compact primary"
+                  style={{ height: "22px", fontSize: "10px", padding: "0 8px", background: "#059669" }}
+                  onClick={() => router.push(`/projects/${projectId}/strategy`)}
+                >
+                  <span>Stratejiye Git</span>
+                  <ArrowRight size={10} />
+                </button>
+              )}
             </div>
-            <button
-              type="button"
-              className="button compact primary"
-              style={{ height: "24px", fontSize: "10px", padding: "0 8px" }}
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent("hermes_apply_assistant_action", { detail: pendingAction }));
-              }}
-            >
-              Yeniden Uygula
-            </button>
+            <div style={{ fontSize: "11.5px", fontWeight: 600 }}>
+              &quot;{pendingAction.idea.title}&quot; &rarr;{" "}
+              <span style={{ textTransform: "uppercase" }}>{pendingAction.idea.columnType || "Dikey Video"}</span>
+            </div>
+            {pendingAction.idea.hook && (
+              <div style={{ fontSize: "10.5px", fontStyle: "italic", opacity: 0.9 }}>
+                Kanca: &quot;{pendingAction.idea.hook}&quot;
+              </div>
+            )}
           </div>
         )}
+
+        {pendingAction &&
+          (pendingAction.action === "update_bulk_items" || pendingAction.action === "update_composer") && (
+            <div
+              style={{
+                padding: "10px 12px",
+                background: "#ede9fe",
+                border: "1px solid #c4b5fd",
+                borderRadius: "10px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "8px",
+                fontSize: "11px",
+                color: "#5b21b6",
+                fontWeight: 600,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <Sparkles size={14} />
+                <span>Değişiklikler yayın planına aktarıldı!</span>
+              </div>
+              <button
+                type="button"
+                className="button compact primary"
+                style={{ height: "24px", fontSize: "10px", padding: "0 8px" }}
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent("hermes_apply_assistant_action", { detail: pendingAction })
+                  );
+                }}
+              >
+                Yeniden Uygula
+              </button>
+            </div>
+          )}
       </div>
 
       {/* Quick Prompt Chips */}
@@ -287,7 +451,6 @@ export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDra
             onClick={() => void handleSend(qp.text)}
             disabled={loading}
           >
-            <Flame size={11} />
             <span>{qp.label}</span>
           </button>
         ))}
@@ -311,7 +474,7 @@ export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDra
               void handleSend();
             }
           }}
-          placeholder="Hermes'e soru sor, strateji veya kanca iste... (Enter ile gönder)"
+          placeholder="Agency uzmanına danış, strateji veya kanca iste... (Enter ile gönder)"
           className="custom-input ai-assistant-textarea"
           disabled={loading}
         />

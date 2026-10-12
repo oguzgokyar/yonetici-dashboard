@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { getDatabase } from "@/lib/server/database";
 import {
   generateFullStrategyAndIdeas,
+  COLUMN_AGENCY_SPECS,
   ColumnType,
   StrategyIdea,
 } from "@/lib/server/strategy-generator";
@@ -259,7 +260,7 @@ export async function POST(
     const insertIdeaStmt = db.prepare(`
       INSERT INTO project_strategy_ideas (
         id, project_id, column_type, title, hook, description, structure_json, target_channel, idea_type, skill_source, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'outlier-post-finder', 'suggested', ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'suggested', ?, ?)
     `);
 
     for (const [colType, items] of Object.entries(fullResult.ideas)) {
@@ -274,6 +275,7 @@ export async function POST(
           JSON.stringify(item.structure || []),
           item.targetChannel || "",
           item.ideaType || "problem_solution",
+          item.skillSource || (COLUMN_AGENCY_SPECS as any)?.[colType]?.agentSlug || "outlier-post-finder",
           now,
           now
         );

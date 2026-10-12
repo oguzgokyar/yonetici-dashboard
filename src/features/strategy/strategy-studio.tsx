@@ -122,11 +122,22 @@ type StrategyResponse = {
 
 const COLUMN_CONFIG: Record<
   ColumnType,
-  { title: string; subtitle: string; icon: LucideIcon; iconBg: string; iconColor: string; defaultTarget: string }
+  {
+    title: string;
+    subtitle: string;
+    agentBadge: string;
+    agentSlug: string;
+    icon: LucideIcon;
+    iconBg: string;
+    iconColor: string;
+    defaultTarget: string;
+  }
 > = {
   vertical_video: {
     title: "Dikey Video",
     subtitle: "Reels / TikTok (9:16)",
+    agentBadge: "Agency TikTok Strategist",
+    agentSlug: "marketing-tiktok-strategist",
     icon: Video,
     iconBg: "#fdf2f8",
     iconColor: "#db2777",
@@ -135,6 +146,8 @@ const COLUMN_CONFIG: Record<
   carousel: {
     title: "Karosel Seri",
     subtitle: "Canva Carousel (5-7 Slayt)",
+    agentBadge: "Agency Carousel Engine",
+    agentSlug: "marketing-carousel-growth-engine",
     icon: Layers,
     iconBg: "#eef2ff",
     iconColor: "#4f46e5",
@@ -143,6 +156,8 @@ const COLUMN_CONFIG: Record<
   single_post: {
     title: "Tekil / İnfografik",
     subtitle: "Vurgu, Alıntı & Haber",
+    agentBadge: "Agency Content Creator",
+    agentSlug: "marketing-content-creator",
     icon: FileText,
     iconBg: "#ecfeff",
     iconColor: "#0891b2",
@@ -151,6 +166,8 @@ const COLUMN_CONFIG: Record<
   engagement: {
     title: "Etkileşim & Story",
     subtitle: "Anket, İkilem & DM",
+    agentBadge: "Agency Community Engager",
+    agentSlug: "marketing-twitter-engager",
     icon: MessageCircle,
     iconBg: "#ecfdf5",
     iconColor: "#059669",
@@ -259,8 +276,32 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
         console.error("Load strategy error:", e);
       });
 
+    const handleIdeaAdded = (e: Event) => {
+      const customEvent = e as CustomEvent<{ idea?: StrategyIdea }>;
+      if (customEvent.detail?.idea) {
+        const addedIdea = customEvent.detail.idea;
+        const col = addedIdea.columnType;
+        setData((prev) => {
+          if (!prev?.columns?.[col]) return prev;
+          return {
+            ...prev,
+            columns: {
+              ...prev.columns,
+              [col]: {
+                ...prev.columns[col],
+                suggested: [addedIdea, ...prev.columns[col].suggested],
+              },
+            },
+          };
+        });
+      }
+    };
+
+    window.addEventListener("hermes_strategy_idea_added", handleIdeaAdded);
+
     return () => {
       ignore = true;
+      window.removeEventListener("hermes_strategy_idea_added", handleIdeaAdded);
     };
   }, [projectId]);
 
@@ -1315,7 +1356,23 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                         <IconComponent size={15} />
                       </div>
                       <div>
-                        <h4 className="kanban-col-title">{conf.title}</h4>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <h4 className="kanban-col-title">{conf.title}</h4>
+                          <span
+                            style={{
+                              fontSize: "9px",
+                              fontWeight: 700,
+                              background: conf.iconBg,
+                              color: conf.iconColor,
+                              padding: "1px 5px",
+                              borderRadius: "4px",
+                              border: `1px solid ${conf.iconColor}33`,
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {conf.agentBadge}
+                          </span>
+                        </div>
                         <p className="kanban-col-subtitle">{conf.subtitle}</p>
                       </div>
                     </div>

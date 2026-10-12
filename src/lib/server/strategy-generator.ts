@@ -72,12 +72,73 @@ export type FullStrategyResult = {
   skillsUsed: Array<{ skill: string; role: string }>;
 };
 
+export const COLUMN_AGENCY_SPECS: Record<
+  ColumnType,
+  {
+    agentName: string;
+    agentSlug: string;
+    role: string;
+    guidelines: string;
+  }
+> = {
+  vertical_video: {
+    agentName: "Agency TikTok Strategist & Video Coach",
+    agentSlug: "marketing-tiktok-strategist",
+    role: "İlk 3 Saniye Kancası, Retention & Tartışma Kurgusu",
+    guidelines: `Dikey Video (Reels/TikTok/Shorts) Kuralları (The Agency TikTok Strategist):
+- Kanca (Hook): Parmak durduran ilk 3 saniye kancası olmalı. Agency Viral Hook tiplerinden birini kullan: [Uyarı / Negatif Merak: "Bunu yapmadan önce sakın..."], [Ters Köşe Hilesi: "Herkes X sanıyor ama 0 TL'ye..."], veya [Şok Sonuç: "Sonundaki tepkiye bakın..."].
+- Yapı (Structure): 4-aşamalı çekim/kurgu akışı:
+  1. [0-3s Kanca]: Şok edici giriş veya dikkat çekici görsel hareket.
+  2. [3-12s Problem/Büyütme]: İzleyicinin yaşadığı acıyı hissettir.
+  3. [12-25s Hap Çözüm]: B-roll eşliğinde tek bir net uygulanabilir değer.
+  4. [Kapanış / Comment Bait]: Kitleyi ikiye bölen veya yorum yapmaya kışkırtan açık soru (Örn: 'Sence 10 üzerinden kaç puan? Sen olsan ne yapardın?').
+- Açıklama: En fazla 2 kısa cümle + 1 tartışmalı soru.`,
+  },
+  carousel: {
+    agentName: "Agency Carousel Growth Engine",
+    agentSlug: "marketing-carousel-growth-engine",
+    role: "6-Aşamalı Kaydırma Anatomisi & Kaydetme Mıknatısı",
+    guidelines: `Çoklu Kaydırmalı Karosel (Canva Carousel) Kuralları (The Agency Carousel Engine):
+- Kanca (Hook): Güçlü bir vaat ve 'Detaylar için sola kaydırın 👉' yönlendirmesi.
+- Yapı (Structure) - 6-Aşamalı Kaydırma Anatomisi:
+  1. [Kapak Slaytı]: Güçlü Vaat + Kaydırma Tetikleyici.
+  2. [Slayt 2]: Hedef kitlenin yaptığı en büyük hata veya acı noktası.
+  3. [Slayt 3]: Sorunun arkasındaki gerçek neden (Agitation).
+  4. [Slayt 4]: Ezber bozan çözüm adımı ve püf nokta.
+  5. [Slayt 5]: Adım adım uygulanabilir kontrol listesi veya özet tablo.
+  6. [Son Slayt]: 'Daha sonra denemek için kaydet 📌 / Arkadaşına gönder 🚀' CTA'sı.`,
+  },
+  single_post: {
+    agentName: "Agency Visual Storyteller & Content Creator",
+    agentSlug: "marketing-content-creator",
+    role: "Şok Edici İstatistik, İnfografik & Karşılaştırma",
+    guidelines: `Tekil Görsel & İnfografik Kuralları (The Agency Content Creator):
+- Kanca (Hook): Ezber bozan tek bir gerçek, çarpıcı endüstri verisi veya 'Biz vs Diğerleri' kıyaslaması.
+- Yapı (Structure): 3-aşamalı kompozisyon:
+  1. [Görsel Odak]: Tek bakışta anlaşılan infografik, şema veya dikkat çekici tekil metin kutusu.
+  2. [Gövde Değeri]: 3 maddelik hap özet ve analitik çıkarım.
+  3. [Etkileşim]: 'Senin bu konudaki görüşün ne?' veya profil bağlantısı yönlendirmesi.`,
+  },
+  engagement: {
+    agentName: "Agency Community & Twitter Engager",
+    agentSlug: "marketing-twitter-engager",
+    role: "Story Anketi, İkilem Sorusu & DM Mıknatısı",
+    guidelines: `Etkileşim & Topluluk Kuralları (The Agency Community Engager):
+- Kanca (Hook): İki zıt görüşü karşılaştıran veya kitleyi seçim yapmaya zorlayan ikilem sorusu.
+- Yapı (Structure): 3-aşamalı etkileşim kurgusu:
+  1. [Anket / Soru]: 'A mı yoksa B mi? Tercihini seç.'
+  2. [Hikaye Arkası]: Neden bu iki seçenek arasında kalındığına dair kısa samimi bağlam.
+  3. [DM / Yorum Tetikleyici]: 'Yoruma [ANAHTAR KELİME] yaz, sana özel listeyi DM'den göndereyim' veya hikaye anket çıkartması.`,
+  },
+};
+
 const DEFAULT_SKILLS = [
-  { skill: "competitor-social-research", role: "Rakip Açıkları & Pazar Kıyaslaması" },
-  { skill: "audience-research", role: "Hedef Persona & İlgi Alanı Analizi" },
-  { skill: "comment-mining", role: "Kitle VOC & Acı Noktaları (Pain Points)" },
-  { skill: "outlier-post-finder", role: "Viral Kanca (Hook) & Format Çıkarma" },
-  { skill: "creator-profile-teardown", role: "Marka Konumlandırma & Değer Vaadi Sentezi" },
+  { skill: "marketing-social-media-strategist", role: "Marka Konumlandırma & Büyüme Hunisi" },
+  { skill: "marketing-tiktok-strategist", role: "Dikey Video & Viral Kanca Motoru" },
+  { skill: "marketing-carousel-growth-engine", role: "6-Aşamalı Carousel Rehber Mimarisi" },
+  { skill: "marketing-content-creator", role: "Tekil Gönderi & İnfografik Kurgusu" },
+  { skill: "marketing-twitter-engager", role: "Topluluk & Etkileşim/DM Mıknatısı" },
+  { skill: "outlier-post-finder", role: "Viral Kanca (Hook) & Pazar Kıyaslaması" },
 ];
 
 export async function generateFullStrategyAndIdeas(input: {
@@ -228,10 +289,17 @@ Output MUST be strictly valid JSON matching this schema (no markdown formatting,
   }
 
   // Direct high-speed synthesis fallback (keeps dashboard resilient)
-  const systemPrompt = `Sen üst düzey bir Sosyal Medya Büyüme & İçerik Stratejisi Ajanısın (ScrapeCreators metodolojisi uzmanı).
-Görevin: Kullanıcının verdiği marka bilgisi, sosyal medya kanalları ve rakipleri ScrapeCreators kurallarıyla (outlier detection, comment mining, competitor teardown) analiz ederek;
+  const agencyRulesBlock = (Object.keys(COLUMN_AGENCY_SPECS) as ColumnType[])
+    .map((col) => `=== [${col.toUpperCase()}] (${COLUMN_AGENCY_SPECS[col].agentName}) ===\n${COLUMN_AGENCY_SPECS[col].guidelines}`)
+    .join("\n\n");
+
+  const systemPrompt = `Sen üst düzey bir Sosyal Medya Büyüme & İçerik Stratejisi Ajanısın (The Agency & ScrapeCreators metodolojisi uzmanı).
+Görevin: Kullanıcının verdiği marka bilgisi, sosyal medya kanalları ve rakipleri analiz ederek;
 1. Stratejik Konumlandırma & Kitle Analizi (VOC - Voice of Customer, acı noktaları, kancalar, rakip açıkları, büyüme taktiği)
-2. 4 ana içerik türü kolonuna dağıtılmış (vertical_video, carousel, single_post, engagement), hemen üretilebilecek kanıtlanmış kancalara (hook) sahip içerik fikirleri üretmek.
+2. 4 ana içerik türü kolonuna dağıtılmış (vertical_video, carousel, single_post, engagement), her kolonun kendi Agency Uzmanı kurallarına %100 uyan içerik fikirleri üretmek.
+
+FORMAT BAZLI AGENCY UZMANI KURALLARI:
+${agencyRulesBlock}
 
 Her kolonda EN AZ 3'er adet son derece yaratıcı, jenerik olmayan, doğrudan markanın nişine özel içerik fikri üret.
 Yanıtını YALNIZCA geçerli ve hatasız bir JSON nesnesi olarak ver. Markdown bloğu veya ekstra metin ekleme.`;
@@ -260,6 +328,21 @@ Lütfen tam JSON şemasına sadık kalarak stratejiyi ve 4 kolonluk içerik fiki
 
   const { content } = await completeText(systemPrompt, userPrompt, { temperature: 0.7, maxTokens: 4000 });
   const fallbackResult = parseJsonResponse<any>(content);
+  const ideasWithSkills: Record<ColumnType, StrategyIdea[]> = {
+    vertical_video: [],
+    carousel: [],
+    single_post: [],
+    engagement: [],
+  };
+  for (const col of ["vertical_video", "carousel", "single_post", "engagement"] as ColumnType[]) {
+    const rawList = fallbackResult.ideas?.[col] || [];
+    ideasWithSkills[col] = rawList.map((item: any) => ({
+      ...item,
+      columnType: col,
+      skillSource: COLUMN_AGENCY_SPECS[col].agentSlug,
+    }));
+  }
+
   return {
     overview: {
       ...fallbackResult.overview,
@@ -269,8 +352,8 @@ Lütfen tam JSON şemasına sadık kalarak stratejiyi ve 4 kolonluk içerik fiki
         liveOutlierSummary: liveInsights.summaryNote,
       },
     },
-    ideas: fallbackResult.ideas,
-    engineType: "CliProxyAPI (gemini-3.8-flash-high)",
+    ideas: ideasWithSkills,
+    engineType: "The Agency Swarm (CliProxyAPI)",
     runId: `local_${Date.now()}`,
     skillsUsed: DEFAULT_SKILLS,
   };
@@ -292,6 +375,8 @@ export async function generateNewIdeasForColumn(input: {
     engagement: "Etkileşim & Topluluk (Story, Anket, Soru-Cevap)",
   };
 
+  const agencySpec = COLUMN_AGENCY_SPECS[input.columnType];
+
   const selectedTypeInfo = input.ideaType && (IDEA_TYPE_LABELS as any)[input.ideaType]
     ? (IDEA_TYPE_LABELS as any)[input.ideaType].label
     : input.ideaType || "";
@@ -312,9 +397,12 @@ export async function generateNewIdeasForColumn(input: {
     dynamicAngleInstruction = `Kural: Markanın genel stratejisine, kanca laboratuvarına ve sektör açıklarına uygun 3 taze fikir üret.`;
   }
 
-  const systemPrompt = `Sen sosyal medya içerik stratejisi uzmanısın (ScrapeCreators outlier & hook metodolojisi).
+  const systemPrompt = `Sen The Agency uzmanlarından '${agencySpec.agentName}' (${agencySpec.role}) rolündesin.
 Kullanıcı senden sadece '${columnLabels[input.columnType]}' kolonu için 3 YENİ ve TAZE içerik fikri istiyor.
 ${dynamicAngleInstruction}
+
+BU FORMAT İÇİN ZORUNLU AGENCY PROTOKOLÜ:
+${agencySpec.guidelines}
 
 Önemli Kurallar:
 - Önceden üretilmiş şu başlıklardan ve konulardan KESİNLİKLE farklı, tekrara düşmeyen yepyeni kancalar üret:
@@ -324,6 +412,7 @@ ${input.existingTitles.map((t) => `- ${t}`).join("\n")}
   const userPrompt = `Marka Adı: ${input.brandName}
 Marka Açıklaması: ${input.brandDescription}
 İçerik Türü Kolonu: ${columnLabels[input.columnType]}
+Atanan Agency Uzmanı: ${agencySpec.agentName} (${agencySpec.agentSlug})
 ${input.ideaType ? `İçerik Amacı / Tipi: ${selectedTypeInfo}` : ""}
 ${input.focusTopic ? `Özel Odak Konusu: ${input.focusTopic}` : ""}
 Hedef Kitle & Strateji Özeti: ${input.strategyContext ? JSON.stringify(input.strategyContext.audienceVoc) : "Belirtilmedi"}
@@ -340,12 +429,13 @@ Lütfen 3 yeni fikir içeren JSON formatını üret:
   }
 ]`;
 
-  const { content } = await completeText(systemPrompt, userPrompt, { temperature: 0.8, maxTokens: 2000 });
+  const { content } = await completeText(systemPrompt, userPrompt, { temperature: 0.8, maxTokens: 2200 });
   const parsed = parseJsonResponse<StrategyIdea[]>(content);
   return parsed.map((item) => ({
     ...item,
     columnType: input.columnType,
     ideaType: item.ideaType || input.ideaType || "problem_solution",
+    skillSource: agencySpec.agentSlug,
     status: "suggested",
   }));
 }
@@ -374,9 +464,16 @@ export async function generateIdeasAcrossAllColumns(input: {
     dynamicAngleInstruction = `Kural: Markanın genel büyüme ve kitle hedeflerine uygun taze ve etkileyici içerikler üret.`;
   }
 
-  const systemPrompt = `Sen kıdemli bir Sosyal Medya Büyüme & Fikir Makinesi Motorusun (ScrapeCreators metodolojisi).
+  const agencyRulesBlock = (Object.keys(COLUMN_AGENCY_SPECS) as ColumnType[])
+    .map((col) => `=== [${col}] (${COLUMN_AGENCY_SPECS[col].agentName}) ===\n${COLUMN_AGENCY_SPECS[col].guidelines}`)
+    .join("\n\n");
+
+  const systemPrompt = `Sen kıdemli bir Sosyal Medya Büyüme & Fikir Makinesi Motorusun (The Agency Multi-Specialist Swarm).
 Kullanıcı senden 4 format kolonunun ("vertical_video", "carousel", "single_post", "engagement") HER BİRİ İÇİN 2'şer adet çok güçlü ve uygulanabilir içerik fikri üretmeni istiyor.
 ${dynamicAngleInstruction}
+
+FORMAT BAZLI ZORUNLU AGENCY PROTOKOLÜ:
+${agencyRulesBlock}
 
 JSON formatında çıktıyı strict bir nesne olarak ver:
 {
@@ -410,6 +507,7 @@ Lütfen 4 kolon için 2'şer fikir içeren JSON nesnesini üret.`;
       ...item,
       columnType: col,
       ideaType: item.ideaType || input.ideaType || "problem_solution",
+      skillSource: COLUMN_AGENCY_SPECS[col].agentSlug,
       status: "suggested",
     }));
   }

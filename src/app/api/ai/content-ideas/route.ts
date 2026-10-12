@@ -34,8 +34,28 @@ export async function POST(request: Request) {
   const previous = database.prepare("SELECT title, concept, status FROM content_ideas WHERE project_id = ? ORDER BY created_at DESC LIMIT 60").all(projectId) as unknown as { title: string; concept: string; status: string }[];
   const excluded = previous.map((item) => `- ${item.title}: ${item.concept} (${item.status === "used" ? "kullanıldı" : "önerildi"})`).join("\n") || "Henüz yok";
   try {
-    const instruction = `Ürün/içerik bilgisi: ${sourcePrompt}\nİçerik tipi: ${input.contentType || "Otomatik"}\nMarka: ${brand.brandName || "Belirtilmedi"}\nSektör: ${brand.industry || "Belirtilmedi"}\nHedef kitle: ${brand.audience || "Belirtilmedi"}\nMarka tonu: ${brand.tone || "Belirtilmedi"}\n${brandConceptInstruction(brandConcept)}\n\nDaha önce önerilen veya kullanılan fikirler (bunları ve yakın varyasyonlarını tekrar etme):\n${excluded}\n\nBirbirinden belirgin biçimde farklı 7 reklam görseli fikri üret. Her fikir seçilen içerik tipine ve marka konseptine uymalı; arka planın yanında başlık, destek metni, CTA ve marka bilgilerinin tasarımdaki kullanımını da tarif etmelidir. Bilgi veya iddia uydurma. Türkçe yaz. Yalnızca JSON dizi döndür. Her nesne: {"title":"kısa fikir adı","concept":"2 cümlelik pazarlama fikri","visualDirection":"kompozisyon, sahne, metin yapısı, ışık ve marka kullanımı","suggestedPrompt":"doğrudan görsel üretiminde kullanılabilecek ayrıntılı prompt"}.`;
-    const { content, model } = await completeText("Sen tekrara düşmeyen, dönüşüm odaklı sosyal medya reklam konseptleri üreten kıdemli bir kreatif direktörsün. Yanıtın yalnızca geçerli JSON olmalı.", instruction, { temperature: 0.85, maxTokens: 2400 });
+    const instruction = `Ürün/içerik bilgisi: ${sourcePrompt}
+İçerik tipi: ${input.contentType || "Otomatik"}
+Marka: ${brand.brandName || "Belirtilmedi"}
+Sektör: ${brand.industry || "Belirtilmedi"}
+Hedef kitle: ${brand.audience || "Belirtilmedi"}
+Marka tonu: ${brand.tone || "Belirtilmedi"}
+${brandConceptInstruction(brandConcept)}
+
+Daha önce önerilen veya kullanılan fikirler (bunları ve yakın varyasyonlarını tekrar etme):
+${excluded}
+
+GÖREV (The Agency Paid Media & Image Prompt Engineering Protokolü):
+Aşağıdaki 5 kanıtlanmış reklam açısından (Problem-Solution, Us vs Them, Authority/Proof, Loss Aversion, Before-After) beslenen, birbirinden belirgin biçimde farklı 7 reklam görseli fikri üret.
+Her fikir:
+1. "title": Çarpıcı, merak uyandıran fikir adı.
+2. "concept": 2 cümlelik pazarlama açısı ve psikolojik tetikleyici (fayda, teklif veya hata önleme).
+3. "visualDirection": Kompozisyon hiyerarşisi, odak noktası, tipografi yerleşimi, CTA düğmesi ve marka renklerinin kullanımı.
+4. "suggestedPrompt": The Agency Image Prompt Engineer standardında doğrudan Midjourney / Flux / DALL-E motorlarında kullanılabilecek zengin İngilizce/Türkçe görsel promptu (kamera açısı, stüdyo ışığı, lens, doku ve negatif prompt ipuçları içermelidir).
+
+Bilgi veya iddia uydurma. Yalnızca geçerli JSON dizi döndür:
+[{"title":"...","concept":"...","visualDirection":"...","suggestedPrompt":"..."}]`;
+    const { content, model } = await completeText("Sen The Agency uzmanlarından 'Paid Media Creative Strategist' ve 'Design Image Prompt Engineer' rollerini birleştiren kıdemli bir kreatif direktörsün. Yanıtın yalnızca geçerli JSON olmalı.", instruction, { temperature: 0.85, maxTokens: 2800 });
     const drafts = parseJsonResponse<IdeaDraft[]>(content);
     const seen = new Set(previous.map((item) => item.title.trim().toLocaleLowerCase("tr-TR")));
     const valid = drafts.filter((item) => item.title?.trim() && item.concept?.trim() && item.visualDirection?.trim() && item.suggestedPrompt?.trim()).filter((item) => { const key = item.title!.trim().toLocaleLowerCase("tr-TR"); if (seen.has(key)) return false; seen.add(key); return true; }).slice(0, 7);
