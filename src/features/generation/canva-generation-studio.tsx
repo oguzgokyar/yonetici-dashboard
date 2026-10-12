@@ -432,6 +432,22 @@ export function CanvaGenerationStudio({
     setConvertingVideoPkgId(packageId);
     setVideoConvertError(null);
     setMessage("");
+
+    // 1. Modalı kullanıcıyı bekletmeden hemen kapat
+    setVideoModalPkg(null);
+
+    // 2. İlgili paketin durumunu rendering yap
+    setPackages((curr) =>
+      curr.map((p) =>
+        p.id === packageId
+          ? {
+              ...p,
+              videoStatus: "rendering",
+            }
+          : p
+      )
+    );
+
     try {
       const res = await fetch(
         `/api/projects/${encodeURIComponent(projectId)}/canva/packages/${encodeURIComponent(
@@ -445,6 +461,7 @@ export function CanvaGenerationStudio({
       );
       const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
+        queued?: boolean;
         message?: string;
         videoUrl?: string;
         videoAssetId?: string;
@@ -453,21 +470,10 @@ export function CanvaGenerationStudio({
       if (!res.ok || !data.ok) {
         throw new Error(data.message || "Video oluşturulamadı.");
       }
-      setPackages((curr) =>
-        curr.map((p) =>
-          p.id === packageId
-            ? {
-                ...p,
-                videoAssetId: data.videoAssetId || null,
-                videoUrl: data.videoUrl || null,
-                videoDuration: data.duration || Math.round((p.itemCount || 1) * durationSec),
-              }
-            : p
-        )
-      );
-      setVideoModalPkg(null);
-      setArchiveTab("videos");
-      setMessage("Canva tasarımı başarıyla videoya dönüştürüldü!");
+
+      // 3. Üretim çekmecesini otomatik aç ve güncelle
+      window.dispatchEvent(new CustomEvent("production-queue-updated", { detail: { openDrawer: true } }));
+      setMessage("Canva Sihirli Video üretimi başlatıldı ve üretim listesine eklendi! Çekmeceden takip edebilirsiniz.");
     } catch (err) {
       const errText = err instanceof Error ? err.message : "Video dönüştürme başarısız.";
       setVideoConvertError(errText);

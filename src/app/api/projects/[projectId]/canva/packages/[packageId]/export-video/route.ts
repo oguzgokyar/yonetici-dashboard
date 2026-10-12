@@ -1,6 +1,7 @@
+import crypto from "node:crypto";
 import { isCanvaStudioEnabled } from "@/lib/server/canva-config";
 import { getDatabase } from "@/lib/server/database";
-import { exportPackageVideoHelper } from "@/lib/server/canva-video-service";
+import { triggerProductionWorker } from "@/lib/server/production-worker";
 
 export const runtime = "nodejs";
 
@@ -25,20 +26,81 @@ export async function POST(request: Request, context: Context) {
     return Response.json({ ok: false, message: "Proje bulunamadı." }, { status: 404 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as ExportVideoBody;
+  const pkg = database
+    .prepare("SELECT id, title, canva_design_id, item_count, cover_asset_id FROM media_packages WHERE id=? AND project_id=?")
+    .get(packageId, projectId) as {
+      id: string;
+      title: string;
+      canva_design_id: string;
+      item_count: number;
+      cover_asset_id?: string | null;
+    } | undefined;
 
-  try {
-    const result = await exportPackageVideoHelper({
-      database,
-      packageId,
-      projectId,
-      durationPerSlide: body.durationPerSlide,
-      useMagicAnimate: body.useMagicAnimate ?? true,
-    });
-
-    return Response.json(result);
-  } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, message: errorMsg }, { status: 500 });
+  if (!pkg) {
+    return Response.json({ ok: false, message: "Paket bulunamadı." }, { status: 404 });
   }
+
+  if (!pkg.canva_design_id) {
+    return Response.json({ ok: false, message: "Bu pakete ait Canva tasarım kimliği bulunamadı." }, { status: 400 });
+  }
+
+  const body = (await request.json().catch(() => ({}))) as ExportVideoBody;
+  const durationPerSlide = Math.min(10, Math.max(1.5, Number(body.durationPerSlide) || 3.5));
+  const useMagicAnimate = body.useMagicAnimate ?? true;
+
+  const jobId = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  // 1. Mark package as rendering immediately so UI reflects status
+  database
+    .prepare("UPDATE media_packages SET video_status='rendering', updated_at=? WHERE id=?")
+    .run(now, packageId);
+
+  // 2. Insert job into generation_jobs so it appears in Production Queue
+  const promptLabel = `${pkg.title || "Canva Karosel"} — Sihirli Animasyon ile Videoya Dönüştürme (${pkg.item_count || 1} Slayt × ${durationPerSlide} sn)`;
+  const requestState = {
+    mode: "canva_video_export",
+    contentType: "reels_video",
+    packageId,
+    designId: pkg.canva_design_id,
+    slideCount: pkg.item_count || 1,
+    durationPerSlide,
+    useMagicAnimate,
+    coverAssetId: pkg.cover_asset_id || null,
+  };
+  const progressState = {
+    phase: "queued",
+    percent: 15,
+    detail: "Sihirli Animasyon ve MP4 video render kuyruğa alındı...",
+    updatedAt: now,
+  };
+
+  database
+    .prepare(
+      `INSERT INTO generation_jobs (
+        id, project_id, type, provider, model, status, prompt, request_json, progress_json, created_at
+      ) VALUES (?, ?, 'canva', 'hermes-canva', 'canva-magic-video', 'queued', ?, ?, ?, ?)`
+    )
+    .run(
+      jobId,
+      projectId,
+      promptLabel,
+      JSON.stringify(requestState),
+      JSON.stringify(progressState),
+      now
+    );
+
+  // 3. Trigger background worker and return immediately
+  triggerProductionWorker();
+
+  return Response.json(
+    {
+      ok: true,
+      queued: true,
+      jobId,
+      packageId,
+      message: "Video dönüştürme görevi üretim listesine eklendi.",
+    },
+    { status: 202 }
+  );
 }

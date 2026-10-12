@@ -85,14 +85,12 @@ async function exportPackageVideoUnderClaim(
 
   let prompt = "";
   if (params.useMagicAnimate) {
-    prompt = `1. Apply Canva Magic Animation (Sihirli Animasyon) to all pages of design_id='${designId}' by executing:
-${params.coordinationJobId ? `HEAVY_JOB_ID=${params.coordinationJobId} ` : ''}/opt/hermes/.venv/bin/python /opt/data/scripts/canva_magic_animate_cdp.py ${designId}
-Make sure Magic Animation is applied and saved before exporting video.
+    prompt = `1. If possible, apply Canva Magic Animation (Sihirli Animasyon) to all pages of design_id='${designId}' by running:
+/opt/hermes/.venv/bin/python /opt/data/scripts/canva_magic_animate_cdp.py ${designId}
 2. Call mcp__canva__export_design on design_id='${designId}' with format={'type':'mp4', 'quality':'horizontal_1080p'}.
 3. Return the exact download URL of the exported MP4 file.`;
   } else {
-    prompt = `Call mcp__canva__export_design directly on design_id='${designId}' with format={'type':'mp4', 'quality':'horizontal_1080p'}.
-Wait for export completion using mcp__canva__get_export_job or check returned download URLs.
+    prompt = `Call mcp__canva__export_design on design_id='${designId}' with format={'type':'mp4', 'quality':'horizontal_1080p'}.
 Return the exact download URL of the exported MP4 file.`;
   }
 

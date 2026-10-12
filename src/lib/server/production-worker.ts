@@ -279,11 +279,60 @@ async function processCanvaJob(job: {
   request_json: string;
 }) {
   const db = getDatabase()!;
-  let req: Partial<CanvaJobRequest> = {};
+  let req: any = {};
   try {
-    req = JSON.parse(job.request_json || "{}") as Partial<CanvaJobRequest>;
+    req = JSON.parse(job.request_json || "{}");
   } catch {
     req = {};
+  }
+
+  // Handle Karoselden Videoya Dönüştürme modu
+  if (req.mode === "canva_video_export") {
+    db.prepare("UPDATE generation_jobs SET status='rendering', progress_json=? WHERE id=? AND status='queued'").run(
+      JSON.stringify({
+        phase: "rendering",
+        percent: 30,
+        detail: "Canva Cloud MP4 render ediliyor...",
+        updatedAt: new Date().toISOString(),
+      }),
+      job.id
+    );
+
+    try {
+      const { exportPackageVideoHelper } = await import("@/lib/server/canva-video-service");
+      const res = await exportPackageVideoHelper({
+        database: db,
+        packageId: req.packageId,
+        projectId: job.project_id,
+        designId: req.designId,
+        slideCount: req.slideCount,
+        durationPerSlide: req.durationPerSlide,
+        useMagicAnimate: req.useMagicAnimate,
+        coordinationJobId: `production:${job.id}`,
+      });
+
+      if (res.ok) {
+        const now = new Date().toISOString();
+        db.prepare(
+          "UPDATE generation_jobs SET status='complete', response_json=?, progress_json=?, completed_at=? WHERE id=?"
+        ).run(
+          JSON.stringify({ videoUrl: res.videoUrl, videoAssetId: res.videoAssetId, duration: res.duration }),
+          JSON.stringify({ phase: "complete", percent: 100, detail: "Video hazır", updatedAt: now }),
+          now,
+          job.id
+        );
+      } else {
+        throw new Error(res.message || "Video oluşturulamadı.");
+      }
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      db.prepare("UPDATE generation_jobs SET status='failed', error=?, completed_at=? WHERE id=?").run(
+        errMsg.slice(0, 1000),
+        new Date().toISOString(),
+        job.id
+      );
+    }
+    return;
   }
 
   const canvaConfig = getCanvaConfig();

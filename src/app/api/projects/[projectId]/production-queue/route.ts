@@ -53,6 +53,7 @@ type DbJobRow = {
 
 function resolveTypeLabel(type: string, requestData: RequestData): string {
   if (type === "canva") {
+    if ((requestData as any)?.mode === "canva_video_export") return "Canva Sihirli Video";
     const cType = requestData?.contentType || "";
     if (cType.includes("carousel")) return "Canva Karosel";
     if (cType.includes("story")) return "Canva Story";
@@ -72,9 +73,12 @@ function resolveTypeLabel(type: string, requestData: RequestData): string {
 }
 
 function extractPreviewUrl(type: string, responseData: ResponseData, packageRow?: PackageData, jobId?: string): string | null {
-  if (type === "canva" && packageRow) {
-    if (packageRow.cover_asset_id) return `/api/assets/${packageRow.cover_asset_id}`;
-    if (packageRow.video_url) return packageRow.video_url;
+  if (type === "canva") {
+    if (responseData?.videoUrl) return responseData.videoUrl;
+    if (packageRow) {
+      if (packageRow.cover_asset_id) return `/api/assets/${packageRow.cover_asset_id}`;
+      if (packageRow.video_url) return packageRow.video_url;
+    }
   }
   if (type === "image" && Array.isArray(responseData?.assets) && responseData.assets.length > 0) {
     return responseData.assets[0]?.url || null;
