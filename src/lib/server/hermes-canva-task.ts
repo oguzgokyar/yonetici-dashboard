@@ -342,17 +342,38 @@ export function buildHermesCanvaTaskPrompt(payload: CanvaTaskPayload): string {
   const concept = (brandInfo as any).brandConcept;
   const isBrandStyleActive = (brandInfo as any).applyBrandStyle !== false;
 
+  // YALNIZCA KULLANICININ ARAYÜZDE SEÇTİĞİ BİLGİLERİ DİNAMİK LİSTELE
+  const selectedElements: string[] = [];
+  if (brandInfo.name) selectedElements.push(`Marka Adı: "${brandInfo.name}"`);
+  if (brandInfo.logo) selectedElements.push(`Logo: Markanın resmi logosu uygun bir köşeye yerleştirilecek.`);
+  if (brandInfo.website) selectedElements.push(`Web Sitesi: "${brandInfo.website}" alt veya köşe çentiğinde zarifçe belirtilecek.`);
+  if (brandInfo.phone) selectedElements.push(`Telefon: "${brandInfo.phone}"`);
+  if (brandInfo.email) selectedElements.push(`E-posta: "${brandInfo.email}"`);
+
+  let brandBriefInjection = "";
+  if (selectedElements.length > 0) {
+    brandBriefInjection = `\n[KULLANICININ SEÇTİĞİ MARKA BİLGİLERİ (Tasarımda Doğal Olarak Kullan)]:\n${selectedElements.map((s) => `- ${s}`).join("\n")}\n(NOT: Yukarıda belirtilmeyen hiçbir marka bilgisi zorla eklenmeyecektir.)\n`;
+  }
+
   let brandGuardianBlock = "";
   if (isBrandStyleActive && concept?.summary) {
     brandGuardianBlock = `
-MARKANIN RESMİ TASARIM SÖZLEŞMESİ (Brand Guardian Aktif):
-- Tasarım Dili & Ruh: ${concept.summary}
-- Görsel Stil: ${concept.visualStyle || "Minimal, modern, ferah kompozisyon"}
-- Tipografi Kuralı: ${concept.typographyStyle || "Başlık min 48pt kalın sans-serif, gövde min 24pt okunabilir sans-serif"}
-- Renk Dağılım Kuralı: %60 Zemin (${concept.primaryColor || "#ffffff"}), %30 Yapı (${concept.secondaryColor || "#0f172a"}), %10 Vurgu (${concept.accentColor || "#6366f1"}).
-- Slaytlar Arası Tutarlılık: Tüm sayfalarda aynı renk paleti, aynı yazı tipleri ve aynı köşe/kart hiyerarşisi KORUNMALIDIR. Rastgele renk geçişi veya yabancı font KESİNLİKLE YASAKTIR.
+MARKANIN RENK & STİL REHBERİ (İlham ve Denge Rehberi):
+- Tasarım Ruhu: ${concept.summary}
+- Renk Dengesi İlhamı: %60 Zemin (${concept.primaryColor || "#ffffff"}), %30 Yapı (${concept.secondaryColor || "#0f172a"}), %10 Vurgu (${concept.accentColor || "#6366f1"}).
+- Tipografi Önerisi: Başlıklar güçlü ve net sans-serif (${concept.typographyStyle || "Montserrat/Poppins Bold"}), gövdeler okunaklı sans-serif (${concept.typographyStyle || "Inter"}).
 `;
   }
+
+  // Brief metnini dinamik olarak marka seçimi ve çakışma önleyici kural ile zenginleştir
+  const effectiveBrief = [
+    payload.prompt,
+    brandBriefInjection,
+    brandGuardianBlock,
+    `[GRAFİK DÜZEN & ÇAKIŞMA ÖNLEME KURALI]:\n- Katman Çakışması Kesinlikle Yasaktır (No overlapping layers/bounding boxes): Metin kutuları hiçbir illüstrasyonun, grafiğin veya diğer metinlerin üzerine binemez.\n- Her öğe etrafında yeterli negatif alan (boşluk payı) bırakılmalıdır.\n- Tasarımda özgün, dengeli ve temiz bir görsel hiyerarşi oluştur.`
+  ].filter(Boolean).join("\n\n").replace(/"/g, '\\"');
+
+  const isSinglePage = payload.slideCount === 1;
 
   return `[HERMES_CANVA_MACHINE_TASK v${HERMES_CANVA_PIPELINE_VERSION}]
 Bu bir Yönetici Dashboard Canva görsel/video üretim makine görevidir.
@@ -369,20 +390,20 @@ Bu aynı iş kimliğiyle mevcut dashboard claim'ine katılır; yeni/farklı iş 
 7. Kilitli içerik: Metinleri harfiyen koru, paraphrase yapma, bullet point atlama.
 8. Güvenli alanlar: 100px yatay, 140px dikey marjin. Max 2 font ailesi. Bounding box çakışması yok.
 ${payload.contentType === "instagram_story" ? "9. INSTAGRAM STORY GÜVENLİ ALAN KURALI: 1080x1920 (9:16) Story formatıdır. Üstten 250px (profil adı/kapatma) ve alttan 250px (DM kutusu) boş bırak. Ana soru/mesajı üst-orta alana yerleştir; ortada Instagram interaktif çıkartması (Anket/Soru Kutusu) için temiz, metinsiz alan bırak.\n" : ""}${isVideoFormat ? "10. VİDEO İÇERİK KURALI: Bu bir video formatıdır. Tasarım oluştuktan sonra otomatik olarak 'Sihirli Animasyon' (Magic Animate) işlenecek ve MP4 video olarak arşive kaydedilecektir.\n" : ""}
-CANVA TASARIM KURALLARI (canva-carousel-director v2):
+CANVA TASARIM KURALLARI:
 - Format: Doğrudan ${meta.canvaFormat} = ${meta.width}×${meta.height}px (${meta.aspectRatio}).
 - Boyut: ${meta.width}x${meta.height}px, ${payload.slideCount} sayfa.
-- Tipografi: Başlık min 48pt kalın, gövde min 24pt temiz sans-serif, max 2 font ailesi.
-- Style: "${payload.style || "Modern ve minimalist"}". Marka renkleri ve logoya uygun.
-- Marka bilgileri: ${JSON.stringify(payload.brandSnapshot || {})}
-${brandGuardianBlock}
+- Tipografi: Başlık net ve vurgulu, gövde okunaklı sans-serif, max 2 font ailesi.
+- Style: "${payload.style || "Modern ve minimalist"}".
+- Hiyerarşi & Negatif Alan: Metinler illüstrasyonların veya diğer metinlerin üzerine binemez (kesinlikle çakışmasız mizanpaj).
+- Kullanıcının Seçtiği Marka Bilgileri: ${JSON.stringify(payload.brandSnapshot || {})} (Yalnızca burada tanımlı olanlar kullanılır, seçilmeyen bilgiler zorlanmaz).
 
 ADIM ADIM YAPMAN GEREKENLER:
 1. İlerleme bildir: POST ${progressEndpoint} — { "phase":"generating", "percent":20, "completed":0, "total":${payload.slideCount}, "detail":"Canva tasarımı oluşturuluyor..." }
-2. mcp__canva__create_design çağır: brief="${payload.prompt}", format="${meta.canvaFormat}", sayfa sayısı=${payload.slideCount}.
+2. mcp__canva__create_design çağır: brief="${effectiveBrief}", format="${meta.canvaFormat}", sayfa sayısı=${payload.slideCount}.
 3. Asenkronsa mcp__canva__get_create_design_async_job ile tamamlanmasını bekle.
 4. get_design ile design_id ve edit_url al; get_design_pages ile sayfa sayısını ve boyutları doğrula.
-5. İlerleme bildir: POST ${progressEndpoint} — { "phase":"exporting", "percent":70, "completed":${Math.floor(payload.slideCount / 2)}, "total":${payload.slideCount}, "detail":"Sayfalar dışa aktarılıyor..." }
+${isSinglePage ? "// TEKİL STORY / POST HIZLI MOD: Çoklu sayfa döngülerini atla, doğrudan tek adımda yüksek çözünürlük export al.\n" : ""}5. İlerleme bildir: POST ${progressEndpoint} — { "phase":"exporting", "percent":70, "completed":${Math.floor(payload.slideCount / 2)}, "total":${payload.slideCount}, "detail":"Sayfalar dışa aktarılıyor..." }
 6. Her sayfa için get_design_thumbnail veya get_design_pages ile signed thumbnail URL'lerini al.
 7. terminal aracıyla her URL'yi /tmp/canva_slides_<jobId>/ dizinine PNG olarak indir (curl veya python3 urllib).
 8. İlerleme bildir: POST ${progressEndpoint} — { "phase":"uploading", "percent":90, "completed":${payload.slideCount}, "total":${payload.slideCount}, "detail":"Paket arşive kaydediliyor..." }

@@ -153,12 +153,12 @@ export async function POST(request: Request, context: Context) {
     const applyBrandStyle = rawBody?.applyBrandStyle ?? true;
 
     brandSnapshot = {
-      name: brand.brandName || projectRow.name,
+      name: allowedFields.has("brandName") ? (brand.brandName || projectRow.name) : "",
       logo: allowedFields.has("logo") ? (brand.logo || "") : undefined,
       website: allowedFields.has("website") ? (brand.website || "") : undefined,
       phone: allowedFields.has("phone") ? (brand.phone || "") : undefined,
       email: allowedFields.has("email") ? (brand.email || "") : undefined,
-      ...(Array.isArray(brand.colors) ? { colors: brand.colors } : {}),
+      ...(applyBrandStyle && Array.isArray(brand.colors) ? { colors: brand.colors } : {}),
       applyBrandStyle,
       brandConcept: applyBrandStyle ? concept : undefined,
     };
