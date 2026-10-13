@@ -74,7 +74,7 @@ JSON Şeması:
             baseUrl,
             apiKey,
             model: imgModel,
-            prompt: `Professional brand identity moodboard and key visual representing the brand '${brand.brandName || "Atölye"}': ${parsed.sampleVisualPrompt}. Clean corporate composition, high aesthetic quality, color palette: ${parsed.primaryColor}, ${parsed.accentColor}. No mockups, no distortion.`,
+            prompt: `Brand design system and visual style guideline sheet for '${brand.brandName || "Atölye"}'. A clean graphic design poster layout showing: color swatches (${parsed.primaryColor}, ${parsed.secondaryColor}, ${parsed.accentColor}), modern bold typography hierarchy sample, UI design components, minimal icons, and visual texture inspiration. Graphic design presentation, brand identity board, clean editorial layout, crisp vector aesthetics. Not a random photo of people.`,
             ratio: "1:1",
           });
 
