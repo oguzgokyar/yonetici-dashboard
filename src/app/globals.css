@@ -2692,6 +2692,40 @@ button { cursor:pointer; }
   border-color: #dcd8ff;
   box-shadow: 0 4px 12px rgba(109, 93, 252, 0.05);
 }
+
+/* Prompt Area Mobil & Temizle İyileştirmeleri */
+.prompt-area {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  min-height: 125px !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow-y: visible !important;
+  resize: vertical !important;
+  font-size: 13px !important;
+  line-height: 1.6 !important;
+  color: #1e293b !important;
+}
+
+.prompt-clear-btn {
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+.prompt-clear-btn:hover {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
 @media (max-width: 900px) {
   .growth-control-grid {
     grid-template-columns: 1fr 1fr;

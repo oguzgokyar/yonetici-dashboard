@@ -564,9 +564,25 @@ export function CanvaGenerationStudio({
 
         {/* Prompt Alanı */}
         <div className="control-section">
-          <label className="control-title" htmlFor="canva-prompt">
-            <span>Kreatif Brief / Prompt</span>
-          </label>
+          <div className="control-title">
+            <label htmlFor="canva-prompt">
+              <span>Kreatif Brief / Prompt</span>
+            </label>
+            {prompt.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPrompt("");
+                  setMessage("");
+                }}
+                className="prompt-clear-btn"
+                title="Prompt metnini temizle"
+              >
+                <X size={13} />
+                <span>Temizle</span>
+              </button>
+            )}
+          </div>
           <textarea
             id="canva-prompt"
             className="prompt-area"

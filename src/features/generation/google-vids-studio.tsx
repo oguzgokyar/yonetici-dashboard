@@ -1,4 +1,5 @@
 "use client";
+import { googleVidsFailureNotification } from "@/lib/google-vids-job-notification";
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -22,7 +23,9 @@ import {
   Sun,
   Trash2,
   WandSparkles,
+  X,
 } from "lucide-react";
+import { TelegramSendButton } from "@/components/ui/telegram-send-button";
 
 type VisualMoodOption = {
   key:
@@ -374,14 +377,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         } else {
           setActiveJob(null);
           // Son başarısız olan görevi kontrol et
-          const recentFailed = (data.jobs || []).find((j: { status: string; error?: string }) => j.status === "failed" && j.error);
-          if (recentFailed) {
-            setLastErrorJob({
-              id: recentFailed.id,
-              error: recentFailed.error,
-              title: recentFailed.prompt || "Google Vids",
-            });
-          }
+          setLastErrorJob(googleVidsFailureNotification(data.jobs || []));
         }
       }
     } catch {}
@@ -757,9 +753,25 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
 
         {/* Konu / Hikaye Alanı */}
         <div className="control-section">
-          <label className="control-title" htmlFor="vids-topic-input">
-            <span>Video Konusu / Hikayesi</span>
-          </label>
+          <div className="control-title">
+            <label htmlFor="vids-topic-input">
+              <span>Video Konusu / Hikayesi</span>
+            </label>
+            {topic.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setTopic("");
+                  setMessage("");
+                }}
+                className="prompt-clear-btn"
+                title="Konu metnini temizle"
+              >
+                <X size={13} />
+                <span>Temizle</span>
+              </button>
+            )}
+          </div>
           <textarea
             id="vids-topic-input"
             className="prompt-area"
@@ -1710,6 +1722,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                     <a href={video.url} download={`google-vids-${video.id}.mp4`}>
                       <Download size={14} /> İndir
                     </a>
+                    <TelegramSendButton mediaUrl={video.url} mediaType="video" variant="button" label="Telegram" size={13} />
                     <Link
                       href={`/projects/${projectId}/publishing?assetId=${video.id}`}
                       style={{

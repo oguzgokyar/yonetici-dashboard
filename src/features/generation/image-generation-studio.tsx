@@ -7,6 +7,7 @@ import {
   ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Download, History, ImageIcon, Info, Layers, Lightbulb, LoaderCircle,
   Maximize2, Pencil, Plus, RefreshCw, Send, Settings2, Sparkles, Trash2, WandSparkles, X,
 } from "lucide-react";
+import { TelegramSendButton } from "@/components/ui/telegram-send-button";
 import { CanvaGenerationStudio } from "./canva-generation-studio";
 import { useProjects } from "@/features/projects/projects-context";
 
@@ -285,7 +286,31 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
         </div>
 
         <div className="control-section">
-          <label className="control-title" htmlFor="creative-prompt"><span>Ne üretelim?</span><button type="button" className="inline-ai" onClick={enhancePrompt} disabled={enhancing}>{enhancing ? <LoaderCircle className="spin" size={13} /> : <Sparkles size={13} />}{enhancing ? "Geliştiriliyor" : "Promptu geliştir"}</button></label>
+          <div className="control-title">
+            <label htmlFor="creative-prompt" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span>Ne üretelim?</span>
+            </label>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              {prompt.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrompt("");
+                    setMessage("");
+                  }}
+                  className="prompt-clear-btn"
+                  title="Promptu temizle"
+                >
+                  <X size={13} />
+                  <span>Temizle</span>
+                </button>
+              )}
+              <button type="button" className="inline-ai" onClick={enhancePrompt} disabled={enhancing}>
+                {enhancing ? <LoaderCircle className="spin" size={13} /> : <Sparkles size={13} />}
+                {enhancing ? "Geliştiriliyor" : "Promptu geliştir"}
+              </button>
+            </div>
+          </div>
           <textarea id="creative-prompt" className="prompt-area" value={prompt} onChange={(e) => { setPrompt(e.target.value); setMessage(""); }} placeholder="Örn. Yeni bioklimatik pergola modelini modern bir terasta, gün batımı ışığında tanıtan premium reklam kreatifi..." />
           {activeIdea && <div className="active-idea-chip"><Lightbulb size={13} /><span>{activeIdea.title}</span><button type="button" onClick={() => setActiveIdea(null)} aria-label="Seçili fikri kaldır"><X size={12} /></button></div>}
           <div className="prompt-footer"><span>{prompt.length}/1200</span><div><button type="button" onClick={() => loadIdeas()}><History size={13} />Fikirler</button><button type="button"><Plus size={13} />Referans görsel</button></div></div>
@@ -326,7 +351,7 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
       {lightboxIndex >= 0 && <div className="creative-lightbox" role="dialog" aria-modal="true" aria-label="Görsel önizleme" onMouseDown={(event) => { if (event.target === event.currentTarget) setLightboxId(null); }}>
         <button type="button" className="lightbox-close" onClick={() => setLightboxId(null)} aria-label="Kapat"><X size={22} /></button>
         {viewable.length > 1 && <button type="button" className="lightbox-nav previous" onClick={() => setLightboxId(viewable[(lightboxIndex - 1 + viewable.length) % viewable.length].id)} aria-label="Önceki görsel"><ChevronLeft size={26} /></button>}
-        <div className="lightbox-content"><Image src={viewable[lightboxIndex].url} alt="Tam ekran reklam kreatifi" fill sizes="100vw" unoptimized priority /><div><span>{lightboxIndex + 1} / {viewable.length}</span><a href={viewable[lightboxIndex].url} download={`kreatif-${viewable[lightboxIndex].id}.png`}><Download size={15} />İndir</a><button type="button" onClick={() => { setEditTarget(viewable[lightboxIndex]); setEditInstruction(""); setLightboxId(null); }}><Pencil size={15} />Düzenle</button><Link href={`/projects/${projectId}/publishing?assetId=${viewable[lightboxIndex].id}`} className="button ghost" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><Send size={15} />Planla</Link></div></div>
+        <div className="lightbox-content"><Image src={viewable[lightboxIndex].url} alt="Tam ekran reklam kreatifi" fill sizes="100vw" unoptimized priority /><div><span>{lightboxIndex + 1} / {viewable.length}</span><a href={viewable[lightboxIndex].url} download={`kreatif-${viewable[lightboxIndex].id}.png`}><Download size={15} />İndir</a><TelegramSendButton mediaUrl={viewable[lightboxIndex].url} variant="button" label="Telegram" size={14} /><button type="button" onClick={() => { setEditTarget(viewable[lightboxIndex]); setEditInstruction(""); setLightboxId(null); }}><Pencil size={15} />Düzenle</button><Link href={`/projects/${projectId}/publishing?assetId=${viewable[lightboxIndex].id}`} className="button ghost" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><Send size={15} />Planla</Link></div></div>
         {viewable.length > 1 && <button type="button" className="lightbox-nav next" onClick={() => setLightboxId(viewable[(lightboxIndex + 1) % viewable.length].id)} aria-label="Sonraki görsel"><ChevronRight size={26} /></button>}
       </div>}
 
@@ -347,7 +372,7 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
 
 function CreativeCard({ asset, model, deleting, projectId, onView, onEdit, onDelete }: { asset: GeneratedAsset; model?: string; deleting: boolean; projectId?: string; onView: () => void; onEdit: () => void; onDelete: () => void }) {
   const thumbUrl = asset.url.startsWith("/api/assets/") ? `${asset.url}?thumb=1` : asset.url;
-  return <article className="generated-card"><button type="button" className="generated-image" onClick={onView} aria-label="Görseli tam ekran aç"><Image src={thumbUrl} alt="AI ile üretilen reklam kreatifi" fill sizes="(max-width: 760px) 100vw, 30vw" unoptimized /><span><Maximize2 size={15} />Tam ekran</span></button><div className="creative-card-footer"><span>{asset.createdAt ? new Date(asset.createdAt).toLocaleDateString("tr-TR") : model || "CliProxyAPI"}</span><div><button type="button" onClick={onEdit} title="Düzenle"><Pencil size={14} /></button><a href={asset.url} download={`kreatif-${asset.id}.png`} title="İndir"><Download size={14} /></a>{projectId && <Link href={`/projects/${projectId}/publishing?assetId=${asset.id}`} title="Paylaşım Planına Ekle"><Send size={14} /></Link>}<button type="button" className="danger" onClick={onDelete} disabled={deleting} title="Sil">{deleting ? <LoaderCircle className="spin" size={14} /> : <Trash2 size={14} />}</button></div></div></article>;
+  return <article className="generated-card"><button type="button" className="generated-image" onClick={onView} aria-label="Görseli tam ekran aç"><Image src={thumbUrl} alt="AI ile üretilen reklam kreatifi" fill sizes="(max-width: 760px) 100vw, 30vw" unoptimized /><span><Maximize2 size={15} />Tam ekran</span></button><div className="creative-card-footer"><span>{asset.createdAt ? new Date(asset.createdAt).toLocaleDateString("tr-TR") : model || "CliProxyAPI"}</span><div><button type="button" onClick={onEdit} title="Düzenle"><Pencil size={14} /></button><a href={asset.url} download={`kreatif-${asset.id}.png`} title="İndir"><Download size={14} /></a><TelegramSendButton mediaUrl={asset.url} title="Telegram'a Gönder" size={14} />{projectId && <Link href={`/projects/${projectId}/publishing?assetId=${asset.id}`} title="Paylaşım Planına Ekle"><Send size={14} /></Link>}<button type="button" className="danger" onClick={onDelete} disabled={deleting} title="Sil">{deleting ? <LoaderCircle className="spin" size={14} /> : <Trash2 size={14} />}</button></div></div></article>;
 }
 
 function ProductionStatus({ job, requestedCount }: { job?: RunningJob; requestedCount: number }) {

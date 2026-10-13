@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   TrendingUp,
   Sparkles,
@@ -14,6 +15,10 @@ import {
   Zap,
   Sliders,
   Layers,
+  Copy,
+  Check,
+  Palette,
+  Clapperboard,
 } from 'lucide-react';
 import type { GrowthResponse, GrowthPlatform, SavedGrowth } from '@/lib/strategy-types';
 import { GROWTH_FORMATS } from '@/lib/strategy-growth-validation';
@@ -60,10 +65,12 @@ export function PlatformGrowthPanel({ projectId }: { projectId: string }) {
 }
 
 function ProjectGrowthPanel({ projectId }: { projectId: string }) {
+  const router = useRouter();
   const [data, setData] = useState<GrowthResponse | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [activeStrategyPlatform, setActiveStrategyPlatform] = useState<GrowthPlatform>('instagram');
+  const [copiedTacticId, setCopiedTacticId] = useState<string | null>(null);
 
   // Input states
   const [selected, setSelected] = useState<GrowthPlatform[]>([]);
@@ -181,6 +188,59 @@ function ProjectGrowthPanel({ projectId }: { projectId: string }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  function copyTacticText(rec: SavedGrowth['strategy']['recommendations'][number], platform: GrowthPlatform) {
+    const stepsText = (rec.steps || []).map((s, idx) => `  ${idx + 1}. ${s}`).join('\n');
+    const fullText = `🎯 [${PLATFORM_INFO[platform].label.toUpperCase()}] Büyüme Taktiği: ${rec.title}\n📌 Format: ${rec.format.toUpperCase()} • Efor: ${rec.effort.toUpperCase()}\n💡 Stratejik Gerekçe: ${rec.rationale}\n📋 Uygulama Adımları:\n${stepsText}\n📈 Beklenen Etki: ${rec.impactHypothesis}`;
+
+    navigator.clipboard.writeText(fullText);
+    setCopiedTacticId(rec.id);
+    setTimeout(() => setCopiedTacticId(null), 2500);
+  }
+
+  function directProduceInCanva(rec: SavedGrowth['strategy']['recommendations'][number], platform: GrowthPlatform) {
+    const selectedFmt = formats[rec.id] || rec.format;
+    let targetContentType = 'instagram_carousel';
+    let targetSlideCount = 6;
+
+    if (selectedFmt === 'vertical_video' || selectedFmt === 'reels' || selectedFmt === 'shorts') {
+      targetContentType = 'reels_video';
+      targetSlideCount = 6;
+    } else if (selectedFmt === 'carousel') {
+      targetContentType = 'instagram_carousel';
+      targetSlideCount = Math.max(3, Math.min(10, rec.steps?.length || 5));
+    } else if (selectedFmt === 'story') {
+      targetContentType = 'instagram_story';
+      targetSlideCount = 1;
+    } else {
+      targetContentType = 'instagram_post';
+      targetSlideCount = 1;
+    }
+
+    const stepsText = (rec.steps || []).map((s, idx) => `Sayfa ${idx + 1}: ${s}`).join('\n');
+    const briefPrompt = `[${PLATFORM_INFO[platform].label} Büyüme Taktiği]\nBaşlık: ${rec.title}\nStratejik Amaç: ${rec.rationale}\n\nAkış Planı:\n${stepsText}\n\nFormat: ${targetContentType}, profesyonel, marka kimliğiyle uyumlu tasarım.`;
+
+    const formPayload = {
+      prompt: briefPrompt,
+      contentType: targetContentType,
+      slideCount: targetSlideCount,
+      style: 'minimalist_modern',
+      isPrefilledFromIdea: true,
+      timestamp: Date.now(),
+    };
+
+    try {
+      localStorage.setItem(`canva_form_${projectId}`, JSON.stringify(formPayload));
+      localStorage.setItem(`canva_prefill_${projectId}`, JSON.stringify(formPayload));
+      router.push(`/projects/${projectId}/image-generation?studio=canva`);
+    } catch {
+      router.push(`/projects/${projectId}/image-generation?studio=canva`);
+    }
+  }
+
+  function directProduceInVideo(rec: SavedGrowth['strategy']['recommendations'][number]) {
+    router.push(`/projects/${projectId}/video-generation?tab=vids&topic=${encodeURIComponent(rec.title + ' - ' + rec.rationale)}`);
   }
 
   const currentStrategy = data?.strategies?.find((s) => s.platform === activeStrategyPlatform);
@@ -449,107 +509,136 @@ function ProjectGrowthPanel({ projectId }: { projectId: string }) {
                         style={{ borderLeft: '4px solid #6366f1', background: '#ffffff' }}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider block">
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ fontSize: "11px", fontWeight: 800, color: "#4f46e5", textTransform: "uppercase", letterSpacing: "0.05em", display: "block" }}>
                               Taktik #{idx + 1} • {rec.format.toUpperCase()}
                             </span>
-                            <h5 className="font-bold text-xs text-slate-900 mt-0.5">{rec.title}</h5>
+                            <h5 style={{ margin: "4px 0 0", font: "700 13.5px 'Manrope'", color: "var(--text)", lineHeight: 1.35 }}>
+                              {rec.title}
+                            </h5>
                           </div>
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                              rec.effort === 'low'
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : rec.effort === 'medium'
-                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                : 'bg-rose-50 text-rose-700 border border-rose-200'
-                            }`}
-                          >
-                            {rec.effort === 'low' ? 'Düşük Efor' : rec.effort === 'medium' ? 'Orta Efor' : 'Yüksek Efor'}
-                          </span>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+                            <button
+                              type="button"
+                              onClick={() => copyTacticText(rec, currentStrategy.platform)}
+                              className="button secondary"
+                              style={{ height: "26px", fontSize: "11px", fontWeight: 700, padding: "0 8px", gap: "4px" }}
+                              title="Taktiği ve Uygulama Adımlarını Kopyala"
+                            >
+                              {copiedTacticId === rec.id ? <Check size={12} style={{ color: "#10b981" }} /> : <Copy size={12} />}
+                              <span>{copiedTacticId === rec.id ? "Kopyalandı" : "Kopyala"}</span>
+                            </button>
+                            <span
+                              className="cockpit-pill-tag"
+                              style={{
+                                fontSize: "11px",
+                                background: rec.effort === "low" ? "#ecfdf5" : rec.effort === "medium" ? "#fffbeb" : "#fef2f2",
+                                color: rec.effort === "low" ? "#065f46" : rec.effort === "medium" ? "#92400e" : "#991b1b",
+                                borderColor: rec.effort === "low" ? "#a7f3d0" : rec.effort === "medium" ? "#fde68a" : "#fecaca",
+                              }}
+                            >
+                              {rec.effort === "low" ? "Düşük Efor" : rec.effort === "medium" ? "Orta Efor" : "Yüksek Efor"}
+                            </span>
+                          </div>
                         </div>
 
-                        <p className="text-[11.5px] text-slate-600 leading-relaxed mt-1">
+                        <p style={{ margin: "8px 0 4px", fontSize: "12.5px", color: "#334155", lineHeight: "1.55", fontWeight: 500 }}>
                           {rec.rationale}
                         </p>
 
                         {/* Adımlar */}
-                        <ol className="text-[11px] text-slate-600 space-y-1 list-decimal pl-4 my-2">
+                        <ol style={{ margin: "4px 0", paddingLeft: "18px", fontSize: "12px", color: "#475569", lineHeight: "1.5", display: "flex", flexDirection: "column", gap: "3px" }}>
                           {rec.steps.map((st, sIdx) => (
                             <li key={sIdx}>{st}</li>
                           ))}
                         </ol>
 
-                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-                          <span>Etki: {rec.impactHypothesis}</span>
+                        <div style={{ marginTop: "auto", paddingTop: "8px", borderTop: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "11.5px", color: "var(--muted)" }}>
+                          <span>Format: <strong style={{ color: "var(--text)" }}>{rec.format}</strong></span>
+                          <span>Etki: <strong style={{ color: "var(--text)" }}>{rec.impactHypothesis}</strong></span>
                         </div>
 
-                        {/* FİKİR ÜRET & PANOYA EKLE KÖPRÜSÜ */}
-                        {rec.contentEligible && (
-                          <div className="mt-2.5 pt-2.5 border-t border-indigo-50/80 bg-indigo-50/30 p-2.5 rounded-lg space-y-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <select
-                                aria-label="İçerik formatı"
-                                value={selectedFormat}
-                                disabled={busy || isPreviewing}
-                                onChange={(e) =>
-                                  setFormats((prev) => ({ ...prev, [rec.id]: e.target.value }))
-                                }
-                                className="h-7 text-[11px] font-semibold rounded border border-slate-300 bg-white px-2 text-slate-700"
+                        {/* HIZLI ÜRETİM VE FİKİR KÖPRÜSÜ */}
+                        <div style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #ede8ff", background: "#f8faff", padding: "10px", borderRadius: "10px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                          {/* Üst Sıra: Doğrudan Üretim Butonları */}
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "6px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                              <button
+                                type="button"
+                                onClick={() => directProduceInCanva(rec, currentStrategy.platform)}
+                                className="button primary"
+                                style={{ height: "28px", fontSize: "11.5px", fontWeight: 700, padding: "0 10px", gap: "5px" }}
+                                title="Bu taktiği ön ayarları yapılmış şekilde Canva Stüdyosu'na aktar"
                               >
-                                {GROWTH_FORMATS[currentStrategy.platform].map((f) => (
-                                  <option key={f} value={f}>
-                                    Format: {f}
-                                  </option>
-                                ))}
-                              </select>
+                                <Palette size={12} />
+                                <span>Canva&apos;da Üret</span>
+                              </button>
 
+                              {(rec.format.includes("video") || rec.format.includes("reels") || rec.format.includes("shorts")) && (
+                                <button
+                                  type="button"
+                                  onClick={() => directProduceInVideo(rec)}
+                                  className="button secondary"
+                                  style={{ height: "28px", fontSize: "11.5px", fontWeight: 700, padding: "0 10px", gap: "5px", color: "#db2777", background: "#fdf2f8", borderColor: "#fbcfe8" }}
+                                  title="Google Vids AI Video Stüdyosu'nda üret"
+                                >
+                                  <Clapperboard size={12} />
+                                  <span>Video Üret</span>
+                                </button>
+                              )}
+                            </div>
+
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                               {!isPreviewing && !isAdded ? (
                                 <button
                                   type="button"
                                   disabled={busy}
-                                  onClick={() => idea('preview', currentStrategy, rec.id, rec.format)}
-                                  className="h-7 px-3 rounded bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold flex items-center gap-1 shadow-sm transition"
+                                  onClick={() => idea("preview", currentStrategy, rec.id, rec.format)}
+                                  className="button ghost"
+                                  style={{ height: "28px", fontSize: "11px", fontWeight: 600, padding: "0 8px", gap: "4px" }}
+                                  title="Bu taktikten Fikir Panosu için başlık ve kanca türet"
                                 >
                                   <Sparkles size={11} />
-                                  <span>Fikir Üret</span>
+                                  <span>Fikir Türet</span>
                                 </button>
                               ) : null}
 
                               {isAdded && (
-                                <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                                <span style={{ fontSize: "11px", fontWeight: 700, color: "#059669", display: "inline-flex", alignItems: "center", gap: "4px" }}>
                                   <CheckCircle2 size={13} />
                                   <span>Panoya Eklendi</span>
                                 </span>
                               )}
                             </div>
-
-                            {/* Önizleme Açıldıysa */}
-                            {previews[rec.id] && (
-                              <div className="p-2.5 rounded bg-white border border-indigo-200 space-y-2 mt-2 shadow-sm animate-fadeIn">
-                                <strong className="text-xs text-indigo-950 font-bold block">
-                                  {previews[rec.id].title}
-                                </strong>
-                                <p className="text-[11px] text-slate-600 italic">
-                                  "{previews[rec.id].hook}"
-                                </p>
-                                <ul className="text-[10.5px] text-slate-600 space-y-0.5 list-disc pl-3">
-                                  {previews[rec.id].structure.map((s, sIdx) => (
-                                    <li key={sIdx}>{s}</li>
-                                  ))}
-                                </ul>
-                                <button
-                                  type="button"
-                                  disabled={busy}
-                                  onClick={() => idea('add', currentStrategy, rec.id, rec.format)}
-                                  className="w-full h-7 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] flex items-center justify-center gap-1"
-                                >
-                                  <Plus size={12} />
-                                  <span>Fikir Panosuna Ekle</span>
-                                </button>
-                              </div>
-                            )}
                           </div>
-                        )}
+
+                          {/* Önizleme Açıldıysa */}
+                          {previews[rec.id] && (
+                            <div style={{ padding: "8px", borderRadius: "8px", background: "white", border: "1px solid #c7d2fe", display: "flex", flexDirection: "column", gap: "6px" }}>
+                              <strong style={{ fontSize: "11.5px", color: "#312e81" }}>
+                                {previews[rec.id].title}
+                              </strong>
+                              <p style={{ margin: 0, fontSize: "11px", color: "#475569", fontStyle: "italic" }}>
+                                &ldquo;{previews[rec.id].hook}&rdquo;
+                              </p>
+                              <ul style={{ margin: 0, paddingLeft: "16px", fontSize: "11px", color: "#475569", display: "flex", flexDirection: "column", gap: "2px" }}>
+                                {previews[rec.id].structure.map((s, sIdx) => (
+                                  <li key={sIdx}>{s}</li>
+                                ))}
+                              </ul>
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => idea("add", currentStrategy, rec.id, rec.format)}
+                                className="button primary"
+                                style={{ width: "100%", height: "26px", fontSize: "11px", fontWeight: 700, justifyContent: "center" }}
+                              >
+                                <Plus size={12} />
+                                <span>Fikir Panosuna Ekle</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
