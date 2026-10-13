@@ -522,8 +522,25 @@ export function CanvaGenerationStudio({
             <span>Marka kaynakları</span>
             <Link href={`/projects/${projectId}/settings`}>Düzenle</Link>
           </div>
-          <p className="control-help">Canva tasarımında korunacak marka detayları:</p>
-          <div className="brand-source-grid">
+          <div className="brand-source-grid" style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+            {/* Marka Stili - Brand Guardian Seçeneği Çipi */}
+            <button
+              type="button"
+              className={`source-chip ${applyBrandStyle ? "selected" : ""}`}
+              onClick={() => setApplyBrandStyle(!applyBrandStyle)}
+              title={applyBrandStyle ? "Marka Stili Aktif: 60-30-10 renk dengesi ve sabit tipografi uygulanır" : "Marka Stili Devre Dışı: Serbest tasarım"}
+              style={{
+                borderColor: applyBrandStyle ? "#10b981" : undefined,
+                background: applyBrandStyle ? "#ecfdf5" : undefined,
+                color: applyBrandStyle ? "#065f46" : undefined,
+                fontWeight: 600,
+              }}
+            >
+              <span>{applyBrandStyle ? <Check size={12} /> : <Sparkles size={12} />}</span>
+              Marka stili
+            </button>
+
+            {/* Diğer Marka Detay Çipleri */}
             {brandFields.map(({ key, label }) => {
               const exists = Boolean(available[key]);
               const selected = selectedFields.includes(key);
@@ -534,6 +551,7 @@ export function CanvaGenerationStudio({
                   disabled={!exists}
                   className={`source-chip ${selected ? "selected" : ""}`}
                   onClick={() => toggleField(key)}
+                  title={!exists ? "Bu bilgi proje ayarlarında tanımlı değil" : label}
                 >
                   <span>{selected && <Check size={12} />}</span>
                   {label}
@@ -541,43 +559,6 @@ export function CanvaGenerationStudio({
                 </button>
               );
             })}
-          </div>
-
-          {/* Marka Stili Açma / Kapatma Anahtarı (Toggle) */}
-          <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid #f1f5f9" }}>
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "8px 10px",
-                borderRadius: "10px",
-                background: applyBrandStyle ? "#f0fdf4" : "#f8fafc",
-                border: applyBrandStyle ? "1px solid #bbf7d0" : "1px solid #e2e8f0",
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Sparkles size={14} style={{ color: applyBrandStyle ? "#166534" : "#94a3b8" }} />
-                <div>
-                  <strong style={{ fontSize: "12px", color: applyBrandStyle ? "#166534" : "#475569", display: "block" }}>
-                    {applyBrandStyle ? "✨ Marka Stili Aktif (Brand Guardian)" : "Marka Stili Devre Dışı"}
-                  </strong>
-                  <small style={{ fontSize: "10.5px", color: "#64748b" }}>
-                    {applyBrandStyle
-                      ? "60-30-10 renk dengesi ve sabit tipografi uygulanır."
-                      : "Tasarımcı ve Canva stili serbest bırakılır."}
-                  </small>
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                checked={applyBrandStyle}
-                onChange={(e) => setApplyBrandStyle(e.target.checked)}
-                style={{ width: "16px", height: "16px", accentColor: "#166534", cursor: "pointer" }}
-              />
-            </label>
           </div>
         </div>
 
