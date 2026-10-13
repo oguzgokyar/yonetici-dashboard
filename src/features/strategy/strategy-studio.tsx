@@ -127,8 +127,8 @@ const COLUMN_CONFIG: Record<
   },
 };
 
-type MainTab = "cockpit" | "platform_growth" | "content_ideas";
-type CockpitTabId = "brand_input" | "brand_identity" | "competitor_analysis" | "target_audience" | "growth_plan";
+type MainTab = "cockpit" | "content_ideas";
+type CockpitTabId = "brand_input" | "brand_identity" | "competitor_analysis" | "target_audience" | "growth_plan" | "platform_growth";
 
 export function StrategyStudio({ projectId }: { projectId: string }) {
   const router = useRouter();
@@ -690,12 +690,30 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
         : idea.description;
       text = buildEngagementStoryPrompt(idea, selectedStepText);
     } else {
-      text = `📌 ${idea.title}\n⚡ Kanca: ${idea.hook}\n📝 Açıklama: ${idea.description}\n🎯 Hedef: ${idea.targetChannel}`;
+      const structureItems = (idea.structure || [])
+        .map((step, idx) => `  ${idx + 1}. ${step}`)
+        .join("\n");
+      const structureBlock = structureItems ? `\n📋 Akış / Slayt Planı:\n${structureItems}` : "";
+      text = `📌 ${idea.title}\n⚡ Kanca: ${idea.hook}\n📝 Açıklama: ${idea.description}${structureBlock}\n🎯 Hedef Kanal: ${idea.targetChannel || "Instagram / TikTok"}`;
     }
 
     navigator.clipboard.writeText(text);
     setCopiedId(idea.id || idea.title);
-    setTimeout(() => setCopiedId(null), 2000);
+    setTimeout(() => setCopiedId(null), 2500);
+  }
+
+  function getCanvaPresetBadge(colType: ColumnType, idea: StrategyIdea) {
+    if (colType === "vertical_video") {
+      return { label: "Reels 9:16", detail: "6 Sahne", color: "#ec4899", bg: "#fdf2f8", border: "#fbcfe8" };
+    }
+    if (colType === "carousel") {
+      const count = Math.max(3, Math.min(10, idea.structure?.length || 5));
+      return { label: "Karusel 4:5", detail: `${count} Slayt`, color: "#4f46e5", bg: "#eef2ff", border: "#c7d2fe" };
+    }
+    if (colType === "engagement") {
+      return { label: "Story 9:16", detail: "1-5 Adım", color: "#d97706", bg: "#fffbeb", border: "#fde68a" };
+    }
+    return { label: "Post 1:1", detail: "Tek Kare", color: "#059669", bg: "#ecfdf5", border: "#a7f3d0" };
   }
 
   const overview = data?.strategy;
@@ -712,6 +730,7 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
     { id: "competitor_analysis", label: "Rakip Analizi", icon: Swords, badge: overview?.competitorAnalysis ? "Fırsat" : undefined },
     { id: "target_audience", label: "Hedef Kitle", icon: Target, badge: overview?.audienceVoc ? "Persona" : undefined },
     { id: "growth_plan", label: "Genel Ritim", icon: TrendingUp, badge: overview?.growthStrategy ? "Haftalık" : undefined },
+    { id: "platform_growth", label: "Platform Büyümesi", icon: TrendingUp, badge: "Agency" },
   ];
 
   // Helper hook categories
@@ -771,21 +790,6 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
           >
             <Compass size={17} />
             <span>Strateji Kokpiti</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setMainTab("platform_growth")}
-            className={`strategy-main-nav-btn ${mainTab === "platform_growth" ? "active" : ""}`}
-          >
-            <TrendingUp size={17} />
-            <span>Platform Büyüme Stratejisi</span>
-            <span
-              className="strategy-main-nav-badge"
-              style={{ background: mainTab === "platform_growth" ? "#4f46e5" : "#e0e7ff", color: mainTab === "platform_growth" ? "#ffffff" : "#4338ca" }}
-            >
-              Agency
-            </span>
           </button>
 
           <button
@@ -1517,18 +1521,16 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
               )}
             </div>
           )}
+
+          {/* Alt Sekme 6: Platform Büyümesi (Agency Swarm) */}
+          {activeTab === "platform_growth" && (
+            <PlatformGrowthPanel key={projectId} projectId={projectId} />
+          )}
         </section>
       )}
 
       {/* ========================================================
-          2. ANA SEKME: PLATFORM BÜYÜME STRATEJİSİ (AGENCY SWARM)
-      ======================================================== */}
-      {mainTab === "platform_growth" && (
-        <PlatformGrowthPanel key={projectId} projectId={projectId} />
-      )}
-
-      {/* ========================================================
-          3. ANA SEKME: İÇERİK ÖNERİLERİ (İÇERİK TÜRÜ KOLON MATRİSİ)
+          2. ANA SEKME: İÇERİK ÖNERİLERİ (İÇERİK TÜRÜ KOLON MATRİSİ)
       ======================================================== */}
       {mainTab === "content_ideas" && columns && (
         <section style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -1765,52 +1767,84 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                                 )}
                               </div>
 
-                              <div className="kanban-card-actions">
-                                <button
-                                  type="button"
-                                  onClick={() => idea.id && handleToggleHideIdea(idea.id)}
-                                  className="btn-card-action icon-only"
-                                  title={isHidden ? "Görünür Yap (Önerilere Taşı)" : "Gizle (Kullanıldı / Reddedildi)"}
-                                >
-                                  {isHidden ? <Eye size={12} /> : <EyeOff size={12} />}
-                                </button>
+                              <div className="kanban-card-actions" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: "6px" }}>
+                                {/* Sol: İçerik türü ve Canva ön ayar rozeti */}
+                                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                                  {(() => {
+                                    const preset = getCanvaPresetBadge(colType, idea);
+                                    return (
+                                      <span
+                                        style={{
+                                          fontSize: "10px",
+                                          fontWeight: 700,
+                                          padding: "2px 6px",
+                                          borderRadius: "6px",
+                                          background: preset.bg,
+                                          color: preset.color,
+                                          border: `1px solid ${preset.border}`,
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: "3px",
+                                        }}
+                                        title={`Canva Ön Ayarı: ${preset.label} (${preset.detail})`}
+                                      >
+                                        {preset.label}
+                                        <small style={{ opacity: 0.8, fontWeight: 500 }}>• {preset.detail}</small>
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
 
-                                <button
-                                  type="button"
-                                  onClick={() => copyIdeaText(idea)}
-                                  className="btn-card-action icon-only"
-                                  title="Fikri Kopyala"
-                                >
-                                  {isCopied ? (
-                                    <CheckCircle2 size={12} style={{ color: "#10b981" }} />
-                                  ) : (
-                                    <Copy size={12} />
-                                  )}
-                                </button>
-
-                                {/* Faz 1: Dikey Video için Google Vids AI Video Stüdyosu Köprüsü */}
-                                {colType === "vertical_video" && (
+                                {/* Sağ: Aksiyon butonları */}
+                                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                                   <button
                                     type="button"
-                                    onClick={() => handleSendToGoogleVids(idea)}
-                                    className="btn-card-action"
-                                    style={{ background: "#fdf2f8", borderColor: "#fbcfe8", color: "#db2777", fontWeight: 700 }}
-                                    title="Google Vids AI Video Stüdyosu'na Aktar (Otomatik Gizlenene Taşınır)"
+                                    onClick={() => idea.id && handleToggleHideIdea(idea.id)}
+                                    className="btn-card-action icon-only"
+                                    title={isHidden ? "Görünür Yap (Önerilere Taşı)" : "Gizle (Kullanıldı / Reddedildi)"}
                                   >
-                                    <Clapperboard size={12} />
-                                    <span>Vids</span>
+                                    {isHidden ? <Eye size={12} /> : <EyeOff size={12} />}
                                   </button>
-                                )}
 
-                                <button
-                                  type="button"
-                                  onClick={() => handleSendToCanva(idea)}
-                                  className="btn-card-action primary"
-                                  title="Canva Görsel Üretim Stüdyosuna Aktar (Otomatik Gizlenene Taşınır)"
-                                >
-                                  <Palette size={12} />
-                                  <span>Canva</span>
-                                </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => copyIdeaText(idea)}
+                                    className="btn-card-action icon-only"
+                                    title={isCopied ? "Panoya Kopyalandı!" : "Fikri ve Akış Planını Kopyala"}
+                                    style={isCopied ? { background: "#ecfdf5", borderColor: "#a7f3d0", color: "#059669" } : undefined}
+                                  >
+                                    {isCopied ? (
+                                      <CheckCircle2 size={12} style={{ color: "#10b981" }} />
+                                    ) : (
+                                      <Copy size={12} />
+                                    )}
+                                  </button>
+
+                                  {/* Faz 1: Dikey Video için Google Vids AI Video Stüdyosu Köprüsü */}
+                                  {colType === "vertical_video" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSendToGoogleVids(idea)}
+                                      className="btn-card-action"
+                                      style={{ background: "#fdf2f8", borderColor: "#fbcfe8", color: "#db2777", fontWeight: 700 }}
+                                      title="Google Vids AI Video Stüdyosu'na Aktar (Otomatik Gizlenene Taşınır)"
+                                    >
+                                      <Clapperboard size={12} />
+                                      <span>Vids</span>
+                                    </button>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSendToCanva(idea)}
+                                    className="btn-card-action primary"
+                                    title={`Canva Stüdyosuna Ön Ayarlı Aktar (${getCanvaPresetBadge(colType, idea).label})`}
+                                    style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 8px" }}
+                                  >
+                                    <Palette size={12} />
+                                    <span>Canva&apos;ya Aktar</span>
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           </div>

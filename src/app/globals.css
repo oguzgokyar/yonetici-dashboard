@@ -2664,6 +2664,45 @@ button { cursor:pointer; }
   font-weight: 600;
 }
 
+/* Platform Growth Panel Minimalist Styles */
+.growth-control-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(130px, 1fr) minmax(130px, 1fr) minmax(180px, 1.2fr);
+  gap: 12px;
+  align-items: end;
+}
+.growth-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.growth-tactic-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #eef0f6;
+  background: #ffffff;
+  transition: all 0.15s ease;
+}
+.growth-tactic-row:hover {
+  border-color: #dcd8ff;
+  box-shadow: 0 4px 12px rgba(109, 93, 252, 0.05);
+}
+@media (max-width: 900px) {
+  .growth-control-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .growth-control-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .cockpit-bullet-list {
   margin: 0;
   padding-left: 18px;

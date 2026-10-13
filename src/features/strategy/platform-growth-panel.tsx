@@ -186,19 +186,19 @@ function ProjectGrowthPanel({ projectId }: { projectId: string }) {
   const currentStrategy = data?.strategies?.find((s) => s.platform === activeStrategyPlatform);
 
   return (
-    <div className="cockpit-tab-content-panel space-y-6">
+    <div className="cockpit-tab-content-panel" style={{ display: "flex", flexDirection: "column", gap: "20px", width: "100%", boxSizing: "border-box" }}>
       {/* 1. ÜST KONTROL BAR: STRATEJİ VE KAPASİTE YAPILANDIRMASI */}
-      <div className="cockpit-detail-card highlight" style={{ background: '#f8fafc', borderColor: '#e2e8f0' }}>
-        <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-slate-200">
-          <div className="flex items-center gap-2">
-            <Sliders size={16} className="text-indigo-600" />
-            <h3 className="font-bold text-sm text-slate-800">Agency Platform Büyüme Kokpiti</h3>
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+      <div className="cockpit-detail-card highlight">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", paddingBottom: "12px", borderBottom: "1px solid #ede8ff" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Sliders size={16} style={{ color: "var(--primary)" }} />
+            <span style={{ font: "700 13px 'Manrope'", color: "var(--text)" }}>Agency Platform Büyüme Kokpiti</span>
+            <span className="cockpit-pill-tag" style={{ background: "#ede8ff", color: "#4f46e5", border: "1px solid #dcd8ff" }}>
               Agency Specialists Entegre
             </span>
           </div>
           {data?.activeRun ? (
-            <div className="flex items-center gap-2 text-xs font-semibold text-amber-600 bg-amber-50 px-3 py-1 rounded-full border border-amber-200 animate-pulse">
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 600, color: "#d97706", background: "#fffbeb", padding: "4px 10px", borderRadius: "20px", border: "1px solid #fde68a" }}>
               <RefreshCw size={12} className="animate-spin" />
               <span>Agency uzmanları stratejiyi analiz ediyor ({data.activeRun.id.slice(0, 8)})...</span>
             </div>
@@ -206,13 +206,13 @@ function ProjectGrowthPanel({ projectId }: { projectId: string }) {
         </div>
 
         {/* Yapılandırma Alanları */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 pt-3 items-end">
+        <div className="growth-control-grid" style={{ paddingTop: "12px" }}>
           {/* Platform Seçimi */}
-          <div className="md:col-span-5 space-y-2">
-            <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block">
-              Analiz Edilecek Platformlar
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <label style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Hedef Platformlar
             </label>
-            <div className="flex flex-wrap gap-2">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
               {data?.availablePlatforms.map((p) => {
                 const isSelected = selected.includes(p);
                 const isConnected = data.connectedPlatforms.includes(p);
@@ -227,18 +227,27 @@ function ProjectGrowthPanel({ projectId }: { projectId: string }) {
                       );
                       pendingKey.current = null;
                     }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all border ${
-                      isSelected
-                        ? 'bg-white shadow-sm border-indigo-300 text-slate-900 ring-2 ring-indigo-500/10'
-                        : 'bg-slate-100 border-slate-200 text-slate-500 hover:bg-slate-200/70'
-                    }`}
+                    style={{
+                      padding: "6px 10px",
+                      borderRadius: "8px",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      border: isSelected ? "1px solid #6366f1" : "1px solid #e2e8f0",
+                      background: isSelected ? "#f5f3ff" : "#ffffff",
+                      color: isSelected ? "#4338ca" : "#64748b",
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
                   >
                     <span>{info.icon}</span>
                     <span>{info.label}</span>
                     {isConnected ? (
-                      <span className="w-2 h-2 rounded-full bg-emerald-500" title="Hesap Bağlı" />
+                      <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#10b981" }} title="Hesap Bağlı" />
                     ) : (
-                      <span className="text-[10px] text-slate-400 font-normal">(Bağlı Değil)</span>
+                      <span style={{ fontSize: "10px", opacity: 0.6 }}>(Bağlı Değil)</span>
                     )}
                   </button>
                 );
@@ -246,9 +255,9 @@ function ProjectGrowthPanel({ projectId }: { projectId: string }) {
             </div>
           </div>
 
-          {/* Haftalık Kapasite */}
-          <div className="md:col-span-2 space-y-1">
-            <label className="text-[11px] font-bold text-slate-600 block">Haftalık İçerik</label>
+          {/* Haftalık İçerik */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+            <label style={{ fontSize: "11px", fontWeight: 700, color: "var(--text)" }}>Haftalık İçerik</label>
             <input
               type="number"
               min={1}
@@ -258,12 +267,13 @@ function ProjectGrowthPanel({ projectId }: { projectId: string }) {
                 setPosts(Number(e.target.value));
                 pendingKey.current = null;
               }}
-              className="w-full h-8 px-2.5 text-xs font-semibold rounded-lg border border-slate-300 bg-white"
+              style={{ width: "100%", height: "34px", padding: "0 10px", fontSize: "12px", fontWeight: 600, borderRadius: "8px", border: "1px solid var(--border)", background: "white", boxSizing: "border-box" }}
             />
           </div>
 
-          <div className="md:col-span-2 space-y-1">
-            <label className="text-[11px] font-bold text-slate-600 block">Haftalık Çalışma</label>
+          {/* Haftalık Çalışma */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+            <label style={{ fontSize: "11px", fontWeight: 700, color: "var(--text)" }}>Haftalık Saat</label>
             <input
               type="number"
               min={0.5}
@@ -274,26 +284,27 @@ function ProjectGrowthPanel({ projectId }: { projectId: string }) {
                 setHours(Number(e.target.value));
                 pendingKey.current = null;
               }}
-              className="w-full h-8 px-2.5 text-xs font-semibold rounded-lg border border-slate-300 bg-white"
+              style={{ width: "100%", height: "34px", padding: "0 10px", fontSize: "12px", fontWeight: 600, borderRadius: "8px", border: "1px solid var(--border)", background: "white", boxSizing: "border-box" }}
             />
           </div>
 
           {/* Başlat Butonu */}
-          <div className="md:col-span-3">
+          <div>
             <button
               type="button"
               disabled={busy || Boolean(data?.activeRun) || !selected.length}
               onClick={() => generate(selected)}
-              className="w-full h-8 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition disabled:opacity-50"
+              className="button primary"
+              style={{ width: "100%", height: "34px", justifyContent: "center", fontSize: "12px", fontWeight: 700, whiteSpace: "nowrap" }}
             >
-              {busy ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} />}
-              <span>{busy ? 'Hazırlanıyor...' : 'Stratejiyi Üret / Yenile'}</span>
+              {busy ? <RefreshCw size={13} className="spin" /> : <Sparkles size={13} />}
+              <span>{busy ? "Hazırlanıyor..." : "Stratejiyi Üret"}</span>
             </button>
           </div>
 
           {/* Hedef Cümlesi */}
-          <div className="md:col-span-12 space-y-1">
-            <label className="text-[11px] font-bold text-slate-600 block">Odak Hedef</label>
+          <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: "4px" }}>
+            <label style={{ fontSize: "11px", fontWeight: 700, color: "var(--text)" }}>Odak Büyüme Hedefi</label>
             <input
               type="text"
               value={objective}
@@ -302,22 +313,22 @@ function ProjectGrowthPanel({ projectId }: { projectId: string }) {
                 setObjective(e.target.value);
                 pendingKey.current = null;
               }}
-              className="w-full h-8 px-3 text-xs rounded-lg border border-slate-300 bg-white text-slate-800"
-              placeholder="Örn: Nitelikli takipçi kazanımı, yüksek Reels kaydetme oranı ve web sitesi trafiği"
+              style={{ width: "100%", height: "34px", padding: "0 10px", fontSize: "12px", borderRadius: "8px", border: "1px solid var(--border)", background: "white", boxSizing: "border-box" }}
+              placeholder="Örn: Nitelikli takipçi kazanımı, yüksek Reels kaydetme oranı ve organik kitle büyütme"
             />
           </div>
         </div>
 
         {error && (
-          <div className="mt-3 p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertCircle size={14} className="flex-shrink-0" />
+          <div style={{ marginTop: "10px", padding: "8px 12px", borderRadius: "8px", background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", fontSize: "12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <AlertCircle size={14} />
               <span>{error}</span>
             </div>
             <button
               type="button"
               onClick={() => setReload((n) => n + 1)}
-              className="text-[11px] font-bold underline hover:text-rose-900"
+              style={{ fontSize: "11px", fontWeight: 700, textDecoration: "underline", color: "#991b1b", background: "none", border: 0, cursor: "pointer" }}
             >
               Yeniden dene
             </button>
@@ -327,10 +338,10 @@ function ProjectGrowthPanel({ projectId }: { projectId: string }) {
 
       {/* 2. STRATEJİ PLATFORM SEKMELERİ (SONUÇLAR MEVCUTSA) */}
       {data?.strategies && data.strategies.length > 0 ? (
-        <div className="space-y-4">
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           {/* Platform Tab Bar */}
-          <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-200 pb-2">
-            <div className="flex items-center gap-1.5">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px", borderBottom: "1px solid var(--border)", paddingBottom: "10px" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
               {data.strategies.map((saved) => {
                 const info = PLATFORM_INFO[saved.platform];
                 const isActive = activeStrategyPlatform === saved.platform;
@@ -339,16 +350,25 @@ function ProjectGrowthPanel({ projectId }: { projectId: string }) {
                     key={saved.id}
                     type="button"
                     onClick={() => setActiveStrategyPlatform(saved.platform)}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
-                      isActive
-                        ? 'bg-slate-900 text-white shadow-sm'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                    }`}
+                    style={{
+                      padding: "6px 14px",
+                      borderRadius: "8px",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      border: isActive ? "1px solid var(--text)" : "1px solid var(--border)",
+                      background: isActive ? "var(--text)" : "white",
+                      color: isActive ? "white" : "var(--muted)",
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
                   >
                     <span>{info.icon}</span>
                     <span>{info.label} Büyüme Stratejisi</span>
                     {saved.stale && (
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300">
+                      <span style={{ fontSize: "10px", padding: "1px 5px", borderRadius: "4px", background: "rgba(245, 158, 11, 0.2)", color: "#b45309" }}>
                         Eski
                       </span>
                     )}
@@ -362,9 +382,10 @@ function ProjectGrowthPanel({ projectId }: { projectId: string }) {
                 type="button"
                 disabled={busy || Boolean(data?.activeRun)}
                 onClick={() => generate([currentStrategy.platform])}
-                className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5"
+                className="button ghost"
+                style={{ height: "32px", fontSize: "11px", fontWeight: 600, padding: "0 10px", gap: "5px" }}
               >
-                <RefreshCw size={12} className={busy ? 'animate-spin' : ''} />
+                <RefreshCw size={12} className={busy ? "spin" : ""} />
                 <span>Bu Platformu Güncelle</span>
               </button>
             )}
@@ -617,7 +638,7 @@ function ProjectGrowthPanel({ projectId }: { projectId: string }) {
                 <div className="cockpit-detail-card">
                   <div className="flex items-center gap-2 mb-2">
                     <Target size={15} className="text-blue-600" />
-                    <h4 className="font-bold text-xs text-slate-900">Ölçüm &amp; Hedef KPI'lar</h4>
+                    <h4 className="font-bold text-xs text-slate-900">Ölçüm &amp; Hedef KPI&apos;lar</h4>
                   </div>
                   <div className="space-y-2">
                     {currentStrategy.strategy.kpis.map((kpi, kIdx) => (
@@ -645,16 +666,14 @@ function ProjectGrowthPanel({ projectId }: { projectId: string }) {
         </div>
       ) : (
         /* Henüz Strateji Üretilmemişse Boş Durum */
-        <div className="text-center py-12 px-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto text-xl shadow-sm">
-            <TrendingUp size={24} />
+        <div style={{ textAlign: "center", padding: "40px 16px", borderRadius: "14px", border: "1px dashed var(--border)", background: "#fafafa", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
+          <div style={{ width: "42px", height: "42px", borderRadius: "12px", background: "#f0edff", color: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <TrendingUp size={22} />
           </div>
-          <div className="max-w-md mx-auto">
-            <h4 className="font-bold text-sm text-slate-800">Henüz Platform Stratejisi Üretilmedi</h4>
-            <p className="text-xs text-slate-500 mt-1">
-              Yukarıdaki panelden analiz etmek istediğiniz platformları seçip{' '}
-              <strong>"Stratejiyi Üret / Yenile"</strong> butonuna basın. Agency uzman direktörleri
-              markanız için özel büyüme takvimini ve taktikleri hazırlayacaktır.
+          <div style={{ maxWidth: "420px" }}>
+            <h4 style={{ margin: "0 0 4px", font: "700 13px 'Manrope'", color: "var(--text)" }}>Henüz Platform Stratejisi Üretilmedi</h4>
+            <p style={{ margin: 0, fontSize: "11.5px", color: "var(--muted)", lineHeight: "1.5" }}>
+              Yukarıdaki panelden analiz etmek istediğiniz platformları seçip <strong>&ldquo;Stratejiyi Üret&rdquo;</strong> butonuna basın. Agency uzman direktörleri markanız için özel büyüme takvimini ve taktikleri hazırlayacaktır.
             </p>
           </div>
         </div>
