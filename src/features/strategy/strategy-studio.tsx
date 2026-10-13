@@ -27,6 +27,7 @@ import {
   Hash,
   Clapperboard,
   X,
+  RotateCcw,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -35,76 +36,8 @@ import {
   IDEA_TYPE_LABELS,
 } from "@/lib/strategy-constants";
 
-type StrategyOverview = {
-  brandIdentity: {
-    tone: string;
-    valueProposition: string;
-    positioning: string;
-    keyMessaging: string;
-    brandArchetype?: string;
-    visualDirectives?: {
-      primaryAesthetic: string;
-      forbiddenCliches: string[];
-      photoStyle: string;
-    };
-  };
-  competitorAnalysis: {
-    contentGaps: string[];
-    viralPatternsToAdapt: string[];
-    differentiationAngle: string;
-    liveOutlierCount?: number;
-    liveOutlierSummary?: string;
-    competitorWeaknesses?: string[];
-  };
-  audienceVoc: {
-    targetPersona: string;
-    painPoints: string[];
-    frequentQuestions: string[];
-    winningHooks: string[];
-    unspokenDesires?: string[];
-  };
-  growthStrategy: {
-    primaryPillars: string[];
-    weeklyPostingPlan: string;
-    channelPriorities: string[];
-    conversionFunnel: string;
-    leadMagnetOffer?: {
-      hook: string;
-      deliverable: string;
-      ctaTrigger: string;
-    };
-    contentDistributionRatio?: {
-      tofuAwareness: string;
-      mofuTrust: string;
-      bofuConversion: string;
-    };
-    aiSearchAeoDirective?: string;
-    hashtagBank?: {
-      broad: string[];
-      niche: string[];
-      brand: string[];
-    };
-    dailySchedule?: Array<{
-      day: string;
-      format: string;
-      focus: string;
-    }>;
-  };
-};
-
-type StrategyIdea = {
-  id?: string;
-  columnType: ColumnType;
-  title: string;
-  hook: string;
-  description: string;
-  structure: string[];
-  targetChannel: string;
-  ideaType?: IdeaType | string;
-  skillSource?: string;
-  status?: "suggested" | "hidden";
-  createdAt?: string;
-};
+import type { StrategyOverview, StrategyIdea } from "@/lib/strategy-types";
+import { PlatformGrowthPanel } from "./platform-growth-panel";
 
 type ColumnData = {
   suggested: StrategyIdea[];
@@ -194,7 +127,7 @@ const COLUMN_CONFIG: Record<
   },
 };
 
-type MainTab = "cockpit" | "content_ideas";
+type MainTab = "cockpit" | "platform_growth" | "content_ideas";
 type CockpitTabId = "brand_input" | "brand_identity" | "competitor_analysis" | "target_audience" | "growth_plan";
 
 export function StrategyStudio({ projectId }: { projectId: string }) {
@@ -249,7 +182,9 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
   const [modalTargetCol, setModalTargetCol] = useState<ColumnType | "all">("all");
   const [modalIdeaType, setModalIdeaType] = useState<IdeaType | "">("");
   const [modalTopic, setModalTopic] = useState("");
+  const [modalResetFirst, setModalResetFirst] = useState(false);
   const [modalSubmitting, setModalSubmitting] = useState(false);
+  const [resettingIdeas, setResettingIdeas] = useState(false);
 
   async function loadStrategy() {
     try {
@@ -454,7 +389,64 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
     setModalTargetCol(target);
     setModalTopic(initialTopic);
     setModalIdeaType("");
+    setModalResetFirst(false);
     setIdeaModalOpen(true);
+  }
+
+  async function handleResetAllIdeas() {
+    if (!window.confirm("Tüm içerik önerileri sıfırlanacaktır. Emin misiniz?")) return;
+    setResettingIdeas(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/strategy/ideas`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "all" }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setData((prev) => {
+          if (!prev) return prev;
+          const nextCols = { ...prev.columns };
+          for (const col of ["vertical_video", "carousel", "single_post", "engagement"] as ColumnType[]) {
+            nextCols[col] = { suggested: [], hidden: [] };
+          }
+          return { ...prev, columns: nextCols };
+        });
+      } else {
+        alert("Hata: " + (json.error || "Öneriler sıfırlanamadı."));
+      }
+    } catch (e: unknown) {
+      alert("Hata: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setResettingIdeas(false);
+    }
+  }
+
+  async function handleResetColumnIdeas(colType: ColumnType) {
+    if (!window.confirm(`${COLUMN_CONFIG[colType].title} kolonundaki tüm fikirler temizlenecektir. Emin misiniz?`)) return;
+    setColLoading((prev) => ({ ...prev, [colType]: true }));
+    try {
+      const res = await fetch(`/api/projects/${projectId}/strategy/ideas`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "single_column", columnType: colType }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setData((prev) => {
+          if (!prev) return prev;
+          const nextCols = { ...prev.columns };
+          nextCols[colType] = { suggested: [], hidden: [] };
+          return { ...prev, columns: nextCols };
+        });
+      } else {
+        alert("Hata: " + (json.error || "Kolon sıfırlanamadı."));
+      }
+    } catch (e: unknown) {
+      alert("Hata: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setColLoading((prev) => ({ ...prev, [colType]: false }));
+    }
   }
 
   async function handleIdeaMachineSubmit(e?: React.FormEvent) {
@@ -464,11 +456,12 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
     setModalSubmitting(true);
     try {
       const isAll = modalTargetCol === "all";
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         scope: isAll ? "all_columns" : "single_column",
         columnType: isAll ? undefined : modalTargetCol,
         focusTopic: modalTopic.trim(),
         ideaType: modalIdeaType || undefined,
+        resetBeforeGenerate: modalResetFirst,
       };
 
       const res = await fetch(`/api/projects/${projectId}/strategy/ideas`, {
@@ -484,10 +477,11 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
             if (!prev) return prev;
             const nextCols = { ...prev.columns };
             for (const col of Object.keys(json.ideasByColumn) as ColumnType[]) {
-              nextCols[col].suggested = [
-                ...(json.ideasByColumn[col] || []),
-                ...nextCols[col].suggested,
-              ];
+              const newItems = json.ideasByColumn[col] || [];
+              nextCols[col] = {
+                suggested: modalResetFirst ? newItems : [...newItems, ...nextCols[col].suggested],
+                hidden: modalResetFirst ? [] : nextCols[col].hidden,
+              };
             }
             return { ...prev, columns: nextCols };
           });
@@ -497,10 +491,10 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
           setData((prev) => {
             if (!prev) return prev;
             const nextCols = { ...prev.columns };
-            nextCols[colType].suggested = [
-              ...json.ideas,
-              ...nextCols[colType].suggested,
-            ];
+            nextCols[colType] = {
+              suggested: modalResetFirst ? json.ideas : [...json.ideas, ...nextCols[colType].suggested],
+              hidden: modalResetFirst ? [] : nextCols[colType].hidden,
+            };
             return { ...prev, columns: nextCols };
           });
           setColTabs((prev) => ({ ...prev, [colType]: "suggested" }));
@@ -518,6 +512,10 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
   }
 
   function handleSendToGoogleVids(idea: StrategyIdea) {
+    if (idea.nativeFormat === 'long_video') {
+      window.alert('YouTube uzun video mevcut Vids kısa-video aktarımında desteklenmiyor. Fikri Kopyala ile bölüm akışını alın ve uzun video düzenleyicinizde kullanın; kısa video için ayrı Shorts fikri üretin.');
+      return;
+    }
     if (!window.confirm(`"${idea.title}" konsepti Google Vids AI Video Stüdyosu'na aktarılacak ve kart 'Gizlenmiş' sekmesine taşınacak.\n\nOnaylıyor musunuz?`)) {
       return;
     }
@@ -605,6 +603,10 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
   }
 
   async function handleSendToCanva(idea: StrategyIdea) {
+    if (idea.nativeFormat === 'long_video') {
+      window.alert('YouTube uzun video Canva Reels aktarımında desteklenmiyor. Fikri Kopyala ile bölüm akışını alın ve uzun video düzenleyicinizde kullanın; kısa video için ayrı Shorts fikri üretin.');
+      return;
+    }
     const cardKey = idea.id || idea.title;
     const isEngagement = idea.columnType === "engagement";
     const selectedStepIndex = selectedStoryIndex[cardKey] ?? 0;
@@ -709,7 +711,7 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
     { id: "brand_identity", label: "Marka Kimliği", icon: Tag, badge: overview?.brandIdentity?.tone ? "Aktif" : undefined },
     { id: "competitor_analysis", label: "Rakip Analizi", icon: Swords, badge: overview?.competitorAnalysis ? "Fırsat" : undefined },
     { id: "target_audience", label: "Hedef Kitle", icon: Target, badge: overview?.audienceVoc ? "Persona" : undefined },
-    { id: "growth_plan", label: "Büyüme Planı", icon: TrendingUp, badge: overview?.growthStrategy ? "Haftalık" : undefined },
+    { id: "growth_plan", label: "Genel Ritim", icon: TrendingUp, badge: overview?.growthStrategy ? "Haftalık" : undefined },
   ];
 
   // Helper hook categories
@@ -773,6 +775,21 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
 
           <button
             type="button"
+            onClick={() => setMainTab("platform_growth")}
+            className={`strategy-main-nav-btn ${mainTab === "platform_growth" ? "active" : ""}`}
+          >
+            <TrendingUp size={17} />
+            <span>Platform Büyüme Stratejisi</span>
+            <span
+              className="strategy-main-nav-badge"
+              style={{ background: mainTab === "platform_growth" ? "#4f46e5" : "#e0e7ff", color: mainTab === "platform_growth" ? "#ffffff" : "#4338ca" }}
+            >
+              Agency
+            </span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setMainTab("content_ideas")}
             className={`strategy-main-nav-btn ${mainTab === "content_ideas" ? "active" : ""}`}
           >
@@ -787,23 +804,48 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
         {/* Bilgilendirme Rozeti & Fikir Makinesi Butonu */}
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           {mainTab === "content_ideas" && (
-            <button
-              type="button"
-              onClick={() => openIdeaMachineModal("all", "")}
-              className="button primary text-xs"
-              style={{
-                height: "34px",
-                padding: "0 13px",
-                gap: "6px",
-                fontWeight: 700,
-                background: "linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)",
-                boxShadow: "0 2px 8px rgba(99, 102, 241, 0.25)",
-              }}
-              title="4 kolonda aynı anda tematik içerik fikirleri üretir"
-            >
-              <Zap size={14} style={{ color: "#fef08a" }} />
-              <span>⚡ Fikir Makinesi</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => openIdeaMachineModal("all", "")}
+                className="button primary text-xs"
+                style={{
+                  height: "34px",
+                  padding: "0 13px",
+                  gap: "6px",
+                  fontWeight: 700,
+                  background: "linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)",
+                  boxShadow: "0 2px 8px rgba(99, 102, 241, 0.25)",
+                }}
+                title="4 kolonda aynı anda tematik içerik fikirleri üretir"
+              >
+                <Zap size={14} style={{ color: "#fef08a" }} />
+                <span>⚡ Fikir Makinesi</span>
+              </button>
+
+              {totalSuggestedIdeas > 0 && (
+                <button
+                  type="button"
+                  onClick={handleResetAllIdeas}
+                  disabled={resettingIdeas}
+                  className="button secondary text-xs"
+                  style={{
+                    height: "34px",
+                    padding: "0 10px",
+                    gap: "5px",
+                    fontWeight: 600,
+                    fontSize: "11.5px",
+                    color: "#64748b",
+                    background: "#ffffff",
+                    border: "1px solid #e2e8f0",
+                  }}
+                  title="Tüm içerik önerilerini sıfırlar"
+                >
+                  {resettingIdeas ? <RefreshCw size={13} className="spin" /> : <RotateCcw size={13} />}
+                  <span>{resettingIdeas ? "Sıfırlanıyor..." : "Önerileri Sıfırla"}</span>
+                </button>
+              )}
+            </>
           )}
 
           <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", color: "var(--muted)" }}>
@@ -1479,7 +1521,14 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
       )}
 
       {/* ========================================================
-          2. ANA SEKME: İÇERİK ÖNERİLERİ (İÇERİK TÜRÜ KOLON MATRİSİ)
+          2. ANA SEKME: PLATFORM BÜYÜME STRATEJİSİ (AGENCY SWARM)
+      ======================================================== */}
+      {mainTab === "platform_growth" && (
+        <PlatformGrowthPanel key={projectId} projectId={projectId} />
+      )}
+
+      {/* ========================================================
+          3. ANA SEKME: İÇERİK ÖNERİLERİ (İÇERİK TÜRÜ KOLON MATRİSİ)
       ======================================================== */}
       {mainTab === "content_ideas" && columns && (
         <section style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -1547,13 +1596,14 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                     </button>
                   </div>
 
-                  {/* Yeni Fikir İste Butonu */}
-                  <div>
+                  {/* Yeni Fikir İste Butonu & Kolon Sıfırla */}
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                     <button
                       type="button"
                       onClick={() => handleGenerateMoreForColumn(colType)}
                       disabled={isColLoading || !brandName.trim()}
                       className="btn-request-idea"
+                      style={{ flex: 1 }}
                     >
                       {isColLoading ? (
                         <>
@@ -1567,6 +1617,30 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                         </>
                       )}
                     </button>
+                    {colData.suggested.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => handleResetColumnIdeas(colType)}
+                        disabled={isColLoading}
+                        title={`${conf.title} kolonunu sıfırla`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: "34px",
+                          height: "34px",
+                          borderRadius: "8px",
+                          border: "1px solid #e2e8f0",
+                          background: "#ffffff",
+                          color: "#94a3b8",
+                          cursor: "pointer",
+                          transition: "all 0.15s ease",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <RotateCcw size={12} />
+                      </button>
+                    )}
                   </div>
 
                   {/* Fikir Kartları Listesi */}
@@ -1663,7 +1737,7 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                             <div className="kanban-card-footer">
                               <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                                 <span className="kanban-channel-badge" title={idea.targetChannel}>
-                                  {idea.targetChannel}
+                                  {idea.nativeFormat === 'long_video' ? 'YouTube · Uzun video' : idea.targetChannel}
                                 </span>
                                 {idea.skillSource && (
                                   <span
@@ -1870,41 +1944,69 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
               </div>
 
               {/* Modal Footer */}
-              <div className="idea-machine-footer">
-                <button
-                  type="button"
-                  onClick={() => setIdeaModalOpen(false)}
-                  disabled={modalSubmitting}
-                  className="button secondary text-xs"
-                  style={{ height: "34px", padding: "0 12px" }}
-                >
-                  Vazgeç
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={modalSubmitting}
-                  className="button primary text-xs"
+              <div className="idea-machine-footer" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}>
+                <label
                   style={{
-                    height: "34px",
-                    padding: "0 16px",
-                    fontWeight: 700,
+                    display: "inline-flex",
+                    alignItems: "center",
                     gap: "6px",
-                    background: "linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    color: modalResetFirst ? "#7c3aed" : "#64748b",
+                    cursor: "pointer",
+                    userSelect: "none",
                   }}
                 >
-                  {modalSubmitting ? (
-                    <>
-                      <RefreshCw className="spin" size={13} />
-                      <span>Fikirler Üretiliyor...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap size={13} style={{ color: "#fef08a" }} />
-                      <span>{modalTargetCol === "all" ? "Fikir Makinesini Çalıştır" : "Yeni Fikirleri Üret"}</span>
-                    </>
-                  )}
-                </button>
+                  <input
+                    type="checkbox"
+                    checked={modalResetFirst}
+                    onChange={(e) => setModalResetFirst(e.target.checked)}
+                    disabled={modalSubmitting}
+                    style={{ accentColor: "#7c3aed", cursor: "pointer", width: "14px", height: "14px" }}
+                  />
+                  <span>{modalTargetCol === "all" ? "Mevcut önerileri sıfırla ve baştan üret" : "Bu kolondaki mevcut fikirleri sıfırla"}</span>
+                </label>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setIdeaModalOpen(false)}
+                    disabled={modalSubmitting}
+                    className="button secondary text-xs"
+                    style={{ height: "34px", padding: "0 12px" }}
+                  >
+                    Vazgeç
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={modalSubmitting}
+                    className="button primary text-xs"
+                    style={{
+                      height: "34px",
+                      padding: "0 16px",
+                      fontWeight: 700,
+                      gap: "6px",
+                      background: "linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)",
+                    }}
+                  >
+                    {modalSubmitting ? (
+                      <>
+                        <RefreshCw className="spin" size={13} />
+                        <span>Fikirler Üretiliyor...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Zap size={13} style={{ color: "#fef08a" }} />
+                        <span>
+                          {modalResetFirst
+                            ? (modalTargetCol === "all" ? "Sıfırla & Baştan Üret" : "Sıfırla & Yeni Üret")
+                            : (modalTargetCol === "all" ? "Fikir Makinesini Çalıştır" : "Yeni Fikirleri Üret")}
+                        </span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
