@@ -160,6 +160,9 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
     engagement: "suggested",
   });
 
+  // Mobile active format selector (Quick Ideas Drawer style: 1 active column at a time on mobile)
+  const [mobileActiveCol, setMobileActiveCol] = useState<ColumnType>("vertical_video");
+
   // Column generation loading states
   const [colLoading, setColLoading] = useState<Record<ColumnType, boolean>>({
     vertical_video: false,
@@ -394,16 +397,23 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
   }
 
   async function handleResetAllIdeas() {
-    if (!window.confirm("Tüm içerik önerileri sıfırlanacaktır. Emin misiniz?")) return;
+    let proceed = true;
+    try {
+      proceed = typeof window !== "undefined" ? window.confirm("Tüm içerik önerileri temizlenecektir. Emin misiniz?") : true;
+    } catch {
+      proceed = true;
+    }
+    if (!proceed) return;
+
     setResettingIdeas(true);
     try {
-      const res = await fetch(`/api/projects/${projectId}/strategy/ideas`, {
+      const res = await fetch(`/api/projects/${projectId}/strategy/ideas?scope=all`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scope: "all" }),
       });
-      const json = await res.json();
-      if (json.success) {
+      const json = await res.json().catch(() => ({}));
+      if (json.success || res.ok) {
         setData((prev) => {
           if (!prev) return prev;
           const nextCols = { ...prev.columns };
@@ -413,26 +423,33 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
           return { ...prev, columns: nextCols };
         });
       } else {
-        alert("Hata: " + (json.error || "Öneriler sıfırlanamadı."));
+        alert(json.error || "Öneriler temizlenemedi.");
       }
     } catch (e: unknown) {
-      alert("Hata: " + (e instanceof Error ? e.message : String(e)));
+      alert(e instanceof Error ? e.message : "Öneriler temizlenemedi.");
     } finally {
       setResettingIdeas(false);
     }
   }
 
   async function handleResetColumnIdeas(colType: ColumnType) {
-    if (!window.confirm(`${COLUMN_CONFIG[colType].title} kolonundaki tüm fikirler temizlenecektir. Emin misiniz?`)) return;
+    let proceed = true;
+    try {
+      proceed = typeof window !== "undefined" ? window.confirm(`${COLUMN_CONFIG[colType].title} kolonundaki tüm fikirler temizlenecektir. Emin misiniz?`) : true;
+    } catch {
+      proceed = true;
+    }
+    if (!proceed) return;
+
     setColLoading((prev) => ({ ...prev, [colType]: true }));
     try {
-      const res = await fetch(`/api/projects/${projectId}/strategy/ideas`, {
+      const res = await fetch(`/api/projects/${projectId}/strategy/ideas?scope=single_column&columnType=${colType}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scope: "single_column", columnType: colType }),
       });
-      const json = await res.json();
-      if (json.success) {
+      const json = await res.json().catch(() => ({}));
+      if (json.success || res.ok) {
         setData((prev) => {
           if (!prev) return prev;
           const nextCols = { ...prev.columns };
@@ -440,10 +457,10 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
           return { ...prev, columns: nextCols };
         });
       } else {
-        alert("Hata: " + (json.error || "Kolon sıfırlanamadı."));
+        alert(json.error || "Kolon temizlenemedi.");
       }
     } catch (e: unknown) {
-      alert("Hata: " + (e instanceof Error ? e.message : String(e)));
+      alert(e instanceof Error ? e.message : "Kolon temizlenemedi.");
     } finally {
       setColLoading((prev) => ({ ...prev, [colType]: false }));
     }
@@ -843,10 +860,10 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                     background: "#ffffff",
                     border: "1px solid #e2e8f0",
                   }}
-                  title="Tüm içerik önerilerini sıfırlar"
+                  title="Tüm içerik önerilerini temizler"
                 >
                   {resettingIdeas ? <RefreshCw size={13} className="spin" /> : <RotateCcw size={13} />}
-                  <span>{resettingIdeas ? "Sıfırlanıyor..." : "Önerileri Sıfırla"}</span>
+                  <span>{resettingIdeas ? "Temizleniyor..." : "Önerileri Temizle"}</span>
                 </button>
               )}
             </>
@@ -1533,7 +1550,44 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
           2. ANA SEKME: İÇERİK ÖNERİLERİ (İÇERİK TÜRÜ KOLON MATRİSİ)
       ======================================================== */}
       {mainTab === "content_ideas" && columns && (
-        <section style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        <section style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {/* MOBİL FORMAT SEÇİCİ BAR (Hızlı İçerik Önerileri Tarzı) */}
+          <div className="ideas-mobile-format-bar">
+            {(Object.keys(COLUMN_CONFIG) as ColumnType[]).map((colType) => {
+              const conf = COLUMN_CONFIG[colType];
+              const isSelected = mobileActiveCol === colType;
+              const Icon = conf.icon;
+              const count = (columns[colType]?.suggested || []).length;
+              return (
+                <button
+                  key={colType}
+                  type="button"
+                  onClick={() => setMobileActiveCol(colType)}
+                  className={`ideas-mobile-format-btn ${isSelected ? "selected" : ""}`}
+                  style={{
+                    border: isSelected ? `2px solid ${conf.iconColor}` : "1px solid #e2e8f0",
+                    background: isSelected ? conf.iconBg : "#ffffff",
+                    color: isSelected ? conf.iconColor : "#64748b",
+                  }}
+                >
+                  <Icon size={16} />
+                  <span style={{ fontSize: "11px", fontWeight: isSelected ? 800 : 600 }}>
+                    {conf.title.split(" ")[0]}
+                  </span>
+                  <span
+                    className="ideas-mobile-badge"
+                    style={{
+                      background: isSelected ? conf.iconColor : "#e2e8f0",
+                      color: isSelected ? "#ffffff" : "#475569",
+                    }}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
           <div className="kanban-grid">
             {(Object.keys(COLUMN_CONFIG) as ColumnType[]).map((colType) => {
               const conf = COLUMN_CONFIG[colType];
@@ -1542,9 +1596,10 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
               const displayList = activeColTab === "suggested" ? colData.suggested : colData.hidden;
               const isColLoading = colLoading[colType];
               const IconComponent = conf.icon;
+              const isMobileHidden = mobileActiveCol !== colType;
 
               return (
-                <div key={colType} className="kanban-column">
+                <div key={colType} className={`kanban-column ${isMobileHidden ? "mobile-hidden-col" : ""}`}>
                   {/* Kolon Başlığı */}
                   <div className="kanban-column-header">
                     <div className="kanban-col-title-wrap">
@@ -1624,7 +1679,7 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                         type="button"
                         onClick={() => handleResetColumnIdeas(colType)}
                         disabled={isColLoading}
-                        title={`${conf.title} kolonunu sıfırla`}
+                        title={`${conf.title} önerilerini temizle`}
                         style={{
                           display: "inline-flex",
                           alignItems: "center",

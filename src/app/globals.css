@@ -2843,16 +2843,56 @@ button { cursor:pointer; }
   align-items: start;
 }
 
+/* Mobile Quick Ideas Style Format Bar */
+.ideas-mobile-format-bar {
+  display: none;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 0 10px;
+}
+
+.ideas-mobile-format-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border-radius: 12px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.ideas-mobile-badge {
+  position: absolute;
+  top: -5px;
+  right: -3px;
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 99px;
+}
+
 @media (max-width: 1200px) {
   .kanban-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@media (max-width: 680px) {
+@media (max-width: 768px) {
+  .ideas-mobile-format-bar {
+    display: grid;
+  }
   .kanban-grid {
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: 14px;
+  }
+  .mobile-hidden-col {
+    display: none !important;
   }
 }
 
