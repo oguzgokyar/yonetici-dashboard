@@ -93,16 +93,17 @@ export async function POST(request: Request, context: Context) {
   const database = getDatabase();
 
   const projectRow = database
-    .prepare("SELECT id, name, brand_json FROM projects WHERE id=?")
-    .get(projectId) as { id: string; name: string; brand_json: string } | undefined;
+    .prepare("SELECT id, name, brand_json, brand_concept_json FROM projects WHERE id=?")
+    .get(projectId) as { id: string; name: string; brand_json: string; brand_concept_json?: string } | undefined;
 
   if (!projectRow) {
     return Response.json({ ok: false, message: "Proje bulunamadı." }, { status: 404 });
   }
 
-  let validatedInput;
+  let validatedInput: ReturnType<typeof validateCanvaJobInput>;
+  let rawBody: any = {};
   try {
-    const rawBody = await request.json().catch(() => ({}));
+    rawBody = await request.json().catch(() => ({}));
     validatedInput = validateCanvaJobInput(rawBody);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Geçersiz istek.";
@@ -134,7 +135,7 @@ export async function POST(request: Request, context: Context) {
     }
   }
 
-  // Extract brand snapshot
+  // Extract brand snapshot & brand concept
   let brandSnapshot: {
     name: string;
     logo?: string;
@@ -142,10 +143,15 @@ export async function POST(request: Request, context: Context) {
     phone?: string;
     email?: string;
     colors?: string[];
+    brandConcept?: any;
+    applyBrandStyle?: boolean;
   } = { name: projectRow.name };
   try {
     const brand = JSON.parse(projectRow.brand_json || "{}");
+    const concept = JSON.parse(projectRow.brand_concept_json || "{}");
     const allowedFields = new Set(validatedInput.selectedBrandFields || []);
+    const applyBrandStyle = rawBody?.applyBrandStyle ?? true;
+
     brandSnapshot = {
       name: brand.brandName || projectRow.name,
       logo: allowedFields.has("logo") ? (brand.logo || "") : undefined,
@@ -153,6 +159,8 @@ export async function POST(request: Request, context: Context) {
       phone: allowedFields.has("phone") ? (brand.phone || "") : undefined,
       email: allowedFields.has("email") ? (brand.email || "") : undefined,
       ...(Array.isArray(brand.colors) ? { colors: brand.colors } : {}),
+      applyBrandStyle,
+      brandConcept: applyBrandStyle ? concept : undefined,
     };
   } catch {
     // ignore

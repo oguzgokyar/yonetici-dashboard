@@ -26,6 +26,7 @@ import {
   Film,
   RefreshCw,
 } from "lucide-react";
+import { TelegramSendButton } from "@/components/ui/telegram-send-button";
 import { CANVA_CONTENT_TYPES, type CanvaContentType } from "@/lib/server/hermes-canva-task";
 import type { Project } from "@/features/projects/projects-context";
 
@@ -105,6 +106,7 @@ export function CanvaGenerationStudio({
   const [contentType, setContentType] = useState<CanvaContentType>("instagram_carousel");
   const [slideCount, setSlideCount] = useState(6);
   const [style, setStyle] = useState("Modern ve minimalist");
+  const [applyBrandStyle, setApplyBrandStyle] = useState(true);
   const [selectedFields, setSelectedFields] = useState<BrandKey[]>([
     "logo",
     "brandName",
@@ -298,6 +300,7 @@ export function CanvaGenerationStudio({
               CANVA_CONTENT_TYPES[contentType]?.packageType === "carousel" ? slideCount : 1,
             style,
             selectedBrandFields: selectedFields,
+            applyBrandStyle,
             idempotencyKey: crypto.randomUUID(),
           }),
         }
@@ -538,6 +541,43 @@ export function CanvaGenerationStudio({
                 </button>
               );
             })}
+          </div>
+
+          {/* Marka Stili Açma / Kapatma Anahtarı (Toggle) */}
+          <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid #f1f5f9" }}>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "8px 10px",
+                borderRadius: "10px",
+                background: applyBrandStyle ? "#f0fdf4" : "#f8fafc",
+                border: applyBrandStyle ? "1px solid #bbf7d0" : "1px solid #e2e8f0",
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Sparkles size={14} style={{ color: applyBrandStyle ? "#166534" : "#94a3b8" }} />
+                <div>
+                  <strong style={{ fontSize: "12px", color: applyBrandStyle ? "#166534" : "#475569", display: "block" }}>
+                    {applyBrandStyle ? "✨ Marka Stili Aktif (Brand Guardian)" : "Marka Stili Devre Dışı"}
+                  </strong>
+                  <small style={{ fontSize: "10.5px", color: "#64748b" }}>
+                    {applyBrandStyle
+                      ? "60-30-10 renk dengesi ve sabit tipografi uygulanır."
+                      : "Tasarımcı ve Canva stili serbest bırakılır."}
+                  </small>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={applyBrandStyle}
+                onChange={(e) => setApplyBrandStyle(e.target.checked)}
+                style={{ width: "16px", height: "16px", accentColor: "#166534", cursor: "pointer" }}
+              />
+            </label>
           </div>
         </div>
 
@@ -1359,6 +1399,16 @@ function CanvaPackageCard({
             <Send size={14} />
           </Link>
 
+          {pkg.coverUrl && (
+            <TelegramSendButton
+              mediaUrl={pkg.coverUrl}
+              mediaType="image"
+              caption={`📸 ${pkg.title || "Canva Tasarımı"}`}
+              title="Telegram'a Gönder"
+              size={13}
+            />
+          )}
+
           <button
             type="button"
             className="danger"
@@ -1922,6 +1972,17 @@ function CanvaVideoCard({
             >
               <Download size={14} />
             </a>
+          )}
+
+          {/* Telegram Gönder */}
+          {pkg.videoUrl && (
+            <TelegramSendButton
+              mediaUrl={pkg.videoUrl}
+              mediaType="video"
+              caption={`🎬 ${pkg.title || "Canva Video"}`}
+              title="Telegram'a Gönder"
+              size={13}
+            />
           )}
 
           {/* Reels Olarak Planla */}

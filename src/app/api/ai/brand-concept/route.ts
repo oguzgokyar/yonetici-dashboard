@@ -24,8 +24,81 @@ export async function POST(request: Request) {
   if (!row) return Response.json({ ok: false, message: "Proje bulunamadı." }, { status: 404 });
   const brand = JSON.parse(row.brand_json) as Record<string, string>;
   try {
-    const { content, model } = await completeText("Sen kısa ve uygulanabilir marka görsel kimlikleri oluşturan bir kreatif direktörsün. Yalnızca geçerli JSON döndür.", `Bu marka için sosyal medya kreatiflerinde sürekli kullanılacak sade bir marka konsepti oluştur. Bilgi veya iddia uydurma.\nMarka: ${brand.brandName || "Belirtilmedi"}\nSektör: ${brand.industry || "Belirtilmedi"}\nAçıklama: ${brand.description || "Belirtilmedi"}\nHedef kitle: ${brand.audience || "Belirtilmedi"}\nTon: ${brand.tone || "Belirtilmedi"}\nMevcut renkler: ${brand.primaryColor || ""}, ${brand.secondaryColor || ""}\n\nJSON: {"summary":"tek paragraf kısa konsept","personality":"3-5 sıfat","visualStyle":"kısa tasarım dili","photographyStyle":"kısa fotoğraf yaklaşımı","primaryColor":"#RRGGBB","secondaryColor":"#RRGGBB","accentColor":"#RRGGBB"}`, { temperature: 0.35, maxTokens: 700 });
-    const concept = normalizeBrandConcept({ ...parseJsonResponse<Partial<BrandConcept>>(content), updatedAt: new Date().toISOString() });
+    const systemPrompt = `Sen Agency Agents Swarm içerisindeki kıdemli Brand Guardian (Marka Koruyucusu ve Tasarım Direktörü) uzmanısın.
+Görevin: Sosyal medya ve Canva üretimlerinde tutarlı, birbirinden kopuk olmayan, markanın kimliğini yansıtan katı bir marka görsel kimlik sözleşmesi oluşturmaktır. Yalnızca geçerli JSON döndür.`;
+
+    const userPrompt = `Bu marka için tüm sosyal medya, Canva karosel ve video üretimlerinde uygulanacak kurumsal marka stili sözleşmesini oluştur.
+Marka: ${brand.brandName || "Belirtilmedi"}
+Sektör: ${brand.industry || "Belirtilmedi"}
+Açıklama: ${brand.description || "Belirtilmedi"}
+Hedef kitle: ${brand.audience || "Belirtilmedi"}
+Ton: ${brand.tone || "Belirtilmedi"}
+Mevcut renkler: ${brand.primaryColor || ""} ${brand.secondaryColor || ""}
+
+JSON Şeması:
+{
+  "summary": "Tek paragrafta markayı özetleyen güçlü görsel konsept ve tasarım sözleşmesi",
+  "personality": "3-5 ayırt edici marka karakter sıfatı (örn: Vizyoner, Yenilikçi, Zanaatkar)",
+  "visualStyle": "Net görsel tasarım dili, dokular, kompozisyon kuralları",
+  "photographyStyle": "Sahne ışığı, gerçekçi atölye/çalışma anı, derinlik kuralları",
+  "typographyStyle": "Başlık için kalın ve net font ailesi + gövde için temiz sans-serif font kuralı",
+  "layoutGuidelines": "%60 zemin, %30 yapı, %10 marka vurgu rengi dağılım kuralı ve kenar boşlukları",
+  "sampleVisualPrompt": "Bu marka stilini ve atmosferini mükemmel temsil eden, yüksek kaliteli, tek kare konsept anahtar görsel (key visual) promptu",
+  "primaryColor": "#RRGGBB (Zemin veya ana kimlik rengi)",
+  "secondaryColor": "#RRGGBB (Yapı ve gövde rengi)",
+  "accentColor": "#RRGGBB (Dikkat çekici canlı vurgu rengi)"
+}`;
+
+    const { content, model } = await completeText(systemPrompt, userPrompt, { temperature: 0.35, maxTokens: 1200 });
+    const parsed = parseJsonResponse<Partial<BrandConcept>>(content);
+
+    let sampleVisualUrl = parsed.sampleVisualUrl || "";
+    // Eğer sampleVisualPrompt varsa temsili örnek bir stil görseli render etmeyi dene
+    if (parsed.sampleVisualPrompt) {
+      try {
+        const { getDatabase } = await import("@/lib/server/database");
+        const { decryptSecret } = await import("@/lib/server/secrets");
+        const { renderCreative } = await import("@/lib/server/cliproxy-creative");
+        const path = await import("node:path");
+        const fs = await import("node:fs");
+        const crypto = await import("node:crypto");
+        const sharp = (await import("sharp")).default;
+
+        const provider = getDatabase().prepare("SELECT base_url, encrypted_api_key, image_model FROM ai_provider_configs WHERE provider = 'cliproxy' AND enabled = 1").get() as any;
+        if (provider?.base_url && provider?.encrypted_api_key) {
+          const apiKey = decryptSecret(provider.encrypted_api_key);
+          const baseUrl = provider.base_url.replace(/\/+$/, "");
+          const imgModel = provider.image_model || "gemini-3.1-flash-image";
+
+          const current = await renderCreative({
+            baseUrl,
+            apiKey,
+            model: imgModel,
+            prompt: `Professional brand identity moodboard and key visual representing the brand '${brand.brandName || "Atölye"}': ${parsed.sampleVisualPrompt}. Clean corporate composition, high aesthetic quality, color palette: ${parsed.primaryColor}, ${parsed.accentColor}. No mockups, no distortion.`,
+            ratio: "1:1",
+          });
+
+          if (current?.bytes) {
+            const assetDir = path.join(process.cwd(), ".data", "assets");
+            fs.mkdirSync(assetDir, { recursive: true });
+            const assetId = crypto.randomUUID();
+            const bytes = await sharp(current.bytes).png().toBuffer();
+            fs.writeFileSync(path.join(assetDir, `${assetId}.png`), bytes);
+            fs.writeFileSync(path.join(assetDir, `${assetId}.json`), JSON.stringify({ mimeType: "image/png", extension: "png" }));
+            sampleVisualUrl = `/api/assets/${assetId}`;
+          }
+        }
+      } catch (renderErr) {
+        console.warn("[Brand Concept] Sample visual render skipped:", renderErr);
+      }
+    }
+
+    const concept = normalizeBrandConcept({
+      ...parsed,
+      sampleVisualUrl: sampleVisualUrl || undefined,
+      updatedAt: new Date().toISOString(),
+    });
+
     getDatabase().prepare("UPDATE projects SET brand_concept_json = ? WHERE id = ?").run(JSON.stringify(concept), input.projectId);
     return Response.json({ ok: true, concept, model });
   } catch (error) {

@@ -338,6 +338,22 @@ export function buildHermesCanvaTaskPrompt(payload: CanvaTaskPayload): string {
     2
   );
 
+  const brandInfo = payload.brandSnapshot || {};
+  const concept = (brandInfo as any).brandConcept;
+  const isBrandStyleActive = (brandInfo as any).applyBrandStyle !== false;
+
+  let brandGuardianBlock = "";
+  if (isBrandStyleActive && concept?.summary) {
+    brandGuardianBlock = `
+MARKANIN RESMİ TASARIM SÖZLEŞMESİ (Brand Guardian Aktif):
+- Tasarım Dili & Ruh: ${concept.summary}
+- Görsel Stil: ${concept.visualStyle || "Minimal, modern, ferah kompozisyon"}
+- Tipografi Kuralı: ${concept.typographyStyle || "Başlık min 48pt kalın sans-serif, gövde min 24pt okunabilir sans-serif"}
+- Renk Dağılım Kuralı: %60 Zemin (${concept.primaryColor || "#ffffff"}), %30 Yapı (${concept.secondaryColor || "#0f172a"}), %10 Vurgu (${concept.accentColor || "#6366f1"}).
+- Slaytlar Arası Tutarlılık: Tüm sayfalarda aynı renk paleti, aynı yazı tipleri ve aynı köşe/kart hiyerarşisi KORUNMALIDIR. Rastgele renk geçişi veya yabancı font KESİNLİKLE YASAKTIR.
+`;
+  }
+
   return `[HERMES_CANVA_MACHINE_TASK v${HERMES_CANVA_PIPELINE_VERSION}]
 Bu bir Yönetici Dashboard Canva görsel/video üretim makine görevidir.
 
@@ -359,6 +375,7 @@ CANVA TASARIM KURALLARI (canva-carousel-director v2):
 - Tipografi: Başlık min 48pt kalın, gövde min 24pt temiz sans-serif, max 2 font ailesi.
 - Style: "${payload.style || "Modern ve minimalist"}". Marka renkleri ve logoya uygun.
 - Marka bilgileri: ${JSON.stringify(payload.brandSnapshot || {})}
+${brandGuardianBlock}
 
 ADIM ADIM YAPMAN GEREKENLER:
 1. İlerleme bildir: POST ${progressEndpoint} — { "phase":"generating", "percent":20, "completed":0, "total":${payload.slideCount}, "detail":"Canva tasarımı oluşturuluyor..." }
