@@ -220,6 +220,10 @@ export function PublishingStudio({
   const [isAiGenerated, setIsAiGenerated] = useState<boolean>(true);
   const [relatedVideoUrl, setRelatedVideoUrl] = useState<string>("");
   const [cleaningWatermark, setCleaningWatermark] = useState<boolean>(false);
+  const [watermarkMode, setWatermarkMode] = useState<"delogo" | "logo_cover" | "crop">("delogo");
+  const [watermarkPosition, setWatermarkPosition] = useState<"bottom_right" | "bottom_left" | "top_right" | "top_left">("bottom_right");
+  const [watermarkCropPercent, setWatermarkCropPercent] = useState<number>(6);
+  const [bulkWatermarkCleaning, setBulkWatermarkCleaning] = useState<boolean>(false);
 
   // -------------------------------------------------------------
   // BULK PUBLISHING STATE
@@ -2238,54 +2242,103 @@ export function PublishingStudio({
                 </span>
               </div>
 
-              {/* Clean Watermark Quick Action (Eğer video seçildiyse) */}
+              {/* Filigran & Logo Düzenleme Aracı (Eğer video seçildiyse) */}
               {(() => {
                 const activeMediaUrl = mediaSourceTab === "recent" ? selectedMedia?.url : customMediaUrl;
                 const isVideoMedia = mediaSourceTab === "recent" ? selectedMedia?.type === "video" : (customMediaUrl.toLowerCase().endsWith(".mp4") || customMediaUrl.includes("video"));
                 if (!isVideoMedia || !activeMediaUrl) return null;
                 return (
                   <div style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "8px 12px",
+                    padding: "10px 12px",
                     background: "#f8fafc",
                     border: "1px dashed #cbd5e1",
                     borderRadius: "8px",
-                    marginBottom: "8px"
+                    marginBottom: "12px"
                   }}>
-                    <div style={{ fontSize: "11.5px", color: "#334155" }}>
-                      <span style={{ fontWeight: 600 }}>Google Vids / AI Filigranı</span>
-                      <p style={{ margin: 0, fontSize: "10.5px", color: "#64748b" }}>Köşedeki yapay zeka logosunu sıfır kayıpla silin.</p>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={cleaningWatermark}
-                      onClick={async () => {
-                        try {
-                          setCleaningWatermark(true);
-                          const res = await fetch(`/api/videos/clean-watermark`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ videoUrl: activeMediaUrl, aspect_ratio: "9:16" }),
-                          });
-                          const data = await res.json();
-                          if (data.ok) {
-                            setSuccess("Google Vids yapay zeka filigranı başarıyla temizlendi!");
-                          } else {
-                            setError(data.message || "Filigran temizlenemedi.");
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                      <div style={{ fontSize: "11.5px", color: "#334155" }}>
+                        <span style={{ fontWeight: 600 }}>Filigran &amp; Logo Düzenleme</span>
+                        <p style={{ margin: 0, fontSize: "10.5px", color: "#64748b" }}>Köşedeki yapay zeka, CapCut veya stok filigranını temizleyin, logonuzla kapatın veya kırpın.</p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={cleaningWatermark}
+                        onClick={async () => {
+                          try {
+                            setCleaningWatermark(true);
+                            const res = await fetch(`/api/videos/clean-watermark`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                videoUrl: activeMediaUrl,
+                                aspect_ratio: "9:16",
+                                mode: watermarkMode,
+                                position: watermarkPosition,
+                                logoUrl: currentProject?.brand?.logo,
+                                cropPercent: watermarkCropPercent,
+                              }),
+                            });
+                            const data = await res.json();
+                            if (data.ok) {
+                              setSuccess(data.message || "Filigran işlemi başarıyla tamamlandı!");
+                            } else {
+                              setError(data.message || "İşlem gerçekleştirilemedi.");
+                            }
+                          } catch (wErr) {
+                            setError(wErr instanceof Error ? wErr.message : "Filigran düzenleme hatası");
+                          } finally {
+                            setCleaningWatermark(false);
                           }
-                        } catch (wErr) {
-                          setError(wErr instanceof Error ? wErr.message : "Filigran temizleme hatası");
-                        } finally {
-                          setCleaningWatermark(false);
-                        }
-                      }}
-                      className="button compact ghost"
-                      style={{ fontSize: "11px", height: "26px", padding: "0 10px", borderColor: "#cbd5e1" }}
-                    >
-                      {cleaningWatermark ? "Temizleniyor..." : "✨ Filigranı Temizle"}
-                    </button>
+                        }}
+                        className="button compact ghost"
+                        style={{ fontSize: "11px", height: "28px", padding: "0 12px", borderColor: "#6d5dfc", color: "#6d5dfc", fontWeight: 600, background: "#ffffff" }}
+                      >
+                        {cleaningWatermark ? "İşleniyor..." : "✨ Uygula"}
+                      </button>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", paddingTop: "6px", borderTop: "1px solid #e2e8f0" }}>
+                      <div>
+                        <label style={{ fontSize: "10.5px", fontWeight: 600, color: "#475569", display: "block", marginBottom: "3px" }}>Yöntem</label>
+                        <select
+                          value={watermarkMode}
+                          onChange={(e) => setWatermarkMode(e.target.value as "delogo" | "logo_cover" | "crop")}
+                          style={{ width: "100%", fontSize: "11px", padding: "3px 6px", borderRadius: "6px", border: "1px solid #cbd5e1", background: "white" }}
+                        >
+                          <option value="delogo">🪄 Akıllı Doku Tamamlama (Delogo)</option>
+                          <option value="logo_cover">🏷️ Marka Logomla Kapat</option>
+                          <option value="crop">✂️ Kadrajı Kırp / Kes</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: "10.5px", fontWeight: 600, color: "#475569", display: "block", marginBottom: "3px" }}>Filigran Konumu</label>
+                        <select
+                          value={watermarkPosition}
+                          onChange={(e) => setWatermarkPosition(e.target.value as "bottom_right" | "bottom_left" | "top_right" | "top_left")}
+                          style={{ width: "100%", fontSize: "11px", padding: "3px 6px", borderRadius: "6px", border: "1px solid #cbd5e1", background: "white" }}
+                        >
+                          <option value="bottom_right">↘️ Sağ Alt (Google Vids / TikTok / Shorts)</option>
+                          <option value="bottom_left">↙️ Sol Alt</option>
+                          <option value="top_right">↗️ Sağ Üst</option>
+                          <option value="top_left">↖️ Sol Üst</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {watermarkMode === "crop" && (
+                      <div style={{ marginTop: "6px", fontSize: "10.5px", color: "#64748b", display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span>Kırpma Payı: %{watermarkCropPercent}</span>
+                        <input
+                          type="range"
+                          min={3}
+                          max={12}
+                          value={watermarkCropPercent}
+                          onChange={(e) => setWatermarkCropPercent(Number(e.target.value))}
+                          style={{ flex: 1, accentColor: "#6d5dfc" }}
+                        />
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -2681,6 +2734,108 @@ export function PublishingStudio({
                     })}
                 </div>
               </div>
+
+              {/* Toplu Filigran & Logo Düzenleme Aracı */}
+              {bulkSelectedAssets.some((a) => a.type === "video") && (
+                <div style={{
+                  marginTop: "12px",
+                  padding: "10px 12px",
+                  background: "#f8fafc",
+                  border: "1px dashed #cbd5e1",
+                  borderRadius: "8px"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                    <div style={{ fontSize: "11.5px", color: "#334155" }}>
+                      <span style={{ fontWeight: 600 }}>Toplu Filigran &amp; Logo Düzenleme</span>
+                      <p style={{ margin: 0, fontSize: "10.5px", color: "#64748b" }}>
+                        Seçilen {bulkSelectedAssets.filter((a) => a.type === "video").length} videoya tek seferde filigran temizliği / logo kapatma uygulayın.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={bulkWatermarkCleaning}
+                      onClick={async () => {
+                        const videoAssets = bulkSelectedAssets.filter((a) => a.type === "video");
+                        if (!videoAssets.length) return;
+                        try {
+                          setBulkWatermarkCleaning(true);
+                          let successCount = 0;
+                          for (const vAsset of videoAssets) {
+                            try {
+                              const res = await fetch(`/api/videos/clean-watermark`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  videoUrl: vAsset.url,
+                                  aspect_ratio: "9:16",
+                                  mode: watermarkMode,
+                                  position: watermarkPosition,
+                                  logoUrl: currentProject?.brand?.logo,
+                                  cropPercent: watermarkCropPercent,
+                                }),
+                              });
+                              const data = await res.json();
+                              if (data.ok) successCount++;
+                            } catch {}
+                          }
+                          setSuccess(`Seçilen ${successCount} videoda filigran işlemi başarıyla tamamlandı!`);
+                        } catch (bErr) {
+                          setError("Toplu filigran düzenleme sırasında hata oluştu.");
+                        } finally {
+                          setBulkWatermarkCleaning(false);
+                        }
+                      }}
+                      className="button compact ghost"
+                      style={{ fontSize: "11px", height: "28px", padding: "0 12px", borderColor: "#6d5dfc", color: "#6d5dfc", fontWeight: 600, background: "#ffffff" }}
+                    >
+                      {bulkWatermarkCleaning ? "İşleniyor..." : "✨ Seçilen Videolara Uygula"}
+                    </button>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", paddingTop: "6px", borderTop: "1px solid #e2e8f0" }}>
+                    <div>
+                      <label style={{ fontSize: "10.5px", fontWeight: 600, color: "#475569", display: "block", marginBottom: "3px" }}>Yöntem</label>
+                      <select
+                        value={watermarkMode}
+                        onChange={(e) => setWatermarkMode(e.target.value as "delogo" | "logo_cover" | "crop")}
+                        style={{ width: "100%", fontSize: "11px", padding: "3px 6px", borderRadius: "6px", border: "1px solid #cbd5e1", background: "white" }}
+                      >
+                        <option value="delogo">🪄 Akıllı Doku Tamamlama (Delogo)</option>
+                        <option value="logo_cover">🏷️ Marka Logomla Kapat</option>
+                        <option value="crop">✂️ Kadrajı Kırp / Kes</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: "10.5px", fontWeight: 600, color: "#475569", display: "block", marginBottom: "3px" }}>Filigran Konumu</label>
+                      <select
+                        value={watermarkPosition}
+                        onChange={(e) => setWatermarkPosition(e.target.value as "bottom_right" | "bottom_left" | "top_right" | "top_left")}
+                        style={{ width: "100%", fontSize: "11px", padding: "3px 6px", borderRadius: "6px", border: "1px solid #cbd5e1", background: "white" }}
+                      >
+                        <option value="bottom_right">↘️ Sağ Alt (Google Vids / TikTok / Shorts)</option>
+                        <option value="bottom_left">↙️ Sol Alt</option>
+                        <option value="top_right">↗️ Sağ Üst</option>
+                        <option value="top_left">↖️ Sol Üst</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {watermarkMode === "crop" && (
+                    <div style={{ marginTop: "6px", fontSize: "10.5px", color: "#64748b", display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span>Kırpma Payı: %{watermarkCropPercent}</span>
+                      <input
+                        type="range"
+                        min={3}
+                        max={12}
+                        value={watermarkCropPercent}
+                        onChange={(e) => setWatermarkCropPercent(Number(e.target.value))}
+                        style={{ flex: 1, accentColor: "#6d5dfc" }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* 3. Toplu Paylaşım Zamanlama Modu */}

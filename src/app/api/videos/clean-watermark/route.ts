@@ -12,10 +12,16 @@ export async function POST(request: Request) {
       videoUrl?: string;
       localPath?: string;
       aspect_ratio?: "9:16" | "16:9" | "1:1";
+      mode?: "delogo" | "logo_cover" | "crop";
+      position?: "bottom_right" | "bottom_left" | "top_right" | "top_left";
+      logoUrl?: string;
+      cropPercent?: number; // varsayılan: 6 (%6 kes)
     };
 
     const videoUrl = body.videoUrl?.trim() || "";
     let localPath = body.localPath?.trim() || "";
+    const mode = body.mode || "delogo";
+    const position = body.position || "bottom_right";
 
     const dataDir = path.join(process.cwd(), ".data");
 
@@ -69,48 +75,111 @@ export async function POST(request: Request) {
       }
     } catch {}
 
-    const ratio = body.aspect_ratio || (h > w ? "9:16" : w > h ? "16:9" : "1:1");
-
-    // 3. Google Vids AI sparkle simgesi için koordinat hesapla
-    let x = 860;
-    let y = 1700;
-    let boxW = 80;
-    let boxH = 80;
-
-    if (ratio === "9:16" || h > w) {
-      x = Math.floor(w * 0.796);
-      y = Math.floor(h * 0.885);
-      boxW = Math.max(70, Math.floor(w * 0.075));
-      boxH = Math.max(70, Math.floor(h * 0.042));
-    } else if (ratio === "16:9" || w > h) {
-      x = Math.floor(w * 0.90);
-      y = Math.floor(h * 0.85);
-      boxW = Math.max(70, Math.floor(w * 0.05));
-      boxH = Math.max(70, Math.floor(h * 0.07));
-    } else {
-      x = Math.floor(w * 0.84);
-      y = Math.floor(h * 0.84);
-      boxW = Math.max(70, Math.floor(w * 0.07));
-      boxH = Math.max(70, Math.floor(h * 0.07));
-    }
-
-    const delogoFilter = `delogo=x=${x}:y=${y}:w=${boxW}:h=${boxH}`;
     const cleanPath = `${localPath}.clean_${Date.now()}.mp4`;
 
-    // 4. FFmpeg Delogo Çalıştır (-c:a copy ile ses ve altyazıyı koru)
-    await execFileAsync("ffmpeg", [
-      "-y",
-      "-i", localPath,
-      "-vf", delogoFilter,
-      "-c:v", "libx264",
-      "-crf", "18",
-      "-preset", "fast",
-      "-c:a", "copy",
-      cleanPath,
-    ]);
+    // 3. Mod seçimine göre filtre oluştur
+    if (mode === "crop") {
+      // Kadrajı kırp/kes modu: Belirlenen pozisyondaki kenardan %5-10 kes ve orijinal çözünürlüğe ölçekle
+      const pct = Math.min(15, Math.max(3, body.cropPercent || 6)) / 100;
+      let cropFilter = "";
+      if (position === "bottom_right" || position === "bottom_left") {
+        // Alttan kes (crop=in_w:in_h*(1-pct):0:0, ardından ölçekle)
+        const newH = Math.floor(h * (1 - pct));
+        cropFilter = `crop=w=iw:h=floor(ih*${(1 - pct).toFixed(3)}):x=0:y=0,scale=${w}:${h}:flags=lanczos`;
+      } else {
+        // Üstten kes
+        cropFilter = `crop=w=iw:h=floor(ih*${(1 - pct).toFixed(3)}):x=0:y=floor(ih*${pct.toFixed(3)}),scale=${w}:${h}:flags=lanczos`;
+      }
+
+      await execFileAsync("ffmpeg", [
+        "-y",
+        "-i", localPath,
+        "-vf", cropFilter,
+        "-c:v", "libx264",
+        "-crf", "18",
+        "-preset", "fast",
+        "-c:a", "copy",
+        cleanPath,
+      ]);
+    } else if (mode === "logo_cover") {
+      // Marka Logosu ile Kapat modu
+      let resolvedLogoPath = "";
+      if (body.logoUrl) {
+        if (body.logoUrl.startsWith("/")) {
+          const l1 = path.join(process.cwd(), "public", body.logoUrl.replace(/^\//, ""));
+          const l2 = path.join(dataDir, body.logoUrl.replace(/^\//, ""));
+          const l3 = path.join(dataDir, "assets", path.basename(body.logoUrl));
+          if (fs.existsSync(l1)) resolvedLogoPath = l1;
+          else if (fs.existsSync(l2)) resolvedLogoPath = l2;
+          else if (fs.existsSync(l3)) resolvedLogoPath = l3;
+        }
+      }
+
+      if (!resolvedLogoPath || !fs.existsSync(resolvedLogoPath)) {
+        return NextResponse.json(
+          { ok: false, message: "Kapatma işlemi için geçerli bir marka logosu bulunamadı." },
+          { status: 400 }
+        );
+      }
+
+      // Pozisyona göre overlay koordinatı (Logo boyutu: video genişliğinin %14'ü)
+      const targetLogoW = Math.max(90, Math.floor(w * 0.14));
+      let overlayCoord = "W-w-24:H-h-24";
+      if (position === "bottom_left") overlayCoord = "24:H-h-24";
+      else if (position === "top_right") overlayCoord = "W-w-24:24";
+      else if (position === "top_left") overlayCoord = "24:24";
+
+      const complexFilter = `[1:v]scale=${targetLogoW}:-1[scaled_logo];[0:v][scaled_logo]overlay=${overlayCoord}`;
+
+      await execFileAsync("ffmpeg", [
+        "-y",
+        "-i", localPath,
+        "-i", resolvedLogoPath,
+        "-filter_complex", complexFilter,
+        "-c:v", "libx264",
+        "-crf", "18",
+        "-preset", "fast",
+        "-c:a", "copy",
+        cleanPath,
+      ]);
+    } else {
+      // Varsayılan: Akıllı Delogo / Doku Tamamlama
+      const ratio = body.aspect_ratio || (h > w ? "9:16" : w > h ? "16:9" : "1:1");
+      let boxW = Math.max(80, Math.floor(w * 0.08));
+      let boxH = Math.max(80, Math.floor(h * 0.045));
+      let x = 0;
+      let y = 0;
+
+      if (position === "bottom_right") {
+        x = w - boxW - Math.floor(w * 0.035);
+        y = h - boxH - Math.floor(h * 0.035);
+      } else if (position === "bottom_left") {
+        x = Math.floor(w * 0.035);
+        y = h - boxH - Math.floor(h * 0.035);
+      } else if (position === "top_right") {
+        x = w - boxW - Math.floor(w * 0.035);
+        y = Math.floor(h * 0.035);
+      } else if (position === "top_left") {
+        x = Math.floor(w * 0.035);
+        y = Math.floor(h * 0.035);
+      }
+
+      const delogoFilter = `delogo=x=${x}:y=${y}:w=${boxW}:h=${boxH}:show=0`;
+
+      await execFileAsync("ffmpeg", [
+        "-y",
+        "-i", localPath,
+        "-vf", delogoFilter,
+        "-c:v", "libx264",
+        "-crf", "18",
+        "-preset", "fast",
+        "-c:a", "copy",
+        cleanPath,
+      ]);
+    }
 
     if (!fs.existsSync(cleanPath) || fs.statSync(cleanPath).size < 1000) {
-      throw new Error("FFmpeg delogo çıktısı oluşturulamadı.");
+      throw new Error("FFmpeg filigran düzenleme çıktısı oluşturulamadı.");
     }
 
     // Orijinal dosyanın yerine temizlenmiş dosyayı geçir
@@ -118,8 +187,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      message: "Google Vids yapay zeka filigranı sıfır kayıpla başarıyla temizlendi.",
-      filter: delogoFilter,
+      message: mode === "logo_cover" 
+        ? "Filigran marka logosuyla kapatıldı."
+        : mode === "crop"
+        ? "Filigranlı alan kadraj dışına kesilerek temizlendi."
+        : "Filigran akıllı doku tamamlama (delogo) ile temizlendi.",
+      mode,
+      position,
       dimensions: { width: w, height: h },
       cleanUrl: videoUrl,
     });
