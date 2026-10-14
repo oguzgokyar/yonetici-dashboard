@@ -22,7 +22,6 @@ type DashboardShellProps = {
 
 const projectNavigation = [
   { label: "Proje Merkezi", href: "", icon: PanelsTopLeft },
-  { label: "Genel Bakış", href: "/overview", icon: LayoutDashboard },
   { label: "Strateji & İçerik", href: "/strategy", icon: Compass },
   { label: "Görsel Üret", href: "/image-generation", icon: Image },
   { label: "Video Üret", href: "/video-generation", icon: Clapperboard },
@@ -113,7 +112,7 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
       </nav>
 
       <div className="sidebar-footer">
-        {projectId && <Link href={`/projects/${projectId}/settings`} className="nav-item" title="Proje Ayarları"><Palette size={19} /><span>Proje Ayarları</span></Link>}
+        {projectId && <Link href={`/projects/${projectId}?tab=settings`} className={`nav-item ${pathname === `/projects/${projectId}/settings` ? "active" : ""}`} title="Proje Ayarları"><Palette size={19} /><span>Proje Ayarları</span></Link>}
         <Link href="/settings" className={`nav-item ${pathname === "/settings" ? "active" : ""}`} title="Sistem Ayarları"><Settings size={19} /><span>Sistem Ayarları</span></Link>
         <div className="profile-chip">
           <div className="avatar">OG</div>

@@ -1,5 +1,6 @@
 import path from "node:path";
 import fs from "node:fs";
+import sharp from "sharp";
 import { isCanvaStudioEnabled, getCanvaConfig } from "@/lib/server/canva-config";
 import { getDatabase } from "@/lib/server/database";
 import { saveSinglePackageAsset } from "@/lib/server/canva-package-service";
@@ -137,9 +138,25 @@ export async function POST(_request: Request, context: Context) {
         // Overwrite file directly
         const filePath = path.join(assetsDir, `${existing.asset_id}.png`);
         fs.writeFileSync(filePath, buffer);
-        // Clear webp caches
-        try { fs.unlinkSync(path.join(assetsDir, `${existing.asset_id}_thumb.webp`)); } catch {}
-        try { fs.unlinkSync(path.join(assetsDir, `${existing.asset_id}_preview.webp`)); } catch {}
+
+        // WebP önbelleklerini anında ve senkron yeniden üret (tarayıcının anında taze görseli görmesi için)
+        try {
+          const [previewBytes, thumbBytes] = await Promise.all([
+            sharp(buffer)
+              .resize(720, null, { withoutEnlargement: true })
+              .webp({ quality: 85 })
+              .toBuffer(),
+            sharp(buffer)
+              .resize(360, null, { withoutEnlargement: true })
+              .webp({ quality: 80 })
+              .toBuffer(),
+          ]);
+          fs.writeFileSync(path.join(assetsDir, `${existing.asset_id}_preview.webp`), previewBytes);
+          fs.writeFileSync(path.join(assetsDir, `${existing.asset_id}_thumb.webp`), thumbBytes);
+        } catch {
+          try { fs.unlinkSync(path.join(assetsDir, `${existing.asset_id}_thumb.webp`)); } catch {}
+          try { fs.unlinkSync(path.join(assetsDir, `${existing.asset_id}_preview.webp`)); } catch {}
+        }
       } else {
         // Add new slide
         const saved = await saveSinglePackageAsset({ buffer, position, assetsDir });

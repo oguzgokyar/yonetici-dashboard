@@ -1562,7 +1562,7 @@ function CanvaGalleryModal({
       >
         {currentItem ? (
           <Image
-            src={currentItem.url ? `${currentItem.url}?preview=1` : ""}
+            src={currentItem.url ? `${currentItem.url}?preview=1&v=${new Date(pkg.updatedAt || pkg.createdAt).getTime()}` : ""}
             alt={`Slide ${currentIndex + 1}`}
             fill
             sizes="600px"
@@ -1654,7 +1654,7 @@ function CanvaGalleryModal({
                 }}
               >
                 <Image
-                  src={it.url ? `${it.url}?thumb=1` : ""}
+                  src={it.url ? `${it.url}?thumb=1&v=${new Date(pkg.updatedAt || pkg.createdAt).getTime()}` : ""}
                   alt={`Thumb ${idx + 1}`}
                   fill
                   sizes="56px"

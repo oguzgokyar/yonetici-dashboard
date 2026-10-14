@@ -13,6 +13,10 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const url = new URL(request.url);
     const isThumb = url.searchParams.get("thumb") === "1";
     const isPreview = url.searchParams.get("preview") === "1" || url.searchParams.has("w");
+    const hasVersion = url.searchParams.has("v");
+    const cacheHeader = hasVersion
+      ? "public, max-age=31536000, immutable"
+      : "public, max-age=60, stale-while-revalidate=300";
 
     // 1. Thumbnail Request (Lightweight ~8-15KB WebP Cached on Disk)
     if (isThumb) {
@@ -22,7 +26,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         return new Response(bytes, {
           headers: {
             "Content-Type": "image/webp",
-            "Cache-Control": "public, max-age=31536000, immutable",
+            "Cache-Control": cacheHeader,
           },
         });
       }
@@ -43,7 +47,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       return new Response(thumbBytes, {
         headers: {
           "Content-Type": "image/webp",
-          "Cache-Control": "public, max-age=31536000, immutable",
+          "Cache-Control": cacheHeader,
         },
       });
     }
@@ -56,7 +60,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         return new Response(bytes, {
           headers: {
             "Content-Type": "image/webp",
-            "Cache-Control": "public, max-age=31536000, immutable",
+            "Cache-Control": cacheHeader,
           },
         });
       }
@@ -75,7 +79,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       return new Response(previewBytes, {
         headers: {
           "Content-Type": "image/webp",
-          "Cache-Control": "public, max-age=31536000, immutable",
+          "Cache-Control": cacheHeader,
         },
       });
     }
@@ -123,7 +127,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         "Content-Type": metadata.mimeType,
         "Content-Length": String(fileSize),
         "Accept-Ranges": "bytes",
-        "Cache-Control": "public, max-age=31536000, immutable",
+        "Cache-Control": cacheHeader,
       },
     });
   } catch {
