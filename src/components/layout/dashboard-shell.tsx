@@ -6,8 +6,8 @@ import { useState, useEffect } from "react";
 import {
   Bell, ChevronDown, Clapperboard, Compass, Film, FolderKanban, Image, LayoutDashboard, PanelsTopLeft,
   Menu, Palette, PanelLeftClose, PanelLeftOpen, Pin, Plus, Search, Send, Settings, Share2, Sparkles, X,
- Layers, Bot,
- } from "lucide-react";
+  Layers, Bot, PhoneCall,
+} from "lucide-react";
  import { useProjects } from "@/features/projects/projects-context";
  import { ProductionQueueDrawer } from "./production-queue-drawer";
  import { QuickIdeasDrawer } from "./quick-ideas-drawer";
@@ -210,6 +210,17 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
             >
               <Bot size={19} />
             </button>
+
+            {/* Canlı Görüşme (Hands-free Voice Call) */}
+            <Link
+              href="/call"
+              className="icon-button queue-button"
+              style={{ color: "#22c55e", borderColor: "rgba(34, 197, 94, 0.4)", background: "rgba(34, 197, 94, 0.08)" }}
+              title="Hermes Canlı Sesli Arama (Hands-free)"
+              aria-label="Hermes ile canlı konuş"
+            >
+              <PhoneCall size={18} />
+            </Link>
 
             <button className="icon-button notification-button"><Bell size={19} /><span /></button>
           </div>
