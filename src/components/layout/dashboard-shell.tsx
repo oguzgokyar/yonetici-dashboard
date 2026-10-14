@@ -82,10 +82,15 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
   const sidebar = (
     <>
       <div className="brand-lockup">
-        <div className="brand-mark"><Sparkles size={18} /></div>
+        {!collapsed && <div className="brand-mark"><Sparkles size={18} /></div>}
         {!collapsed && <span>Yönetici</span>}
-        <button className="icon-button collapse-button" onClick={() => setCollapsed(!collapsed)} aria-label="Kenar çubuğunu daralt">
-          {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+        <button
+          className="icon-button collapse-button"
+          onClick={() => setCollapsed(!collapsed)}
+          aria-label={collapsed ? "Kenar çubuğunu genişlet" : "Kenar çubuğunu daralt"}
+          title={collapsed ? "Genişlet" : "Daralt"}
+        >
+          {collapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={18} />}
         </button>
         <button className="icon-button mobile-close" onClick={() => setMobileOpen(false)} aria-label="Menüyü kapat"><X size={20} /></button>
       </div>
@@ -112,7 +117,6 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
       </nav>
 
       <div className="sidebar-footer">
-        {projectId && <Link href={`/projects/${projectId}?tab=settings`} className={`nav-item ${pathname === `/projects/${projectId}/settings` ? "active" : ""}`} title="Proje Ayarları"><Palette size={19} /><span>Proje Ayarları</span></Link>}
         <Link href="/settings" className={`nav-item ${pathname === "/settings" ? "active" : ""}`} title="Sistem Ayarları"><Settings size={19} /><span>Sistem Ayarları</span></Link>
         <div className="profile-chip">
           <div className="avatar">OG</div>

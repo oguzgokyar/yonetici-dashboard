@@ -36,10 +36,13 @@ button { cursor:pointer; }
 }
 .sidebar { position:fixed; inset:0 auto 0 0; width:248px; padding:22px 14px 16px; background:var(--sidebar); color:#f7f7fa; display:flex; flex-direction:column; z-index:30; transition:width .2s ease; }
 .sidebar-collapsed .desktop-sidebar { width:78px; }
-.brand-lockup { height:42px; display:flex; align-items:center; gap:11px; padding:0 7px; font:700 18px "Manrope", sans-serif; }
-.brand-mark { width:32px; height:32px; display:grid; place-items:center; border-radius:10px; background:linear-gradient(145deg,#8173ff,#5f4eea); box-shadow:0 8px 24px #6d5dfc55; flex:none; }
+.brand-lockup { height:42px; display:flex; align-items:center; gap:11px; padding:0 7px; font:700 18px "Manrope", sans-serif; position:relative; }
+.brand-mark { width:32px; height:32px; display:grid; place-items:center; border-radius:10px; background:linear-gradient(145deg,#8173ff,#5f4eea); box-shadow:0 8px 24px #6d5dfc55; flex:none; cursor:pointer; }
 .collapse-button { margin-left:auto; color:#8f909d!important; }
-.sidebar-collapsed .brand-lockup>span,.sidebar-collapsed .nav-label,.sidebar-collapsed .nav-item span,.sidebar-collapsed .collapse-button { display:none; }
+.sidebar-collapsed .brand-lockup { justify-content:center; padding:0; }
+.sidebar-collapsed .brand-lockup>span,.sidebar-collapsed .nav-label,.sidebar-collapsed .nav-item span { display:none; }
+.sidebar-collapsed .collapse-button { margin-left:0; display:flex!important; }
+.sidebar-collapsed .brand-mark { display:none; }
 .sidebar-collapsed .nav-item { justify-content:center; padding-inline:0; }
 .sidebar-nav { margin-top:28px; display:flex; flex-direction:column; gap:4px; }
 .nav-label { color:#676875; font-size:10px; font-weight:700; letter-spacing:.12em; margin:20px 11px 8px; }
