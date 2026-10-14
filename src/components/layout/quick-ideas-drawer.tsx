@@ -22,19 +22,8 @@ import {
 } from "lucide-react";
 import { type ColumnType, IDEA_TYPE_LABELS } from "@/lib/strategy-constants";
 
-type StrategyIdea = {
-  id?: string;
-  columnType: ColumnType;
-  title: string;
-  hook: string;
-  description: string;
-  structure: string[];
-  targetChannel: string;
-  ideaType?: string;
-  skillSource?: string;
-  status?: "suggested" | "hidden";
-  createdAt?: string;
-};
+import type { StrategyIdea } from "@/lib/strategy-types";
+
 
 type ColumnData = {
   suggested: StrategyIdea[];
@@ -212,6 +201,10 @@ export function QuickIdeasDrawer({
   };
 
   const handleSendToCanva = async (idea: StrategyIdea) => {
+    if (idea.nativeFormat === 'long_video') {
+      window.alert('YouTube uzun video Canva Reels aktarımında desteklenmiyor. Fikri Kopyala ile bölüm akışını alın ve uzun video düzenleyicinizde kullanın; kısa video için ayrı Shorts fikri üretin.');
+      return;
+    }
     if (!projectId) return;
     const cardKey = idea.id || idea.title;
     const isEngagement = activeCategory === "engagement";
@@ -289,6 +282,10 @@ export function QuickIdeasDrawer({
   };
 
   const handleSendToGoogleVids = (idea: StrategyIdea) => {
+    if (idea.nativeFormat === 'long_video') {
+      window.alert('YouTube uzun video mevcut Vids kısa-video aktarımında desteklenmiyor. Fikri Kopyala ile bölüm akışını alın ve uzun video düzenleyicinizde kullanın; kısa video için ayrı Shorts fikri üretin.');
+      return;
+    }
     if (!projectId) return;
     try {
       const cleanHook = (idea.hook || "").replace(/^["'“”]+|["'“”]+$/g, "");
@@ -661,7 +658,7 @@ export function QuickIdeasDrawer({
                     {/* Alt Çubuk & Aksiyon Butonları */}
                     <div className="kanban-card-footer">
                       <span className="kanban-channel-badge" title={idea.targetChannel}>
-                        {idea.targetChannel || "Instagram / TikTok"}
+                        {idea.nativeFormat === "long_video" ? "YouTube · Uzun video" : idea.targetChannel || "Instagram / TikTok"}
                       </span>
 
                       <div className="kanban-card-actions">

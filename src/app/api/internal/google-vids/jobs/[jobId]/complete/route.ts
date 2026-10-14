@@ -3,6 +3,7 @@ import path from "node:path";
 import { execSync } from "node:child_process";
 import { createJobCallbackToken, getCanvaConfig, verifyCallbackToken } from "@/lib/server/canva-config";
 import { getDatabase } from "@/lib/server/database";
+import { validateGoogleVidsNativeArtifact } from "@/lib/server/google-vids-native-artifact";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -20,8 +21,8 @@ export async function POST(request: Request, context: Context) {
 
   const database = getDatabase();
   const job = database
-    .prepare("SELECT id, project_id, status, request_json FROM generation_jobs WHERE id=? AND type='google-vids'")
-    .get(jobId) as { id: string; project_id: string; status: string; request_json: string } | undefined;
+    .prepare("SELECT id, project_id, status, error, request_json FROM generation_jobs WHERE id=? AND type='google-vids'")
+    .get(jobId) as { id: string; project_id: string; status: string; error?: string; request_json: string } | undefined;
 
   if (!job) {
     return Response.json({ ok: false, message: "İş bulunamadı." }, { status: 404 });
@@ -35,17 +36,37 @@ export async function POST(request: Request, context: Context) {
   }
 
   const videoEntry = formData.get("video");
+  let nativeMetadata: Record<string, unknown>;
+  try {
+    nativeMetadata = JSON.parse(String(formData.get("nativeMetadata") || "null"));
+    if (!nativeMetadata || nativeMetadata.exportSource !== "google-vids-native" || nativeMetadata.jobId !== jobId || nativeMetadata.downloadState !== "completed") throw new Error("Native evidence required");
+  } catch {
+    return Response.json({ ok: false, message: "Doğrulanmış Google Vids yerleşik export metadata eksik." }, { status: 422 });
+  }
   if (!videoEntry || typeof videoEntry !== "object" || !("arrayBuffer" in videoEntry)) {
     return Response.json({ ok: false, message: "Video dosyası eksik." }, { status: 400 });
   }
 
   const videoBuffer = Buffer.from(await (videoEntry as Blob).arrayBuffer());
+  let req: { title?: string; durationSeconds?: number; aspectRatio?: string; scenes?: {voiceoverTr?: string; durationSeconds?: number}[]; musicSpec?: {musicPromptEn?: string} } = {};
+  try { req = JSON.parse(job.request_json || "{}"); } catch {}
+  if (["cancelled", "canceled"].includes(job.status) || job.error === 'Kullanıcı tarafından iptal edildi.') return Response.json({ok:false,message:"İş iptal edildi."},{status:409});
   const outputDir = path.join(process.cwd(), ".data", "video-renders");
   fs.mkdirSync(outputDir, { recursive: true });
   const finalMp4Path = path.join(outputDir, `${jobId}.mp4`);
   const thumbPath = path.join(outputDir, `${jobId}_thumb.webp`);
 
-  fs.writeFileSync(finalMp4Path, videoBuffer);
+  const staging = `${finalMp4Path}.${crypto.randomUUID()}.pending`;
+  fs.writeFileSync(staging, videoBuffer);
+  try {
+    nativeMetadata = validateGoogleVidsNativeArtifact(staging, nativeMetadata, jobId, req);
+  } catch {
+    fs.unlinkSync(staging);
+    return Response.json({ok:false,message:"Google Vids native artifact doğrulaması başarısız."},{status:422});
+  }
+  const current = database.prepare("SELECT status,error FROM generation_jobs WHERE id=?").get(jobId) as {status:string;error?:string} | undefined;
+  if (!current || ["cancelled","canceled"].includes(current.status) || current.error === "Kullanıcı tarafından iptal edildi.") { fs.unlinkSync(staging); return Response.json({ok:false},{status:409}); }
+  fs.renameSync(staging, finalMp4Path);
 
   try {
     execSync(
@@ -56,10 +77,6 @@ export async function POST(request: Request, context: Context) {
     // ignore thumbnail error
   }
 
-  let req: { title?: string; durationSeconds?: number; aspectRatio?: string } = {};
-  try {
-    req = JSON.parse(job.request_json || "{}");
-  } catch {}
 
   const videoUrl = `/api/videos/${jobId}`;
   const googleVidsUrl = formData.get("googleVidsUrl") as string | null;
@@ -71,7 +88,8 @@ export async function POST(request: Request, context: Context) {
     durationSeconds: req.durationSeconds || 30,
     aspectRatio: req.aspectRatio || "9:16",
     isGoogleVids: true,
-    googleVidsUrl: googleVidsUrl || undefined,
+    nativeMetadata,
+    googleVidsUrl: nativeMetadata.googleVidsUrl || googleVidsUrl || undefined,
     completedAt: new Date().toISOString(),
   };
 
@@ -79,10 +97,11 @@ export async function POST(request: Request, context: Context) {
     .prepare(`
       UPDATE generation_jobs
       SET status = 'complete',
+          error = NULL,
           response_json = ?,
           progress_json = ?,
           completed_at = ?
-      WHERE id = ?
+      WHERE id = ? AND status NOT IN ('cancelled','canceled')
     `)
     .run(
       JSON.stringify(responsePayload),

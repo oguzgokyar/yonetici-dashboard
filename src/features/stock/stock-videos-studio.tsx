@@ -29,6 +29,7 @@ import {
 
   X,
 } from "lucide-react";
+import { TelegramSendButton } from "@/components/ui/telegram-send-button";
 import { useProjects } from "@/features/projects/projects-context";
 import { StockFramedVideo, type StockFrameStyle } from "@/remotion/StockFramedVideo";
 import { DriveSettingsModal } from "./drive-settings-modal";
@@ -863,6 +864,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                           <Download size={12} />
                           <span>İndir</span>
                         </a>
+                        <TelegramSendButton mediaUrl={rv.url} mediaType="video" variant="button" label="Telegram" size={12} />
                         <button
                           type="button"
                           className="stock-btn-del"

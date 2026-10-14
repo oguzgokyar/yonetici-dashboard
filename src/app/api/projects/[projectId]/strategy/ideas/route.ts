@@ -66,6 +66,59 @@ export async function PATCH(
   return handleUpdateStatus(request, params);
 }
 
+// DELETE: Fikirleri sıfırla / sil (Tüm fikirler, tekil kolon veya tekil fikir)
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ projectId: string }> }
+) {
+  const { projectId } = await params;
+  let body: Record<string, unknown> = {};
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    // Body boş olabilir
+  }
+
+  const url = new URL(request.url);
+  const scope = (body.scope as string) || url.searchParams.get("scope") || "all";
+  const columnType = (body.columnType as string) || url.searchParams.get("columnType");
+  const ideaId = (body.ideaId as string) || url.searchParams.get("ideaId");
+
+  const db = getDatabase()!;
+
+  // 1. Tekil fikir silme
+  if (ideaId) {
+    const res = db.prepare("DELETE FROM project_strategy_ideas WHERE id = ? AND project_id = ?").run(ideaId, projectId);
+    return NextResponse.json({
+      success: true,
+      scope: "single_idea",
+      deletedCount: res.changes,
+      message: "Fikir silindi.",
+    });
+  }
+
+  // 2. Belirli bir kolonu sıfırlama
+  if (scope === "single_column" && columnType) {
+    const res = db.prepare("DELETE FROM project_strategy_ideas WHERE project_id = ? AND column_type = ?").run(projectId, columnType);
+    return NextResponse.json({
+      success: true,
+      scope: "single_column",
+      columnType,
+      deletedCount: res.changes,
+      message: `${columnType} kolonundaki ${res.changes} fikir temizlendi.`,
+    });
+  }
+
+  // 3. Projedeki tüm fikirleri sıfırlama
+  const res = db.prepare("DELETE FROM project_strategy_ideas WHERE project_id = ?").run(projectId);
+  return NextResponse.json({
+    success: true,
+    scope: "all",
+    deletedCount: res.changes,
+    message: `Tüm fikirler sıfırlandı (${res.changes} fikir silindi).`,
+  });
+}
+
 // POST: Generate NEW ideas for a specific column OR across ALL columns (Fikir Makinesi)
 export async function POST(
   request: NextRequest,
@@ -152,11 +205,18 @@ export async function POST(
 
     // SENARYO 1: TÜM KOLONLAR (FİKİR MAKİNESİ)
     if (scope === "all_columns") {
+      const resetBeforeGenerate = Boolean(body.resetBeforeGenerate);
+      if (resetBeforeGenerate) {
+        db.prepare("DELETE FROM project_strategy_ideas WHERE project_id = ?").run(projectId);
+      }
+
       // 4 Kolonun tamamındaki mevcut başlıkları topla (sıfır-tekrar koruması)
-      const existingRows = db.prepare(`
-        SELECT column_type, title FROM project_strategy_ideas 
-        WHERE project_id = ?
-      `).all(projectId) as Array<{ column_type: ColumnType; title: string }>;
+      const existingRows = resetBeforeGenerate
+        ? []
+        : (db.prepare(`
+            SELECT column_type, title FROM project_strategy_ideas 
+            WHERE project_id = ?
+          `).all(projectId) as Array<{ column_type: ColumnType; title: string }>);
 
       const existingTitlesByColumn: Record<ColumnType, string[]> = {
         vertical_video: [],
@@ -227,11 +287,18 @@ export async function POST(
     }
 
     // SENARYO 2: TEKİL KOLON (+ Yeni Fikir İste)
+    const resetBeforeGenerateCol = Boolean(body.resetBeforeGenerate);
+    if (resetBeforeGenerateCol) {
+      db.prepare("DELETE FROM project_strategy_ideas WHERE project_id = ? AND column_type = ?").run(projectId, columnType);
+    }
+
     // Get existing titles for this column to avoid duplicates
-    const existingRows = db.prepare(`
-      SELECT title FROM project_strategy_ideas 
-      WHERE project_id = ? AND column_type = ?
-    `).all(projectId, columnType) as { title: string }[];
+    const existingRows = resetBeforeGenerateCol
+      ? []
+      : (db.prepare(`
+          SELECT title FROM project_strategy_ideas 
+          WHERE project_id = ? AND column_type = ?
+        `).all(projectId, columnType) as { title: string }[]);
     const existingTitles = existingRows.map((r) => r.title);
 
     const newIdeas = await generateNewIdeasForColumn({

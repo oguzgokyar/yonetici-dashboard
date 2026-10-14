@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { getDatabase } from "@/lib/server/database";
+import { GrowthStore } from "@/lib/server/platform-growth-store";
 import {
   generateFullStrategyAndIdeas,
   COLUMN_AGENCY_SPECS,
@@ -46,6 +47,7 @@ export async function GET(
         description: row.description,
         structure: JSON.parse(row.structure_json || "[]"),
         targetChannel: row.target_channel,
+        nativeFormat: row.native_format || undefined,
         ideaType: row.idea_type || "problem_solution",
         skillSource: row.skill_source || "outlier-post-finder",
         status: row.status,
@@ -307,6 +309,7 @@ export async function DELETE(
   const db = getDatabase()!;
 
   // 1. Delete all ideas
+  new GrowthStore(db).reset(projectId);
   db.prepare("DELETE FROM project_strategy_ideas WHERE project_id = ?").run(projectId);
 
   // 2. Reset strategy fields

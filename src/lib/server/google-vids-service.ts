@@ -1,6 +1,8 @@
 import "server-only";
 
 import path from "node:path";
+import { googleVidsRunnerDecision } from "./google-vids-runner-policy";
+import { validateGoogleVidsNativeArtifact } from "./google-vids-native-artifact";
 import fs from "node:fs";
 import { getDatabase } from "@/lib/server/database";
 import { getCanvaConfig, createJobCallbackToken } from "@/lib/server/canva-config";
@@ -115,6 +117,9 @@ export async function processGoogleVidsJob(job: {
   // Directly spawn the script on server or dispatch via Hermes
   let automationSucceeded = false;
   try {
+    if (!fs.existsSync("/opt/hermes/.venv/bin/python") || !fs.existsSync("/opt/data/scripts/google_vids_automation.py")) {
+      throw Object.assign(new Error("Host native runner bridge required"), { code: "ENOENT" });
+    }
     const { spawn } = await import("node:child_process");
     const { createInterface } = await import("node:readline");
 
@@ -143,17 +148,20 @@ export async function processGoogleVidsJob(job: {
         },
       });
 
+      const localDeadline = setTimeout(() => proc.kill("SIGTERM"), Math.min(3_600_000, Math.max(1_800_000, scenes.length * 360_000 + 900_000)));
+      const cancellationWatch = setInterval(() => {
+        const row = db.prepare("SELECT status FROM generation_jobs WHERE id=?").get(job.id) as {status:string} | undefined;
+        if (!row || !["rendering","running"].includes(row.status)) proc.kill("SIGTERM");
+      }, 5000);
+      const cleanup = () => { clearTimeout(localDeadline); clearInterval(cancellationWatch); };
+      proc.once("error", cleanup); proc.once("close", cleanup);
       const rl = createInterface({ input: proc.stdout });
-      let capturedGoogleVidsUrl: string | undefined;
       rl.on("line", (line) => {
         const trimmed = line.trim();
         if (trimmed.startsWith("__PROGRESS__")) {
           try {
             const progressData = JSON.parse(trimmed.slice("__PROGRESS__".length));
-            if (progressData.googleVidsUrl) {
-              capturedGoogleVidsUrl = progressData.googleVidsUrl;
-            }
-            db.prepare("UPDATE generation_jobs SET progress_json = ? WHERE id = ?").run(
+            db.prepare("UPDATE generation_jobs SET progress_json = ? WHERE id = ? AND status IN ('rendering','running')").run(
               JSON.stringify({
                 phase: progressData.phase,
                 percent: progressData.percent,
@@ -172,6 +180,8 @@ export async function processGoogleVidsJob(job: {
       proc.on("error", (err) => reject(err));
       proc.on("close", (code) => {
         if (code === 0 && fs.existsSync(finalMp4Path) && fs.statSync(finalMp4Path).size > 1000) {
+          try { validateGoogleVidsNativeArtifact(finalMp4Path, JSON.parse(fs.readFileSync(finalMp4Path+'.native.json','utf8')), job.id, req); }
+          catch (error) { reject(error); return; }
           automationSucceeded = true;
           resolve();
         } else {
@@ -181,7 +191,11 @@ export async function processGoogleVidsJob(job: {
     });
   } catch (localErr) {
     // If local execution fails (e.g. running inside container without host access), fallback to Hermes run dispatch
-    console.warn("[Google Vids] Local execution fallback to Hermes Agent:", localErr);
+    if ((localErr as NodeJS.ErrnoException).code !== "ENOENT") {
+      db.prepare("UPDATE generation_jobs SET status='failed', error=?, completed_at=? WHERE id=? AND status='rendering'").run(String(localErr).slice(0,1000), new Date().toISOString(), job.id);
+      return;
+    }
+    console.info("[Google Vids] Host/Hermes native runner bridge required (container ENOENT)");
   }
 
   if (automationSucceeded) {
@@ -209,10 +223,11 @@ export async function processGoogleVidsJob(job: {
     db.prepare(`
       UPDATE generation_jobs
       SET status = 'complete',
+          error = NULL,
           response_json = ?,
           progress_json = ?,
           completed_at = ?
-      WHERE id = ?
+      WHERE id = ? AND status IN ('running','rendering')
     `).run(
       JSON.stringify(responsePayload),
       JSON.stringify({ phase: "complete", percent: 100, detail: "Tamamlandı" }),
@@ -245,7 +260,7 @@ ${downloadRefImageCmd}/opt/hermes/.venv/bin/python /opt/data/scripts/google_vids
 Once "/tmp/vids_out_${job.id}.mp4" is generated:
 Parse the stdout log of the python script for '__PROGRESS__' line containing 'googleVidsUrl' to get the URL if available.
 Upload the video file via multipart form-data to the callback endpoint:
-curl -s -X POST ${callbackToken ? `-H "Authorization: Bearer ${callbackToken}" ` : ""}-F "video=@/tmp/vids_out_${job.id}.mp4" -F "googleVidsUrl=$(grep -o '"googleVidsUrl": *"[^"]*"' /tmp/vids_job_${job.id}.log 2>/dev/null | cut -d'"' -f4 || echo '')" "${callbackUrl}"
+curl --fail-with-body -s -X POST ${callbackToken ? `-H "Authorization: Bearer ${callbackToken}" ` : ""}-F "video=@/tmp/vids_out_${job.id}.mp4" -F "nativeMetadata=</tmp/vids_out_${job.id}.mp4.native.json" -F "googleVidsUrl=$(python3 -c 'import json; print(json.load(open("/tmp/vids_out_${job.id}.mp4.native.json"))["googleVidsUrl"])')" "${callbackUrl}"
 rm -f "/tmp/vids_out_${job.id}.mp4" "${scenesTempFile}" "/tmp/vids_job_${job.id}.log" "/tmp/vids_ref_${job.id}.png"
 
 Return the completion output.`;
@@ -276,7 +291,7 @@ Return the completion output.`;
       UPDATE generation_jobs
       SET status = 'running',
           progress_json = ?
-      WHERE id = ?
+      WHERE id = ? AND status IN ('running','rendering')
     `).run(
       JSON.stringify({
         phase: "running",
@@ -288,14 +303,19 @@ Return the completion output.`;
       job.id
     );
 
-    // Poll run completion up to 240 seconds
-    const deadline = Date.now() + 240000;
+    // Native multi-scene generation + three layer phases + native export.
+    const started = Date.now();
+    const maximumRuntimeMs = Math.min(3_600_000, Math.max(1_800_000, scenes.length * 360_000 + 900_000));
+    const deadline = started + maximumRuntimeMs;
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 5000));
 
-      // Kontrol et: callback veya dosya geldi mi?
-      if (fs.existsSync(finalMp4Path) && fs.statSync(finalMp4Path).size > 1000) {
-        break;
+      const current = db.prepare("SELECT status FROM generation_jobs WHERE id=?").get(job.id) as {status:string} | undefined;
+      const decision = googleVidsRunnerDecision("running", current?.status, Date.now()-started, maximumRuntimeMs);
+      if (decision === "complete") return;
+      if (decision === "cancel") {
+        if (runId) await fetch(`${baseUrl}/v1/runs/${runId}/cancel`, { method:"POST", headers:{"Content-Type":"application/json", ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})}, body:JSON.stringify({reason:"job_cancelled_or_deadline"}),signal:AbortSignal.timeout(8000)}).catch(()=>null);
+        return;
       }
 
       if (runId) {
@@ -324,51 +344,16 @@ Return the completion output.`;
               markVidsAccountQuotaExhausted(authuserIndex);
               throw new Error("Google Vids günlük/saatlik video oluşturma sınırına ulaşıldı. Google hesabı kotasını sıfırlayana kadar lütfen bekleyin.");
             }
-            recordVidsAccountRenderSuccess(authuserIndex);
-            break;
+            // Run completion is not artifact completion; await verified callback.
+            continue;
           }
         }
       }
     }
 
-    if (!fs.existsSync(finalMp4Path) || fs.statSync(finalMp4Path).size < 1000) {
-      // Check last known error or progress
-      let customErr = "Google Vids MP4 dosyası zaman aşımına uğradı veya oluşturulamadı.";
-      try {
-        const curRow = db.prepare("SELECT progress_json FROM generation_jobs WHERE id = ?").get(job.id) as { progress_json?: string } | undefined;
-        if (curRow?.progress_json && curRow.progress_json.includes("sınırına ulaştınız")) {
-          markVidsAccountQuotaExhausted(authuserIndex);
-          customErr = "Google Vids günlük/saatlik video oluşturma sınırına ulaşıldı. Lütfen kotanın sıfırlanmasını bekleyin.";
-        }
-      } catch {}
-      throw new Error(customErr);
-    }
+    if (runId) await fetch(`${baseUrl}/v1/runs/${runId}/cancel`, {method:"POST",headers:{"Content-Type":"application/json",...(apiKey ? {Authorization: `Bearer ${apiKey}`} : {})},body:JSON.stringify({reason:"native_deadline"}),signal:AbortSignal.timeout(8000)}).catch(()=>null);
+    throw new Error("Google Vids native completion callback deadline exceeded; existing file is not completion evidence.");
 
-    const videoUrl = `/api/videos/${job.id}`;
-    const responsePayload = {
-      id: job.id,
-      url: videoUrl,
-      videoUrl: videoUrl,
-      title: title,
-      durationSeconds: req.durationSeconds || 30,
-      aspectRatio: aspectRatio,
-      isGoogleVids: true,
-      completedAt: new Date().toISOString(),
-    };
-
-    db.prepare(`
-      UPDATE generation_jobs
-      SET status = 'complete',
-          response_json = ?,
-          progress_json = ?,
-          completed_at = ?
-      WHERE id = ?
-    `).run(
-      JSON.stringify(responsePayload),
-      JSON.stringify({ phase: "complete", percent: 100, detail: "Tamamlandı" }),
-      new Date().toISOString(),
-      job.id
-    );
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     db.prepare(`
@@ -376,7 +361,7 @@ Return the completion output.`;
       SET status = 'failed',
           error = ?,
           completed_at = ?
-      WHERE id = ?
+      WHERE id = ? AND status IN ('running','rendering')
     `).run(
       errMsg.slice(0, 1000),
       new Date().toISOString(),

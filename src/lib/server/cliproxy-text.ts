@@ -19,11 +19,11 @@ export async function completeText(system: string, prompt: string, options?: { t
   }
   if (!model) throw new Error("Kullanılabilir prompt modeli bulunamadı.");
   const response = await fetch(`${baseUrl}/chat/completions`, { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model, temperature: options?.temperature ?? 0.6, max_tokens: options?.maxTokens ?? 1400, messages: [{ role: "system", content: system }, { role: "user", content: prompt }] }), signal: AbortSignal.timeout(60_000) });
-  const body = await response.json() as { choices?: { message?: { content?: string } }[]; error?: { message?: string } };
+  const body = await response.json() as { model?: string; choices?: { message?: { content?: string } }[]; error?: { message?: string } };
   if (!response.ok) throw new Error(body.error?.message || "AI metin isteği tamamlanamadı.");
   const content = body.choices?.[0]?.message?.content?.trim();
   if (!content) throw new Error("AI kullanılabilir bir yanıt üretmedi.");
-  return { content, model };
+  return { content, model: body.model || model };
 }
 
 export function parseJsonResponse<T>(text: string): T {

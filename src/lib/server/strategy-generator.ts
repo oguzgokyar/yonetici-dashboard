@@ -12,76 +12,8 @@ import {
 } from "@/lib/strategy-constants";
 export { type ColumnType, type IdeaType, IDEA_TYPE_LABELS };
 
-export type StrategyOverview = {
-  brandIdentity: {
-    tone: string;
-    valueProposition: string;
-    positioning: string;
-    keyMessaging: string;
-    brandArchetype?: string;
-    visualDirectives?: {
-      primaryAesthetic: string;
-      forbiddenCliches: string[];
-      photoStyle: string;
-    };
-  };
-  competitorAnalysis: {
-    contentGaps: string[];
-    viralPatternsToAdapt: string[];
-    differentiationAngle: string;
-    liveOutlierCount?: number;
-    liveOutlierSummary?: string;
-    competitorWeaknesses?: string[];
-  };
-  audienceVoc: {
-    targetPersona: string;
-    painPoints: string[];
-    frequentQuestions: string[];
-    winningHooks: string[];
-    unspokenDesires?: string[];
-  };
-  growthStrategy: {
-    primaryPillars: string[];
-    weeklyPostingPlan: string;
-    channelPriorities: string[];
-    conversionFunnel: string;
-    leadMagnetOffer?: {
-      hook: string;
-      deliverable: string;
-      ctaTrigger: string;
-    };
-    contentDistributionRatio?: {
-      tofuAwareness: string;
-      mofuTrust: string;
-      bofuConversion: string;
-    };
-    aiSearchAeoDirective?: string;
-    hashtagBank?: {
-      broad: string[];
-      niche: string[];
-      brand: string[];
-    };
-    dailySchedule?: Array<{
-      day: string;
-      format: string;
-      focus: string;
-    }>;
-  };
-};
-
-export type StrategyIdea = {
-  id?: string;
-  columnType: ColumnType;
-  title: string;
-  hook: string;
-  description: string;
-  structure: string[];
-  targetChannel: string;
-  ideaType?: IdeaType | string;
-  skillSource?: string;
-  status?: "suggested" | "hidden";
-  createdAt?: string;
-};
+import type { StrategyOverview, StrategyIdea } from "@/lib/strategy-types";
+export type { StrategyOverview, StrategyIdea } from "@/lib/strategy-types";
 
 export type FullStrategyResult = {
   overview: StrategyOverview;

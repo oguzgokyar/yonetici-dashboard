@@ -1,4 +1,5 @@
 import { getDatabase } from "@/lib/server/database";
+import { triggerGrowthWorker } from "@/lib/server/platform-growth-worker";
 import { ensureTikTokSchedulersRehydrated } from "@/lib/server/tiktok-exact-scheduler";
 
 export const runtime = "nodejs";
@@ -8,6 +9,7 @@ export async function GET() {
   try {
     getDatabase().prepare("SELECT 1 AS healthy").get();
     ensureTikTokSchedulersRehydrated();
+    triggerGrowthWorker();
     return Response.json({ ok: true, service: "yonetici-dashboard" });
   } catch {
     return Response.json({ ok: false, service: "yonetici-dashboard" }, { status: 503 });
