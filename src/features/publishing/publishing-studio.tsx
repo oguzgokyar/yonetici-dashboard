@@ -2520,6 +2520,12 @@ export function PublishingStudio({
                   );
                 })}
               </div>
+              {selectedIntegrationIds.some((id) => accounts.find((a) => a.integrationId === id)?.identifier.includes("youtube")) && (
+                <div style={{ marginTop: "8px", fontSize: "11px", color: "#e65100", display: "flex", alignItems: "center", gap: "5px", background: "rgba(255, 152, 0, 0.08)", padding: "6px 10px", borderRadius: "6px" }}>
+                  <Youtube size={13} color="#ff0000" />
+                  <span><strong>YouTube Shorts Köprüsü Aktif:</strong> Seçilen statik görseller/karuseller YouTube için otomatik olarak 9:16 Shorts videosuna dönüştürülür.</span>
+                </div>
+              )}
             </div>
 
             {/* 2. Çoklu Medya / Kreatif Seçimi */}

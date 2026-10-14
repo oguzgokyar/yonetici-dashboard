@@ -6,6 +6,7 @@ import {
   YouTubePostSettings,
   TikTokPostSettings,
 } from "@/lib/server/postiz-client";
+import { convertImagesToYouTubeVideo } from "@/lib/server/image-slideshow-service";
 import { appendMusicAttribution, resolveMusicAttribution } from "@/lib/music-attribution";
 import { uploadVideoViaTikTokBrowser } from "@/lib/server/tiktok-browser-service";
 import {
@@ -136,6 +137,27 @@ export async function POST(request: Request, context: Context) {
             .get(projectId, target.integrationId) as { identifier?: string } | undefined;
           const platformIdentifier = targetAccount?.identifier || "instagram";
 
+          // YouTube için görsel paketini otomatik YouTube Shorts MP4 videosuna dönüştür
+          let effectivePostizMediaList = postizMediaList;
+          let effectivePostType = targetPostType;
+
+          if (platformIdentifier.includes("youtube") && packageItems && packageItems.length > 0) {
+            try {
+              const videoRes = await convertImagesToYouTubeVideo({
+                imageUrls: packageItems.map((_, i) => `/api/assets/${mediaPackageId}_${i}`),
+              });
+              if (videoRes.ok && videoRes.videoPath && fs.existsSync(videoRes.videoPath)) {
+                const vBuf = fs.readFileSync(videoRes.videoPath);
+                const vUploaded = await uploadMediaToPostiz(vBuf, path.basename(videoRes.videoPath), "video/mp4");
+                effectivePostizMediaList = [{ id: vUploaded.id, path: vUploaded.path }];
+                effectivePostType = "reel";
+                try { fs.unlinkSync(videoRes.videoPath); } catch {}
+              }
+            } catch (ytConvErr) {
+              console.warn("[Bulk Posts Route] YouTube Karosel-Shorts dönüşümü atlandı:", ytConvErr);
+            }
+          }
+
           try {
             const isAi = target.isAiGenerated !== undefined ? (target.isAiGenerated ? 1 : 0) : item.isAiGenerated !== undefined ? (item.isAiGenerated ? 1 : 0) : 1;
             const relPostId = target.relatedPostId || item.relatedPostId || null;
@@ -147,8 +169,8 @@ export async function POST(request: Request, context: Context) {
               integrationId: target.integrationId,
               platformIdentifier,
               caption: fullCaption,
-              media: postizMediaList,
-              postType: targetPostType,
+              media: effectivePostizMediaList,
+              postType: effectivePostType,
               youtubeSettings: target.youtubeSettings,
               tiktokSettings: target.tiktokSettings,
               isAiGenerated: isAi === 1,

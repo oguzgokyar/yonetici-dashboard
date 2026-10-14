@@ -76,7 +76,8 @@ export function MultiPlatformPreview({
     .join(" ");
 
   if (platform === "youtube") {
-    const isShorts = postType === "reel" || (isVideo && displayTitle.toLowerCase().includes("shorts"));
+    // YouTube'da görseller otomatik olarak 9:16 Shorts videosuna dönüştürülür
+    const isShorts = postType === "reel" || (isVideo && displayTitle.toLowerCase().includes("shorts")) || !isVideo;
 
     if (isShorts) {
       return (

@@ -18,6 +18,7 @@ import {
   YouTubePostSettings,
   TikTokPostSettings,
 } from "@/lib/server/postiz-client";
+import { convertImagesToYouTubeVideo } from "@/lib/server/image-slideshow-service";
 
 export const runtime = "nodejs";
 
@@ -264,6 +265,32 @@ export async function POST(request: Request, context: Context) {
         .get(projectId, target.integrationId) as { identifier?: string } | undefined;
       const platformIdentifier = targetAccount?.identifier || "instagram";
 
+      // YouTube için görsel paketini otomatik YouTube Shorts MP4 videosuna dönüştür
+      let effectivePostizMediaList = postizMediaList;
+      let effectivePostType = targetPostType;
+
+      if (platformIdentifier.includes("youtube") && packageItems && packageItems.length > 0) {
+        try {
+          // Paketteki tüm görselleri topla ve yerel yollarını al
+          const imgUrls = packageItems.map((item) => item.filename);
+          // packageItems buffer'larını geçici MP4'e dönüştür
+          const videoRes = await convertImagesToYouTubeVideo({
+            imageUrls: packageItems.map((_, i) => `/api/assets/${mediaPackageId}_${i}`), // fallback id
+          });
+
+          // Eğer dönüştürme yerel dosyalarla başarılı olduysa
+          if (videoRes.ok && videoRes.videoPath && fs.existsSync(videoRes.videoPath)) {
+            const vBuf = fs.readFileSync(videoRes.videoPath);
+            const vUploaded = await uploadMediaToPostiz(vBuf, path.basename(videoRes.videoPath), "video/mp4");
+            effectivePostizMediaList = [{ id: vUploaded.id, path: vUploaded.path }];
+            effectivePostType = "reel"; // YouTube Shorts
+            try { fs.unlinkSync(videoRes.videoPath); } catch {}
+          }
+        } catch (ytConvErr) {
+          console.warn("[Posts Route] YouTube Karosel-Shorts dönüşümü atlandı:", ytConvErr);
+        }
+      }
+
       try {
         const postizResult = await createPostizPost({
           type: targetScheduleType,
@@ -271,8 +298,8 @@ export async function POST(request: Request, context: Context) {
           integrationId: target.integrationId,
           platformIdentifier,
           caption: fullCaption,
-          media: postizMediaList,
-          postType: targetPostType,
+          media: effectivePostizMediaList,
+          postType: effectivePostType,
           youtubeSettings: target.youtubeSettings,
           tiktokSettings: target.tiktokSettings,
         });
@@ -475,7 +502,37 @@ export async function POST(request: Request, context: Context) {
   let postizMedia: { id: string; path: string } | null = null;
   if (!isOnlyTikTokBrowser) {
     try {
-      postizMedia = await uploadMediaToPostiz(fileBuffer, filename, mimeType);
+      let uploadBuffer = fileBuffer;
+      let uploadFilename = filename;
+      let uploadMimeType = mimeType;
+
+      // Eğer hedef kanallar arasında YouTube varsa ve medya görsel ise:
+      // YouTube API statik görsel kabul etmediği için otomatik olarak 10-15s YouTube Shorts MP4 videosuna dönüştür
+      const hasYouTubeTarget = targets.some((t) => {
+        const acc = database
+          .prepare("SELECT identifier FROM project_social_accounts WHERE project_id=? AND integration_id=?")
+          .get(projectId, t.integrationId) as { identifier?: string } | undefined;
+        return Boolean(acc?.identifier?.includes("youtube"));
+      });
+
+      if (hasYouTubeTarget && (resolvedContentType === "image" || !mimeType.startsWith("video/"))) {
+        try {
+          const videoRes = await convertImagesToYouTubeVideo({
+            imageUrls: [body.mediaUrl || `/api/assets/${candidateId}`],
+            durationPerSlide: 8, // Tek görsel için 8 saniyelik statik video
+          });
+          if (videoRes.ok && videoRes.videoPath && fs.existsSync(videoRes.videoPath)) {
+            uploadBuffer = fs.readFileSync(videoRes.videoPath);
+            uploadFilename = path.basename(videoRes.videoPath);
+            uploadMimeType = "video/mp4";
+            try { fs.unlinkSync(videoRes.videoPath); } catch {}
+          }
+        } catch (ytSingleErr) {
+          console.warn("[Posts Route] YouTube tekil görsel video dönüşümü atlandı:", ytSingleErr);
+        }
+      }
+
+      postizMedia = await uploadMediaToPostiz(uploadBuffer, uploadFilename, uploadMimeType);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       return Response.json({ ok: false, message: `Medyayı Postiz'e yükleme başarısız: ${errMsg}` }, { status: 500 });
