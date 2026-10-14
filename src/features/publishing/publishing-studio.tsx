@@ -111,7 +111,7 @@ function parseIstanbulDatetimeLocalToUtc(val: string): string | undefined {
 type RecentAsset = {
   id: string;
   type: "image" | "video";
-  category: "image" | "video" | "stock" | "stock_render" | "canva_package";
+  category: "image" | "video" | "stock" | "stock_render" | "canva_package" | "raw_stock";
   url: string;
   thumbnailUrl?: string;
   packageId?: string;
@@ -198,7 +198,7 @@ export function PublishingStudio({
   const [customMediaUrl, setCustomMediaUrl] = useState("");
   const [mediaSourceTab, setMediaSourceTab] = useState<"recent" | "custom">("recent");
   const [mediaCategoryFilter, setMediaCategoryFilter] = useState<
-    "all" | "image" | "canva_package" | "video" | "stock"
+    "all" | "image" | "canva_package" | "video" | "stock" | "raw_stock"
   >("all");
   const [mediaPage, setMediaPage] = useState(1);
   const MEDIA_PER_PAGE = 15;
@@ -406,10 +406,10 @@ export function PublishingStudio({
             items.push({
               id: s.id,
               type: "video",
-              category: "stock",
+              category: "raw_stock",
               url: s.streamUrl,
               thumbnailUrl: thumbUrl,
-              prompt: `Stok Video: ${s.name}`,
+              prompt: `Ham Stok Video: ${s.name}`,
               sourceTopic: s.name.replace(/\.[^/.]+$/, ""),
               metadata: s.metadata,
               createdAt: s.createdAt,
@@ -843,8 +843,9 @@ export function PublishingStudio({
       if (mediaCategoryFilter === "all") return true;
       if (mediaCategoryFilter === "image") return a.type === "image" && a.category !== "canva_package";
       if (mediaCategoryFilter === "canva_package") return a.category === "canva_package";
-      if (mediaCategoryFilter === "video") return a.type === "video" && a.category !== "stock" && a.category !== "stock_render";
-      if (mediaCategoryFilter === "stock") return a.category === "stock" || a.category === "stock_render";
+      if (mediaCategoryFilter === "video") return a.type === "video" && a.category !== "stock" && a.category !== "stock_render" && a.category !== "raw_stock";
+      if (mediaCategoryFilter === "stock") return a.category === "stock_render";
+      if (mediaCategoryFilter === "raw_stock") return a.category === "stock" || a.category === "raw_stock";
       return true;
     });
     setBulkSelectedAssets((prev) => {
@@ -1423,8 +1424,9 @@ export function PublishingStudio({
   const filteredAssets = recentAssets.filter((a) => {
     if (mediaCategoryFilter === "all") return true;
     if (mediaCategoryFilter === "canva_package") return a.category === "canva_package";
-    if (mediaCategoryFilter === "video") return a.type === "video" && a.category !== "stock";
-    if (mediaCategoryFilter === "stock") return a.category === "stock" || a.category === "stock_render";
+    if (mediaCategoryFilter === "video") return a.type === "video" && a.category !== "stock" && a.category !== "stock_render" && a.category !== "raw_stock";
+    if (mediaCategoryFilter === "stock") return a.category === "stock_render";
+    if (mediaCategoryFilter === "raw_stock") return a.category === "stock" || a.category === "raw_stock";
     if (mediaCategoryFilter === "image") return a.type === "image" && a.category !== "canva_package";
     return true;
   });
@@ -1652,6 +1654,13 @@ export function PublishingStudio({
                     >
                       Stok
                     </button>
+                    <button
+                      type="button"
+                      className={`composer-media-tab-btn ${mediaCategoryFilter === "raw_stock" ? "active" : ""}`}
+                      onClick={() => { setMediaCategoryFilter("raw_stock"); setMediaPage(1); }}
+                    >
+                      Ham
+                    </button>
                   </div>
 
                   <div
@@ -1730,6 +1739,10 @@ export function PublishingStudio({
                             >
                               {asset.category === "canva_package"
                                 ? `Canva (${asset.itemCount || 1})`
+                                : asset.category === "raw_stock"
+                                ? "Ham Stok"
+                                : asset.category === "stock_render"
+                                ? "Stok Video"
                                 : asset.type === "video"
                                 ? "Video"
                                 : "Görsel"}
@@ -1739,7 +1752,11 @@ export function PublishingStudio({
                       })
                     ) : (
                       <div style={{ width: "100%", gridColumn: "1 / -1", textAlign: "center", padding: "32px 12px", color: "var(--muted)", fontSize: "12px" }}>
-                        Bu kategoride henüz kreatif üretilmemiş.
+                        {mediaCategoryFilter === "raw_stock"
+                          ? "Henüz kaynak klasörde taranmış ham stok video bulunamadı."
+                          : mediaCategoryFilter === "stock"
+                          ? "Henüz işlenmiş/render edilmiş stok video bulunamadı."
+                          : "Bu kategoride henüz kreatif üretilmemiş."}
                       </div>
                     )}
                   </div>
@@ -2592,6 +2609,13 @@ export function PublishingStudio({
                   >
                     Stok
                   </button>
+                  <button
+                    type="button"
+                    className={`composer-media-tab-btn ${mediaCategoryFilter === "raw_stock" ? "active" : ""}`}
+                    onClick={() => { setMediaCategoryFilter("raw_stock"); setMediaPage(1); }}
+                  >
+                    Ham
+                  </button>
                 </div>
 
                 {/* Medya gridi (Checkbox'lı) */}
@@ -2601,8 +2625,9 @@ export function PublishingStudio({
                       if (mediaCategoryFilter === "all") return true;
                       if (mediaCategoryFilter === "image") return a.type === "image" && a.category !== "canva_package";
                       if (mediaCategoryFilter === "canva_package") return a.category === "canva_package";
-                      if (mediaCategoryFilter === "video") return a.type === "video" && a.category !== "stock" && a.category !== "stock_render";
-                      if (mediaCategoryFilter === "stock") return a.category === "stock" || a.category === "stock_render";
+                      if (mediaCategoryFilter === "video") return a.type === "video" && a.category !== "stock" && a.category !== "stock_render" && a.category !== "raw_stock";
+                      if (mediaCategoryFilter === "stock") return a.category === "stock_render";
+                      if (mediaCategoryFilter === "raw_stock") return a.category === "stock" || a.category === "raw_stock";
                       return true;
                     })
                     .slice((mediaPage - 1) * MEDIA_PER_PAGE, mediaPage * MEDIA_PER_PAGE)
@@ -2643,6 +2668,10 @@ export function PublishingStudio({
                           <div className="composer-media-badge">
                             {asset.category === "canva_package"
                               ? `Canva (${asset.itemCount || 1}s)`
+                              : asset.category === "raw_stock"
+                              ? "Ham Stok"
+                              : asset.category === "stock_render"
+                              ? "Stok Video"
                               : asset.type === "video"
                               ? "Video"
                               : "Görsel"}
