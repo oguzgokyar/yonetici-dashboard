@@ -69,11 +69,59 @@ export function BrandSettings({ projectId }: { projectId: string }) {
   }
 
   const colors = [concept.primaryColor, concept.secondaryColor, concept.accentColor];
+  const fields = [form.brandName, form.website, form.industry, form.description, form.audience, form.tone, form.phone, form.email, form.address, form.logo];
+  const completed = fields.filter(Boolean).length;
+  const completeness = Math.round((completed / fields.length) * 100);
+
   return <div className="settings-layout">
     <aside className="settings-nav"><strong>Proje ayarları</strong><button className={tab === "brand" ? "active" : ""} onClick={() => { setTab("brand"); setResult(null); }}><Palette size={17} />Marka bilgileri</button><button className={tab === "concept" ? "active" : ""} onClick={() => { setTab("concept"); setResult(null); }}><SwatchBook size={17} />Marka konsepti</button></aside>
     {tab === "brand" ? <section className="settings-card"><div className="settings-heading"><div><h2>Marka bilgileri</h2><p>AI üretimlerinde kullanılacak doğrulanmış marka ve iletişim bilgileri.</p></div><button className="button primary" onClick={saveBrand}>{saved ? <Check size={17} /> : <Save size={17} />}{saved ? "Kaydedildi" : "Kaydet"}</button></div>
       <div className="brand-import-card"><div><span><Globe2 size={18} /></span><div><strong>Web sitesinden marka bilgilerini ve konsepti getir</strong><p>AI boş alanları doldurur ve görsel marka konseptini otomatik belirler.</p></div></div><button type="button" className="button secondary" onClick={importFromWebsite} disabled={importing}>{importing ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}{importing ? "Site inceleniyor" : "Marka bilgilerini getir"}</button></div>
       {result && <ResultBox result={result} />}
+
+      {/* MARKA DNA'SI & PROFİL TAMAMLAMA KARTLARI */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", margin: "16px 0" }}>
+        <div style={{ padding: "14px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", display: "flex", flexDirection: "column", gap: "10px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: "12px", fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: "6px" }}>
+              <Palette size={15} color="var(--primary)" /> Marka DNA'sı Özeti
+            </span>
+            <small style={{ fontSize: "10.5px", color: "var(--muted)" }}>Canlı Bağlam</small>
+          </div>
+          <div style={{ fontSize: "11px", display: "flex", flexDirection: "column", gap: "6px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ color: "#64748b" }}>Hedef Kitle:</span>
+              <strong style={{ color: "#0f172a" }}>{form.audience || "Tanımlanmadı"}</strong>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ color: "#64748b" }}>İletişim Tonu:</span>
+              <strong style={{ color: "#0f172a" }}>{form.tone || "Tanımlanmadı"}</strong>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ color: "#64748b" }}>Ana Renk:</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                <i style={{ width: "12px", height: "12px", borderRadius: "3px", background: form.primaryColor }} />
+                <strong>{form.primaryColor.toUpperCase()}</strong>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding: "14px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", display: "flex", flexDirection: "column", gap: "10px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: "12px", fontWeight: 700, color: "#1e293b" }}>Profil Doluluğu</span>
+            <span style={{ fontSize: "12px", fontWeight: 800, color: "var(--primary)" }}>%{completeness}</span>
+          </div>
+          <div style={{ height: "6px", background: "#e2e8f0", borderRadius: "3px", overflow: "hidden" }}>
+            <div style={{ width: `${completeness}%`, height: "100%", background: form.primaryColor, transition: "width 0.3s ease" }} />
+          </div>
+          <div style={{ fontSize: "10.5px", color: "#64748b", display: "flex", justifyContent: "space-between" }}>
+            <span>{completed}/10 Alan Dolu</span>
+            <span>{completeness === 100 ? "✓ Tam Uyum" : "Eksik alanları aşağıdan doldurun"}</span>
+          </div>
+        </div>
+      </div>
+
       <div className="form-grid"><label className="field-label full">Marka logosu<div className="logo-upload">{form.logo ? <><Image src={form.logo} alt="Marka logosu" width={180} height={68} unoptimized /><button type="button" className="icon-button" onClick={() => field("logo", "")} aria-label="Logoyu kaldır"><X size={16} /></button></> : <><ImagePlus size={22} /><span>PNG, JPG veya SVG yükleyin</span></>}<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(e) => uploadLogo(e.target.files?.[0])} /></div></label>
         <TextField label="Marka adı" value={form.brandName} onChange={(v) => field("brandName", v)} /><TextField label="Web sitesi" value={form.website} onChange={(v) => field("website", v)} /><TextField label="Telefon" value={form.phone} onChange={(v) => field("phone", v)} /><TextField label="E-posta" value={form.email} onChange={(v) => field("email", v)} /><TextField label="Adres" value={form.address} onChange={(v) => field("address", v)} full /><TextField label="Sektör" value={form.industry} onChange={(v) => field("industry", v)} full /><AreaField label="Marka açıklaması" value={form.description} onChange={(v) => field("description", v)} /><AreaField label="Hedef kitle" value={form.audience} onChange={(v) => field("audience", v)} /><AreaField label="Marka tonu" value={form.tone} onChange={(v) => field("tone", v)} /><ColorField label="Ana renk" value={form.primaryColor} onChange={(v) => field("primaryColor", v)} /><ColorField label="Yardımcı renk" value={form.secondaryColor} onChange={(v) => field("secondaryColor", v)} /><TextField label="Varsayılan çağrı metni" value={form.defaultCta} onChange={(v) => field("defaultCta", v)} full />
       </div></section> : <section className="settings-card"><div className="settings-heading"><div><h2>Marka konsepti</h2><p>Görsel üretimlerinde otomatik ve zorunlu kullanılan tasarım yönü.</p></div><button className="button primary" onClick={() => saveConcept()}>{saved ? <Check size={17} /> : <Save size={17} />}{saved ? "Kaydedildi" : "Kaydet"}</button></div>

@@ -5,9 +5,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import {
-  ArrowRight, Building2, CheckCircle2, CircleDashed, ExternalLink, Globe2,
+  ArrowRight, Building2, ExternalLink, Globe2,
   Image as ImageIcon, Clapperboard, Film, Compass, Send, Share2, Pin,
-  Palette, Pencil, Target, MessageSquareText, Layers, Sparkles, Settings2,
+  Pencil, Layers, Sparkles, Settings2,
 } from "lucide-react";
 import { useProjects } from "./projects-context";
 import { BrandSettings } from "./brand-settings";
@@ -74,7 +74,7 @@ export function ProjectHub({ projectId }: { projectId: string }) {
             }}
           >
             <Layers size={16} />
-            <span>Proje Merkezi &amp; Üretim Araçları</span>
+            <span>Üretim Araçları</span>
           </button>
           <button
             type="button"
@@ -91,7 +91,7 @@ export function ProjectHub({ projectId }: { projectId: string }) {
             }}
           >
             <Settings2 size={16} />
-            <span>Marka Bilgileri &amp; Tasarım Konsepti</span>
+            <span>Marka Bilgileri</span>
           </button>
         </div>
 
@@ -143,67 +143,8 @@ export function ProjectHub({ projectId }: { projectId: string }) {
             </button>
           </section>
 
-          {/* Marka DNA ve Profil Tamamlanma */}
-          <div className="project-brain-grid">
-            <section className="panel brand-dna-panel">
-              <div className="panel-header">
-                <div>
-                  <h3>Marka DNA’sı</h3>
-                  <p>Üretimlerde kullanılacak ana bağlam</p>
-                </div>
-                <Palette size={19} />
-              </div>
-              <div className="brand-dna-list">
-                <BrandFact icon={<Target size={17} />} label="Hedef kitle" value={brand.audience} placeholder="Hedef kitle tanımlanmadı" />
-                <BrandFact icon={<MessageSquareText size={17} />} label="İletişim tonu" value={brand.tone} placeholder="Marka tonu tanımlanmadı" />
-                <BrandFact icon={<Palette size={17} />} label="Ana renk" value={brand.primaryColor.toLocaleUpperCase("tr-TR")} color={brand.primaryColor} />
-              </div>
-            </section>
-
-            <section className="panel completeness-panel">
-              <div className="panel-header">
-                <div>
-                  <h3>Profil tamamlanma</h3>
-                  <p>Daha iyi AI sonuçları için</p>
-                </div>
-                <span className="completion-value">%{completeness}</span>
-              </div>
-              <div className="completion-track">
-                <span style={{ width: `${completeness}%`, background: brand.primaryColor }} />
-              </div>
-              <div className="completion-list">
-                <Completion label="Temel bilgiler" done={Boolean(brand.brandName && brand.industry)} />
-                <Completion label="Marka açıklaması" done={Boolean(brand.description)} />
-                <Completion label="Hedef kitle" done={Boolean(brand.audience)} />
-                <Completion label="İletişim tonu" done={Boolean(brand.tone)} />
-                <Completion label="Logo ve iletişim" done={Boolean(brand.logo && brand.phone && brand.email)} />
-              </div>
-              {completeness < 100 && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("settings")}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    padding: 0,
-                    color: "var(--primary)",
-                    fontWeight: 600,
-                    fontSize: "12px",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "4px",
-                    cursor: "pointer",
-                    marginTop: "8px",
-                  }}
-                >
-                  Eksik bilgileri tamamla <ArrowRight size={15} />
-                </button>
-              )}
-            </section>
-          </div>
-
           {/* TÜM ÜRETİM ARAÇLARI KISAYOL KARTLARI */}
-          <section className="project-section-heading" style={{ marginTop: "28px" }}>
+          <section className="project-section-heading" style={{ marginTop: "16px" }}>
             <div>
               <h3>Tüm Üretim ve Yönetim Araçları</h3>
               <p>Bu projeye bağlı içerik üretimi, video kurgusu ve kanal dağıtım araçları</p>
@@ -278,40 +219,6 @@ export function ProjectHub({ projectId }: { projectId: string }) {
         </>
       )}
     </>
-  );
-}
-
-function BrandFact({
-  icon,
-  label,
-  value,
-  placeholder,
-  color,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  placeholder?: string;
-  color?: string;
-}) {
-  return (
-    <div className="brand-fact">
-      <div className="brand-fact-icon">{icon}</div>
-      <div>
-        <span>{label}</span>
-        <strong className={!value ? "muted-value" : ""}>{value || placeholder}</strong>
-      </div>
-      {color && <i style={{ background: color }} />}
-    </div>
-  );
-}
-
-function Completion({ label, done }: { label: string; done: boolean }) {
-  return (
-    <div>
-      {done ? <CheckCircle2 className="done" size={16} /> : <CircleDashed size={16} />}
-      <span>{label}</span>
-    </div>
   );
 }
 
