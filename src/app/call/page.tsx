@@ -2,22 +2,31 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { Mic, MicOff, PhoneOff, Volume2, ArrowLeft, Sparkles, Radio } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Volume2, ArrowLeft, Sparkles, Radio, Cpu } from "lucide-react";
 
 type Message = {
   role: "user" | "assistant";
   content: string;
 };
 
-// Base64'ten Blob'a dönüştürücü (iOS Safari için data-uri yerine Blob URL çok daha kararlıdır)
-function base64ToBlob(base64: string, mimeType = "audio/mpeg"): Blob {
-  const byteChars = atob(base64);
-  const byteNumbers = new Uint8Array(byteChars.length);
-  for (let i = 0; i < byteChars.length; i++) {
-    byteNumbers[i] = byteChars.charCodeAt(i);
+// Base64'ten ArrayBuffer'a dönüştürücü (Web Audio API decodeAudioData için)
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binaryString = window.atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
   }
-  return new Blob([byteNumbers], { type: mimeType });
+  return bytes.buffer;
 }
+
+const AVAILABLE_MODELS = [
+  { id: "gemini-3.8-flash-high", label: "Gemini 3.8 Flash (Hızlı & Akıcı)" },
+  { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Lite (Ultra Hızlı)" },
+  { id: "claude-sonnet-5-5-high", label: "Claude Sonnet 5.5 (Doğal & Edebi)" },
+  { id: "gpt-5.6-sol", label: "GPT-5.6 Sol (Analitik Zeka)" },
+  { id: "gpt-6-sol", label: "GPT-6 Sol (En Güçlü)" },
+];
 
 export default function LiveCallPage() {
   const [isCalling, setIsCalling] = useState(false);
@@ -25,17 +34,19 @@ export default function LiveCallPage() {
   const [callDuration, setCallDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState("tr-TR-AhmetNeural");
+  const [selectedModel, setSelectedModel] = useState("gemini-3.8-flash-high");
   const [interimText, setInterimText] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const recognitionRef = useRef<any>(null);
-  const audioElRef = useRef<HTMLAudioElement | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const isBusyRef = useRef(false); // Düşünürken veya konuşurken mikrofonu kilitleyen atomik kilit
   const isSpeakingRef = useRef(false);
   const isCallingRef = useRef(false);
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const wakeLockRef = useRef<any>(null);
-  const activeBlobUrlRef = useRef<string | null>(null);
 
   // Çağrı süresi sayacı
   useEffect(() => {
@@ -76,66 +87,85 @@ export default function LiveCallPage() {
 
   // Ses oynatıcıyı durdurma (Barge-in / araya girme)
   function stopCurrentAudio() {
-    if (audioElRef.current) {
-      audioElRef.current.pause();
-      audioElRef.current.currentTime = 0;
+    if (activeSourceRef.current) {
+      try {
+        activeSourceRef.current.stop();
+        activeSourceRef.current.disconnect();
+      } catch {}
+      activeSourceRef.current = null;
     }
     if ("speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
-    if (activeBlobUrlRef.current) {
-      URL.revokeObjectURL(activeBlobUrlRef.current);
-      activeBlobUrlRef.current = null;
-    }
     isSpeakingRef.current = false;
-  }
-
-  // Apple iOS Native SpeechSynthesis yedeği
-  function playNativeVoiceFallback(text: string) {
-    if (!("speechSynthesis" in window) || !isCallingRef.current) {
-      onSpeechEnded();
-      return;
-    }
-
-    try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "tr-TR";
-      utterance.rate = 1.05;
-
-      const voices = window.speechSynthesis.getVoices();
-      const trVoice = voices.find((v) => v.lang.startsWith("tr"));
-      if (trVoice) utterance.voice = trVoice;
-
-      utterance.onend = () => onSpeechEnded();
-      utterance.onerror = () => onSpeechEnded();
-
-      setStatus("speaking");
-      isSpeakingRef.current = true;
-      window.speechSynthesis.speak(utterance);
-    } catch {
-      onSpeechEnded();
-    }
   }
 
   // Hermes'in konuşması bittiğinde tetiklenir
   function onSpeechEnded() {
-    isSpeakingRef.current = false;
-    if (activeBlobUrlRef.current) {
-      URL.revokeObjectURL(activeBlobUrlRef.current);
-      activeBlobUrlRef.current = null;
-    }
-    if (isCallingRef.current) {
-      setStatus("listening");
-      startSpeechRecognitionSafe();
+    stopCurrentAudio();
+    // 400ms sessizlik tamponu (hoparlör yankısını mikrofonun yakalamasını önler)
+    setTimeout(() => {
+      isSpeakingRef.current = false;
+      isBusyRef.current = false;
+      if (isCallingRef.current) {
+        setStatus("listening");
+        startSpeechRecognitionSafe();
+      }
+    }, 400);
+  }
+
+  // Web Audio API ile Edge-TTS sesini kayıpsız çalma (iOS Safari Autoplay Bypass)
+  async function playDecodedAudio(audioBase64: string): Promise<boolean> {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
+
+      stopCurrentAudio();
+
+      const arrayBuffer = base64ToArrayBuffer(audioBase64);
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      source.onended = () => onSpeechEnded();
+
+      activeSourceRef.current = source;
+      setStatus("speaking");
+      isSpeakingRef.current = true;
+      source.start(0);
+      return true;
+    } catch (err) {
+      console.warn("[WebAudio] decodeAudioData hatası:", err);
+      return false;
     }
   }
 
   // Hermes'e mesaj gönderme ve ses çalma
   async function sendToHermes(userUtterance: string) {
-    if (!userUtterance.trim() || !isCallingRef.current) return;
+    if (isBusyRef.current || !userUtterance.trim() || !isCallingRef.current) {
+      return;
+    }
 
+    isBusyRef.current = true;
     setStatus("thinking");
+
+    // Mikrofonu ve zamanlayıcıları derhal sustur (çift istek ve yankı koruması)
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch {}
+    }
+
     const updatedHistory: Message[] = [...messages, { role: "user", content: userUtterance.trim() }];
     setMessages(updatedHistory);
     setInterimText("");
@@ -148,6 +178,7 @@ export default function LiveCallPage() {
           message: userUtterance.trim(),
           history: updatedHistory.slice(-6),
           voice: selectedVoice,
+          model: selectedModel,
         }),
       });
 
@@ -159,31 +190,25 @@ export default function LiveCallPage() {
       const replyText = data.text;
       setMessages((prev) => [...prev, { role: "assistant", content: replyText }]);
 
-      // 1. Önce ses dosyasıyla (Edge-TTS) çalmayı dene
-      if (data.audioBase64 && isCallingRef.current && audioElRef.current) {
-        try {
-          setStatus("speaking");
-          isSpeakingRef.current = true;
+      if (!isCallingRef.current) {
+        isBusyRef.current = false;
+        return;
+      }
 
-          const blob = base64ToBlob(data.audioBase64, "audio/mpeg");
-          const blobUrl = URL.createObjectURL(blob);
-          activeBlobUrlRef.current = blobUrl;
-
-          const audio = audioElRef.current;
-          audio.src = blobUrl;
-          await audio.play();
-        } catch (playErr) {
-          console.warn("[Call] HTML5 audio.play engellendi, iOS yerel ses sentezine geçiliyor:", playErr);
-          // 2. iOS Safari engellerse anında yerel iOS Türkçe ses motorunu devreye sok
-          playNativeVoiceFallback(replyText);
+      // Web Audio API üzerinden seçilen nöral sesi çal (Erkek: Ahmet / Kadın: Emel)
+      if (data.audioBase64) {
+        const played = await playDecodedAudio(data.audioBase64);
+        if (!played) {
+          onSpeechEnded();
         }
       } else {
-        // Ses gelmediyse yerel ses senteziyle oku
-        playNativeVoiceFallback(replyText);
+        onSpeechEnded();
       }
     } catch (err: any) {
       console.error("[Call] Gönderim hatası:", err);
       setErrorMsg(err.message || "İletişim hatası oluştu.");
+      isBusyRef.current = false;
+      isSpeakingRef.current = false;
       setStatus("listening");
       startSpeechRecognitionSafe();
     }
@@ -191,7 +216,7 @@ export default function LiveCallPage() {
 
   // Güvenli SpeechRecognition başlatıcı
   function startSpeechRecognitionSafe() {
-    if (!recognitionRef.current || !isCallingRef.current) return;
+    if (!recognitionRef.current || !isCallingRef.current || isBusyRef.current) return;
     try {
       recognitionRef.current.start();
     } catch {
@@ -200,29 +225,24 @@ export default function LiveCallPage() {
   }
 
   // Aramayı başlat
-  function startCall() {
+  async function startCall() {
     setErrorMsg(null);
     setIsCalling(true);
     isCallingRef.current = true;
+    isBusyRef.current = false;
     setStatus("listening");
 
-    // 🔥 KRİTİK iOS SAFARI OPTİMİZASYONU:
-    // Kullanıcı butona dokunduğu an (User Interaction) ses motorunu kilitsiz hale getir (Prime / Unlock)
-    if (audioElRef.current) {
-      audioElRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-      audioElRef.current.play().then(() => {
-        if (audioElRef.current) {
-          audioElRef.current.pause();
-          audioElRef.current.currentTime = 0;
-        }
-      }).catch((e) => console.log("Audio unlock:", e));
-    }
-
-    if ("speechSynthesis" in window) {
-      try {
-        const dummy = new SpeechSynthesisUtterance("");
-        window.speechSynthesis.speak(dummy);
-      } catch {}
+    // 🔥 KRİTİK iOS SAFARI KİLİT AÇMA (AudioContext Unlock):
+    // Kullanıcı butona dokunduğu an AudioContext'i başlat ve resume et
+    try {
+      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtxClass) {
+        const ctx = new AudioCtxClass();
+        await ctx.resume();
+        audioCtxRef.current = ctx;
+      }
+    } catch (e) {
+      console.warn("AudioContext başlatılamadı:", e);
     }
 
     const SpeechRecognition =
@@ -242,17 +262,21 @@ export default function LiveCallPage() {
     let pendingFinalTranscript = "";
 
     recognition.onstart = () => {
-      if (!isSpeakingRef.current) {
+      if (!isBusyRef.current) {
         setStatus("listening");
       }
     };
 
     recognition.onresult = (event: any) => {
-      // Kullanıcı konuşmaya başladıysa ve Hermes o sırada konuşuyorsa: Araya girme (Barge-in)!
+      // Eğer Hermes konuşuyorsa araya gir (Barge-in)
       if (isSpeakingRef.current) {
         stopCurrentAudio();
+        isBusyRef.current = false;
         setStatus("listening");
       }
+
+      // Eğer Hermes düşünüyorsa mükerrer sesleri engelle
+      if (isBusyRef.current) return;
 
       let currentInterim = "";
       for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -265,17 +289,14 @@ export default function LiveCallPage() {
 
       setInterimText(currentInterim || pendingFinalTranscript);
 
-      // Sessizlik kontrolü: Kullanıcı 900ms duraksadığında cümleyi Hermes'e gönder
+      // Sessizlik kontrolü: 950ms duraksandığında Hermes'e tek bir istek olarak gönder
       if (silenceTimerRef.current) {
         clearTimeout(silenceTimerRef.current);
       }
 
       silenceTimerRef.current = setTimeout(() => {
         const fullSentence = (pendingFinalTranscript + " " + currentInterim).trim();
-        if (fullSentence.length > 1) {
-          try {
-            recognition.stop();
-          } catch {}
+        if (fullSentence.length > 1 && !isBusyRef.current) {
           pendingFinalTranscript = "";
           setInterimText("");
           sendToHermes(fullSentence);
@@ -292,8 +313,8 @@ export default function LiveCallPage() {
     };
 
     recognition.onend = () => {
-      // Çağrı devam ediyorsa ve Hermes konuşmuyorsa dinlemeyi sürdür
-      if (isCallingRef.current && !isSpeakingRef.current) {
+      // SADECE Hermes meşgul DEĞİLSE mikrofonu açık tut (yankı ve çift cevap önleyici)
+      if (isCallingRef.current && !isBusyRef.current) {
         startSpeechRecognitionSafe();
       }
     };
@@ -305,6 +326,7 @@ export default function LiveCallPage() {
   // Aramayı sonlandır
   function endCall() {
     isCallingRef.current = false;
+    isBusyRef.current = false;
     setIsCalling(false);
     setStatus("idle");
     stopCurrentAudio();
@@ -317,6 +339,7 @@ export default function LiveCallPage() {
     }
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
     }
   }
 
@@ -334,75 +357,94 @@ export default function LiveCallPage() {
       display: "flex",
       flexDirection: "column",
       justifyContent: "space-between",
-      padding: "24px 20px 40px",
+      padding: "20px 16px 36px",
       fontFamily: "'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
       position: "relative",
       overflow: "hidden",
     }}>
-      {/* Gizli ve Hazır HTML5 Ses Elementi (iOS Kilitsiz Oynatma İçin) */}
-      <audio
-        ref={audioElRef}
-        playsInline
-        preload="auto"
-        onEnded={onSpeechEnded}
-        onError={onSpeechEnded}
-        style={{ display: "none" }}
-      />
-
-      {/* Üst Bar */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 }}>
-        <Link href="/" style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "6px",
-          color: "#94a3b8",
-          textDecoration: "none",
-          fontSize: "13px",
-          background: "rgba(255, 255, 255, 0.06)",
-          padding: "6px 12px",
-          borderRadius: "20px",
-          backdropFilter: "blur(10px)",
-        }}>
-          <ArrowLeft size={14} />
-          <span>Dashboard</span>
-        </Link>
-
-        {isCalling && (
-          <div style={{
+      {/* Üst Bar: Navigasyon, Süre, Model & Ses Seçicileri */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "10px", zIndex: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Link href="/" style={{
             display: "flex",
             alignItems: "center",
             gap: "6px",
-            background: "rgba(34, 197, 94, 0.12)",
-            border: "1px solid rgba(34, 197, 94, 0.3)",
-            padding: "4px 12px",
-            borderRadius: "16px",
-            fontSize: "12px",
-            color: "#4ade80",
-            fontWeight: 600,
-          }}>
-            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#22c55e", display: "inline-block", animation: "pulse 1.5s infinite" }} />
-            <span>{formatTime(callDuration)}</span>
-          </div>
-        )}
-
-        {/* Ses Seçici */}
-        <select
-          value={selectedVoice}
-          onChange={(e) => setSelectedVoice(e.target.value)}
-          disabled={isCalling}
-          style={{
+            color: "#94a3b8",
+            textDecoration: "none",
+            fontSize: "13px",
             background: "rgba(255, 255, 255, 0.06)",
-            border: "1px solid rgba(255, 255, 255, 0.1)",
-            color: "#cbd5e1",
-            padding: "6px 10px",
-            borderRadius: "14px",
-            fontSize: "11px",
-            outline: "none",
-          }}
-        >
-          <option value="tr-TR-AhmetNeural" style={{ background: "#111" }}>Ahmet (Erkek)</option>
-          <option value="tr-TR-EmelNeural" style={{ background: "#111" }}>Emel (Kadın)</option>
-        </select>
+            padding: "6px 12px",
+            borderRadius: "20px",
+            backdropFilter: "blur(10px)",
+          }}>
+            <ArrowLeft size={14} />
+            <span>Dashboard</span>
+          </Link>
+
+          {isCalling && (
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              background: "rgba(34, 197, 94, 0.12)",
+              border: "1px solid rgba(34, 197, 94, 0.3)",
+              padding: "4px 12px",
+              borderRadius: "16px",
+              fontSize: "12px",
+              color: "#4ade80",
+              fontWeight: 600,
+            }}>
+              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#22c55e", display: "inline-block", animation: "pulse 1.5s infinite" }} />
+              <span>{formatTime(callDuration)}</span>
+            </div>
+          )}
+
+          {/* Ses Seçici (Ahmet Erkek / Emel Kadın) */}
+          <select
+            value={selectedVoice}
+            onChange={(e) => setSelectedVoice(e.target.value)}
+            disabled={isCalling}
+            style={{
+              background: "rgba(255, 255, 255, 0.08)",
+              border: "1px solid rgba(255, 255, 255, 0.15)",
+              color: "#cbd5e1",
+              padding: "6px 10px",
+              borderRadius: "14px",
+              fontSize: "11.5px",
+              outline: "none",
+              fontWeight: 600,
+            }}
+          >
+            <option value="tr-TR-AhmetNeural" style={{ background: "#111" }}>👨 Ahmet (Erkek)</option>
+            <option value="tr-TR-EmelNeural" style={{ background: "#111" }}>👩 Emel (Kadın)</option>
+          </select>
+        </div>
+
+        {/* Model Seçici (Yapay Zeka Seçimi) */}
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(255, 255, 255, 0.04)", padding: "4px 10px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.07)" }}>
+          <Cpu size={13} color="#818cf8" />
+          <span style={{ fontSize: "11px", color: "#94a3b8" }}>Model:</span>
+          <select
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            disabled={isCalling}
+            style={{
+              flex: 1,
+              background: "transparent",
+              border: "none",
+              color: "#e2e8f0",
+              fontSize: "11px",
+              outline: "none",
+              cursor: "pointer",
+            }}
+          >
+            {AVAILABLE_MODELS.map((m) => (
+              <option key={m.id} value={m.id} style={{ background: "#111" }}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Orta Görsel & Dalga Alanı */}
@@ -413,7 +455,7 @@ export default function LiveCallPage() {
         justifyContent: "center",
         flex: 1,
         textAlign: "center",
-        margin: "30px 0",
+        margin: "20px 0",
         position: "relative",
       }}>
         {/* Arka Plan Glow */}
@@ -423,39 +465,51 @@ export default function LiveCallPage() {
           height: "280px",
           borderRadius: "50%",
           background: status === "speaking"
-            ? "radial-gradient(circle, rgba(99, 102, 241, 0.25) 0%, rgba(99, 102, 241, 0) 70%)"
+            ? "radial-gradient(circle, rgba(99, 102, 241, 0.3) 0%, rgba(99, 102, 241, 0) 70%)"
             : status === "listening"
-            ? "radial-gradient(circle, rgba(34, 197, 94, 0.25) 0%, rgba(34, 197, 94, 0) 70%)"
+            ? "radial-gradient(circle, rgba(34, 197, 94, 0.3) 0%, rgba(34, 197, 94, 0) 70%)"
             : status === "thinking"
-            ? "radial-gradient(circle, rgba(234, 179, 8, 0.25) 0%, rgba(234, 179, 8, 0) 70%)"
+            ? "radial-gradient(circle, rgba(234, 179, 8, 0.3) 0%, rgba(234, 179, 8, 0) 70%)"
             : "radial-gradient(circle, rgba(148, 163, 184, 0.1) 0%, rgba(148, 163, 184, 0) 70%)",
           filter: "blur(20px)",
           transition: "all 0.6s ease",
           zIndex: 1,
         }} />
 
-        {/* Ana Ses Küresi */}
-        <div style={{
-          width: "140px",
-          height: "140px",
-          borderRadius: "50%",
-          background: status === "speaking"
-            ? "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)"
-            : status === "listening"
-            ? "linear-gradient(135deg, #22c55e 0%, #10b981 100%)"
-            : status === "thinking"
-            ? "linear-gradient(135deg, #eab308 0%, #f97316 100%)"
-            : "linear-gradient(135deg, #1e293b 0%, #334155 100%)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          boxShadow: isCalling
-            ? "0 0 50px rgba(99, 102, 241, 0.4), inset 0 0 20px rgba(255, 255, 255, 0.3)"
-            : "0 10px 30px rgba(0, 0, 0, 0.5)",
-          transform: status === "speaking" || status === "listening" ? "scale(1.08)" : "scale(1)",
-          transition: "all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
-          zIndex: 2,
-        }}>
+        {/* Ana Ses Küresi (Araya girmek için dokunulabilir) */}
+        <div
+          onClick={() => {
+            if (isSpeakingRef.current) {
+              stopCurrentAudio();
+              isBusyRef.current = false;
+              setStatus("listening");
+              startSpeechRecognitionSafe();
+            }
+          }}
+          style={{
+            width: "140px",
+            height: "140px",
+            borderRadius: "50%",
+            background: status === "speaking"
+              ? "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)"
+              : status === "listening"
+              ? "linear-gradient(135deg, #22c55e 0%, #10b981 100%)"
+              : status === "thinking"
+              ? "linear-gradient(135deg, #eab308 0%, #f97316 100%)"
+              : "linear-gradient(135deg, #1e293b 0%, #334155 100%)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: isCalling
+              ? "0 0 50px rgba(99, 102, 241, 0.4), inset 0 0 20px rgba(255, 255, 255, 0.3)"
+              : "0 10px 30px rgba(0, 0, 0, 0.5)",
+            transform: status === "speaking" || status === "listening" ? "scale(1.08)" : "scale(1)",
+            transition: "all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
+            zIndex: 2,
+            cursor: isSpeakingRef.current ? "pointer" : "default",
+          }}
+          title={isSpeakingRef.current ? "Araya girmek için dokunun" : ""}
+        >
           {status === "speaking" ? (
             <Volume2 size={48} color="#ffffff" />
           ) : status === "thinking" ? (
@@ -466,19 +520,19 @@ export default function LiveCallPage() {
         </div>
 
         {/* Durum Başlığı */}
-        <h2 style={{ fontSize: "24px", fontWeight: 700, margin: "24px 0 6px", letterSpacing: "-0.5px" }}>
+        <h2 style={{ fontSize: "23px", fontWeight: 700, margin: "22px 0 6px", letterSpacing: "-0.5px" }}>
           Hermes Canlı Asistan
         </h2>
 
         <p style={{
-          fontSize: "14px",
+          fontSize: "13.5px",
           color: status === "speaking" ? "#a5b4fc" : status === "listening" ? "#86efac" : status === "thinking" ? "#fde047" : "#94a3b8",
           margin: 0,
           fontWeight: 500,
           transition: "color 0.3s ease",
         }}>
           {status === "speaking"
-            ? "Hermes konuşuyor..."
+            ? "Hermes konuşuyor (araya girmek için konuşun veya dokunun)..."
             : status === "thinking"
             ? "Düşünüyor..."
             : status === "listening"

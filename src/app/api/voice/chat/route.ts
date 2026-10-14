@@ -12,13 +12,13 @@ Kurallar:
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { message, history = [], voice = "tr-TR-AhmetNeural" } = body;
+    const { message, history = [], voice = "tr-TR-AhmetNeural", model } = body;
 
     if (!message || typeof message !== "string" || !message.trim()) {
       return Response.json({ ok: false, error: "Mesaj boş olamaz." }, { status: 400 });
     }
 
-    // 1. Zeka motoru (Gemini 3.8 Flash High) ile yanıt üretimi
+    // 1. Zeka motoru ile yanıt üretimi
     const historyText = Array.isArray(history) && history.length > 0
       ? `Son konuşma akışı:\n${history.slice(-6).map((h: { role: string; content: string }) => `${h.role === "user" ? "Oğuz" : "Hermes"}: ${h.content}`).join("\n")}\n\n`
       : "";
@@ -28,6 +28,7 @@ export async function POST(request: Request) {
     const result = await completeText(SYSTEM_VOICE_PROMPT, userPrompt, {
       temperature: 0.7,
       maxTokens: 200,
+      model: model || undefined,
     });
 
     const cleanReply = result.content

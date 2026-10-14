@@ -5,12 +5,12 @@ import { decryptSecret } from "@/lib/server/secrets";
 
 type ProviderRow = { base_url: string; encrypted_api_key: string; text_model: string };
 
-export async function completeText(system: string, prompt: string, options?: { temperature?: number; maxTokens?: number }) {
+export async function completeText(system: string, prompt: string, options?: { temperature?: number; maxTokens?: number; model?: string }) {
   const provider = getDatabase().prepare("SELECT base_url, encrypted_api_key, text_model FROM ai_provider_configs WHERE provider = 'cliproxy' AND enabled = 1").get() as ProviderRow | undefined;
   if (!provider?.base_url || !provider.encrypted_api_key) throw new Error("Önce Sistem Ayarları'ndan CliProxyAPI bağlantısını kaydedin.");
   const apiKey = decryptSecret(provider.encrypted_api_key);
   const baseUrl = provider.base_url.replace(/\/+$/, "");
-  let model = provider.text_model;
+  let model = options?.model || provider.text_model;
   if (!model) {
     const response = await fetch(`${baseUrl}/models`, { headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(10_000) });
     const body = await response.json() as { data?: { id?: string }[] };
