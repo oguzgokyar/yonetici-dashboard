@@ -106,6 +106,33 @@ test("buildPlatformSettings handles TikTok settings with __type", () => {
   assert.equal(settings.title, "TikTok Başlık");
   assert.equal(settings.content_posting_method, "DIRECT_POST");
   assert.equal(settings.privacy_level, "SELF_ONLY");
+  assert.equal(settings.video_made_with_ai, true);
+
+  const disabledAiSettings = buildPlatformSettings({
+    platformIdentifier: "tiktok",
+    caption: "TikTok açıklaması",
+    isAiGenerated: false,
+  });
+  assert.equal(disabledAiSettings.video_made_with_ai, false);
+});
+
+test("buildPlatformSettings handles X/Twitter settings with made_with_ai", () => {
+  const xSettings = buildPlatformSettings({
+    platformIdentifier: "x",
+    caption: "X Tweet paylaşımı",
+    isAiGenerated: true,
+  });
+
+  assert.equal(xSettings.__type, "x");
+  assert.equal(xSettings.who_can_reply_post, "everyone");
+  assert.equal(xSettings.made_with_ai, true);
+
+  const xDisabled = buildPlatformSettings({
+    platformIdentifier: "twitter",
+    caption: "X Tweet paylaşımı",
+    isAiGenerated: false,
+  });
+  assert.equal(xDisabled.made_with_ai, false);
 });
 
 test("buildCaption automatically adds #Shorts for YouTube Shorts if missing", () => {
@@ -122,4 +149,17 @@ test("buildCaption automatically adds #Shorts for YouTube Shorts if missing", ()
     caption: "Harika video #shorts izle",
   });
   assert.equal(alreadyHas, "Harika video #shorts izle");
+});
+
+test("buildCaption appends #MadeWithAI and relatedVideoUrl correctly", () => {
+  const cap = buildCaption({
+    platformIdentifier: "youtube",
+    postType: "reel",
+    caption: "Deney videosu",
+    isAiGenerated: true,
+    relatedVideoUrl: "https://youtube.com/shorts/part2",
+  });
+  assert.ok(cap.includes("#Shorts"));
+  assert.ok(cap.includes("#MadeWithAI"));
+  assert.ok(cap.includes("👉 İlgili Video: https://youtube.com/shorts/part2"));
 });

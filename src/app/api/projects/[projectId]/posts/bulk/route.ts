@@ -33,6 +33,9 @@ type TargetSetting = {
   youtubeSettings?: YouTubePostSettings;
   tiktokSettings?: TikTokPostSettings;
   tiktokMethod?: "postiz" | "browser";
+  isAiGenerated?: boolean;
+  relatedPostId?: string;
+  relatedVideoUrl?: string;
 };
 
 type BulkItemPayload = {
@@ -45,6 +48,9 @@ type BulkItemPayload = {
   hashtags?: string;
   scheduleType?: "now" | "schedule" | "draft";
   scheduledAt?: string;
+  isAiGenerated?: boolean;
+  relatedPostId?: string;
+  relatedVideoUrl?: string;
   targets: TargetSetting[];
 };
 
@@ -131,6 +137,10 @@ export async function POST(request: Request, context: Context) {
           const platformIdentifier = targetAccount?.identifier || "instagram";
 
           try {
+            const isAi = target.isAiGenerated !== undefined ? (target.isAiGenerated ? 1 : 0) : item.isAiGenerated !== undefined ? (item.isAiGenerated ? 1 : 0) : 1;
+            const relPostId = target.relatedPostId || item.relatedPostId || null;
+            const relVideoUrl = target.relatedVideoUrl || item.relatedVideoUrl || null;
+
             const postizResult = await createPostizPost({
               type: targetScheduleType,
               date: targetScheduledAt,
@@ -141,6 +151,8 @@ export async function POST(request: Request, context: Context) {
               postType: targetPostType,
               youtubeSettings: target.youtubeSettings,
               tiktokSettings: target.tiktokSettings,
+              isAiGenerated: isAi === 1,
+              relatedVideoUrl: relVideoUrl || undefined,
             });
 
             const createdPostId = postizResult[0]?.postId || "";
@@ -157,8 +169,9 @@ export async function POST(request: Request, context: Context) {
                   id, project_id, title, content_type, media_url,
                   caption, hashtags, status, schedule_type, scheduled_at,
                   integration_id, post_type, postiz_post_id, media_package_id,
-                  media_json, error_message, created_at, updated_at
-                ) VALUES (?, ?, ?, 'image', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+                  media_json, is_ai_generated, related_post_id, related_video_url,
+                  error_message, created_at, updated_at
+                ) VALUES (?, ?, ?, 'image', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
               `)
               .run(
                 postId,
@@ -175,6 +188,9 @@ export async function POST(request: Request, context: Context) {
                 createdPostId,
                 mediaPackageId,
                 JSON.stringify(postizMediaList.map((m) => ({ url: m.path }))),
+                isAi,
+                relPostId,
+                relVideoUrl,
                 now,
                 now
               );
@@ -360,6 +376,9 @@ export async function POST(request: Request, context: Context) {
           .get(projectId, target.integrationId) as { identifier?: string; tiktok_method?: string } | undefined;
         const platformIdentifier = targetAccount?.identifier || "instagram";
         const effectiveTiktokMethod = target.tiktokMethod || targetAccount?.tiktok_method || "browser";
+        const isAi = target.isAiGenerated !== undefined ? (target.isAiGenerated ? 1 : 0) : item.isAiGenerated !== undefined ? (item.isAiGenerated ? 1 : 0) : 1;
+        const relPostId = target.relatedPostId || item.relatedPostId || null;
+        const relVideoUrl = target.relatedVideoUrl || item.relatedVideoUrl || null;
 
         // TikTok Tarayıcı Yükleme Modu Kontrolü
         if (platformIdentifier.includes("tiktok") && effectiveTiktokMethod === "browser" && isVideo) {
@@ -376,8 +395,9 @@ export async function POST(request: Request, context: Context) {
                     id, project_id, title, content_type, media_url,
                     caption, hashtags, status, schedule_type, scheduled_at,
                     integration_id, post_type, postiz_post_id, postiz_media_id,
-                    local_path, error_message, created_at, updated_at
-                  ) VALUES (?, ?, ?, 'video', ?, ?, ?, 'scheduled', 'schedule', ?, ?, ?, NULL, NULL, ?, NULL, ?, ?)
+                    local_path, is_ai_generated, related_post_id, related_video_url,
+                    error_message, created_at, updated_at
+                  ) VALUES (?, ?, ?, 'video', ?, ?, ?, 'scheduled', 'schedule', ?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL, ?, ?)
                 `)
                 .run(
                   postId,
@@ -390,6 +410,9 @@ export async function POST(request: Request, context: Context) {
                   target.integrationId,
                   targetPostType,
                   queueFilePath,
+                  isAi,
+                  relPostId,
+                  relVideoUrl,
                   now,
                   now
                 );
@@ -417,6 +440,7 @@ export async function POST(request: Request, context: Context) {
               videoPath: tmpVideoPath,
               caption: fullCaption,
               visibility: targetScheduleType === "draft" ? "SELF_ONLY" : "PUBLIC",
+              isAiGenerated: isAi === 1,
             });
             try { fs.unlinkSync(tmpVideoPath); } catch {}
 
@@ -436,8 +460,10 @@ export async function POST(request: Request, context: Context) {
                   id, project_id, title, content_type, media_url,
                   caption, hashtags, status, schedule_type, scheduled_at,
                   integration_id, post_type, postiz_post_id, postiz_media_id,
+                  is_ai_generated, related_post_id, related_video_url,
                   error_message, created_at, updated_at
-                ) VALUES (?, ?, ?, 'video', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)\n              `)
+                ) VALUES (?, ?, ?, 'video', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+              `)
               .run(
                 postId,
                 projectId,
@@ -452,6 +478,9 @@ export async function POST(request: Request, context: Context) {
                 targetPostType,
                 `tiktok_browser_${postId.slice(0, 8)}`,
                 postizMedia?.id || "",
+                isAi,
+                relPostId,
+                relVideoUrl,
                 now,
                 now
               );
@@ -483,6 +512,8 @@ export async function POST(request: Request, context: Context) {
             postType: targetPostType,
             youtubeSettings: target.youtubeSettings,
             tiktokSettings: target.tiktokSettings,
+            isAiGenerated: isAi === 1,
+            relatedVideoUrl: relVideoUrl || undefined,
           });
 
           const createdPostId = postizResult[0]?.postId || "";
@@ -499,8 +530,9 @@ export async function POST(request: Request, context: Context) {
                 id, project_id, title, content_type, media_url,
                 caption, hashtags, status, schedule_type, scheduled_at,
                 integration_id, post_type, postiz_post_id, postiz_media_id,
+                is_ai_generated, related_post_id, related_video_url,
                 error_message, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
             `)
             .run(
               postId,
@@ -517,6 +549,9 @@ export async function POST(request: Request, context: Context) {
               targetPostType,
               createdPostId,
               postizMedia ? postizMedia.id : null,
+              isAi,
+              relPostId,
+              relVideoUrl,
               now,
               now
             );

@@ -31,6 +31,8 @@ export type PlatformSettingsParams = {
   tiktokSettings?: TikTokPostSettings;
   videoDurationSeconds?: number;
   videoAspectRatio?: "9:16" | "16:9" | "1:1" | "4:5";
+  isAiGenerated?: boolean;
+  relatedVideoUrl?: string;
 };
 
 /**
@@ -108,6 +110,8 @@ export function buildPlatformSettings(params: PlatformSettingsParams): Record<st
       params.tiktokSettings?.title ||
       (params.caption ? params.caption.slice(0, 85).trim() : undefined);
 
+    const isAi = params.tiktokSettings?.video_made_with_ai ?? params.isAiGenerated ?? true;
+
     return {
       __type: "tiktok",
       ...(title ? { title: title.slice(0, 90) } : {}),
@@ -119,23 +123,50 @@ export function buildPlatformSettings(params: PlatformSettingsParams): Record<st
       autoAddMusic: params.tiktokSettings?.autoAddMusic || "no",
       brand_content_toggle: params.tiktokSettings?.brand_content_toggle ?? false,
       brand_organic_toggle: params.tiktokSettings?.brand_organic_toggle ?? false,
-      video_made_with_ai: params.tiktokSettings?.video_made_with_ai ?? true,
+      video_made_with_ai: isAi,
+    };
+  }
+
+  if (platform.includes("x") || platform.includes("twitter")) {
+    return {
+      __type: "x",
+      who_can_reply_post: "everyone",
+      made_with_ai: params.isAiGenerated ?? true,
     };
   }
 
   // Instagram / Instagram Standalone (default)
   const postizPostType = params.postType === "story" ? "story" : "post";
-  return { post_type: postizPostType };
+  return {
+    post_type: postizPostType,
+    ...(params.isAiGenerated !== undefined ? { is_ai_generated: params.isAiGenerated } : {}),
+  };
 }
 
 /**
- * Auto-appends #Shorts to caption for YouTube Shorts videos if not already present.
+ * Auto-appends #Shorts to caption for YouTube Shorts videos if not already present,
+ * and appends AI disclosure or related video link if configured.
  */
 export function buildCaption(params: PlatformSettingsParams): string {
   const platform = (params.platformIdentifier || "instagram").toLowerCase();
+  let caption = params.caption;
+
   if (platform.includes("youtube") && isYouTubeShorts(params)) {
-    const hasShorts = params.caption.toLowerCase().includes("#shorts");
-    return hasShorts ? params.caption : `${params.caption}\n\n#Shorts`;
+    const hasShorts = caption.toLowerCase().includes("#shorts");
+    if (!hasShorts) {
+      caption = `${caption}\n\n#Shorts`;
+    }
+    if (params.isAiGenerated && !caption.toLowerCase().includes("#madewithai") && !caption.toLowerCase().includes("#yapayzeka")) {
+      caption = `${caption} #MadeWithAI`;
+    }
   }
-  return params.caption;
+
+  if (params.relatedVideoUrl && params.relatedVideoUrl.trim()) {
+    const cleanUrl = params.relatedVideoUrl.trim();
+    if (!caption.includes(cleanUrl)) {
+      caption = `${caption}\n\n👉 İlgili Video: ${cleanUrl}`;
+    }
+  }
+
+  return caption;
 }

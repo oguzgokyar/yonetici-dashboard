@@ -217,6 +217,9 @@ export function PublishingStudio({
   const [newSetTags, setNewSetTags] = useState("");
   const [savingHashtagSet, setSavingHashtagSet] = useState(false);
   const [tiktokUploadMethod, setTiktokUploadMethod] = useState<"browser" | "postiz">("browser");
+  const [isAiGenerated, setIsAiGenerated] = useState<boolean>(true);
+  const [relatedVideoUrl, setRelatedVideoUrl] = useState<string>("");
+  const [cleaningWatermark, setCleaningWatermark] = useState<boolean>(false);
 
   // -------------------------------------------------------------
   // BULK PUBLISHING STATE
@@ -233,6 +236,8 @@ export function PublishingStudio({
     asset: RecentAsset;
     scheduledAt: string;
     isPrepared: boolean;
+    isAiGenerated?: boolean;
+    relatedVideoUrl?: string;
     // Platform-specific content records
     platformData: Record<string, {
       title: string;
@@ -1167,10 +1172,12 @@ export function PublishingStudio({
                 title: pContent.title.slice(0, 90),
                 content_posting_method: "DIRECT_POST" as const,
                 privacy_level: "SELF_ONLY" as const,
-                video_made_with_ai: true,
+                video_made_with_ai: item.isAiGenerated !== undefined ? item.isAiGenerated : isAiGenerated,
               }
             : undefined,
           tiktokMethod: isTt ? tiktokUploadMethod : undefined,
+          isAiGenerated: item.isAiGenerated !== undefined ? item.isAiGenerated : isAiGenerated,
+          relatedVideoUrl: item.relatedVideoUrl || relatedVideoUrl.trim() || undefined,
         };
       });
 
@@ -1186,6 +1193,8 @@ export function PublishingStudio({
         hashtags: firstContent.hashtags,
         scheduleType: bulkScheduleMode === "draft" ? ("draft" as const) : bulkScheduleMode === "now" ? ("now" as const) : ("schedule" as const),
         scheduledAt: formattedDate,
+        isAiGenerated: item.isAiGenerated !== undefined ? item.isAiGenerated : isAiGenerated,
+        relatedVideoUrl: item.relatedVideoUrl || relatedVideoUrl.trim() || undefined,
         targets,
       };
     });
@@ -1294,10 +1303,12 @@ export function PublishingStudio({
               title: (rawTitle || "Video Paylaşımı").slice(0, 90),
               content_posting_method: "DIRECT_POST" as const,
               privacy_level: "SELF_ONLY" as const,
-              video_made_with_ai: true,
+              video_made_with_ai: isAiGenerated,
             }
           : undefined,
         tiktokMethod: isTt ? tiktokUploadMethod : undefined,
+        isAiGenerated,
+        relatedVideoUrl: relatedVideoUrl.trim() || undefined,
       };
     });
 
@@ -1315,6 +1326,8 @@ export function PublishingStudio({
           hashtags: globalHashtags,
           scheduleType,
           scheduledAt: formattedDate,
+          isAiGenerated,
+          relatedVideoUrl: relatedVideoUrl.trim() || undefined,
           targets,
         }),
       });
@@ -2146,6 +2159,121 @@ export function PublishingStudio({
               </div>
             </div>
 
+            {/* Ek Özellikler: AI Belirteci & Video Bağlama */}
+            <div className="composer-section" style={{ borderTop: "1px solid #f0f0f4", paddingTop: "14px", marginBottom: "8px" }}>
+              <div className="composer-section-title">
+                <span>Yapay Zeka &amp; Video Bağlama</span>
+              </div>
+
+              {/* AI Disclosure Switch Card */}
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "10px 14px",
+                background: "#fbfbfe",
+                border: "1px solid #e0e2ec",
+                borderRadius: "10px",
+                marginBottom: "10px"
+              }}>
+                <div>
+                  <div style={{ fontSize: "12.5px", fontWeight: 700, display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span>✨ Yapay Zeka İçerik Etiketi (AI Disclosure)</span>
+                    <span style={{
+                      fontSize: "10px",
+                      padding: "2px 7px",
+                      borderRadius: "10px",
+                      background: isAiGenerated ? "rgba(97, 43, 211, 0.12)" : "rgba(107, 114, 128, 0.12)",
+                      color: isAiGenerated ? "#612bd3" : "#6b7280",
+                      fontWeight: 700
+                    }}>
+                      {isAiGenerated ? "Açık (Önerilen)" : "Kapalı"}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "2px" }}>
+                    TikTok botunda resmi web switch'ini açar; X ve destekleyen platformlarda şeffaflık rozetini uygular.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={isAiGenerated}
+                  onChange={(e) => setIsAiGenerated(e.target.checked)}
+                  style={{ width: "20px", height: "20px", cursor: "pointer", accentColor: "#612bd3" }}
+                  title="Yapay zeka içerik etiketini aç/kapat"
+                />
+              </div>
+
+              {/* Sonraki Video / Video Bağla */}
+              <div style={{ marginBottom: "10px" }}>
+                <label className="input-label" style={{ fontSize: "11px", fontWeight: 700, display: "flex", alignItems: "center", gap: "5px" }}>
+                  <span>🔗 Sonraki / İlgili Video Bağla (Opsiyonel)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Örn: https://youtube.com/shorts/... veya Bölüm 2 linki"
+                  value={relatedVideoUrl}
+                  onChange={(e) => setRelatedVideoUrl(e.target.value)}
+                  className="custom-input"
+                  style={{ fontSize: "12px", height: "36px" }}
+                />
+                <span style={{ fontSize: "10.5px", color: "var(--muted)" }}>
+                  Destekleyen platformlarda izleyiciyi serinin devamına yönlendirmek için açıklama veya yoruma eklenir.
+                </span>
+              </div>
+
+              {/* Clean Watermark Quick Action (Eğer video seçildiyse) */}
+              {(() => {
+                const activeMediaUrl = mediaSourceTab === "recent" ? selectedMedia?.url : customMediaUrl;
+                const isVideoMedia = mediaSourceTab === "recent" ? selectedMedia?.type === "video" : (customMediaUrl.toLowerCase().endsWith(".mp4") || customMediaUrl.includes("video"));
+                if (!isVideoMedia || !activeMediaUrl) return null;
+                return (
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "8px 12px",
+                    background: "#f8fafc",
+                    border: "1px dashed #cbd5e1",
+                    borderRadius: "8px",
+                    marginBottom: "8px"
+                  }}>
+                    <div style={{ fontSize: "11.5px", color: "#334155" }}>
+                      <span style={{ fontWeight: 600 }}>Google Vids / AI Filigranı</span>
+                      <p style={{ margin: 0, fontSize: "10.5px", color: "#64748b" }}>Köşedeki yapay zeka logosunu sıfır kayıpla silin.</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={cleaningWatermark}
+                      onClick={async () => {
+                        try {
+                          setCleaningWatermark(true);
+                          const res = await fetch(`/api/videos/clean-watermark`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ videoUrl: activeMediaUrl, aspect_ratio: "9:16" }),
+                          });
+                          const data = await res.json();
+                          if (data.ok) {
+                            setSuccess("Google Vids yapay zeka filigranı başarıyla temizlendi!");
+                          } else {
+                            setError(data.message || "Filigran temizlenemedi.");
+                          }
+                        } catch (wErr) {
+                          setError(wErr instanceof Error ? wErr.message : "Filigran temizleme hatası");
+                        } finally {
+                          setCleaningWatermark(false);
+                        }
+                      }}
+                      className="button compact ghost"
+                      style={{ fontSize: "11px", height: "26px", padding: "0 10px", borderColor: "#cbd5e1" }}
+                    >
+                      {cleaningWatermark ? "Temizleniyor..." : "✨ Filigranı Temizle"}
+                    </button>
+                  </div>
+                );
+              })()}
+            </div>
+
             {/* 4. Scheduling & Submit */}
             <div className="composer-section" style={{ borderTop: "1px solid #f0f0f4", paddingTop: "16px" }}>
               <div className="composer-section-title">
@@ -2837,6 +2965,21 @@ export function PublishingStudio({
                       </button>
                     );
                   })}
+                  {bulkItems.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const anyOff = bulkItems.some((i) => i.isAiGenerated === false);
+                        const nextVal = anyOff ? true : false;
+                        setBulkItems((prev) => prev.map((p) => ({ ...p, isAiGenerated: nextVal })));
+                      }}
+                      className="button compact ghost"
+                      style={{ height: "28px", fontSize: "11px", marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                      title="Listedeki tüm içeriklerin yapay zeka etiketini aç/kapat"
+                    >
+                      <span>✨ Tümünde AI Etiketi: {bulkItems.every((i) => i.isAiGenerated !== false) ? "Açık" : "Karışık/Kapalı"}</span>
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -2969,6 +3112,36 @@ export function PublishingStudio({
                               }}
                             />
                           </div>
+
+                          {/* AI İçerik Etiketi Chip */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const cur = item.isAiGenerated !== false;
+                              setBulkItems((prev) =>
+                                prev.map((p) => (p.id === item.id ? { ...p, isAiGenerated: !cur } : p))
+                              );
+                            }}
+                            style={{
+                              fontSize: "9.5px",
+                              padding: "4px 6px",
+                              borderRadius: "6px",
+                              background: item.isAiGenerated !== false ? "rgba(97, 43, 211, 0.1)" : "#f1f5f9",
+                              color: item.isAiGenerated !== false ? "#612bd3" : "#64748b",
+                              border: "1px solid",
+                              borderColor: item.isAiGenerated !== false ? "rgba(97, 43, 211, 0.3)" : "#e2e8f0",
+                              fontWeight: 700,
+                              cursor: "pointer",
+                              textAlign: "center",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: "3px",
+                            }}
+                            title="Yapay zeka içerik etiketini aç/kapat"
+                          >
+                            <span>✨ {item.isAiGenerated !== false ? "AI: Açık" : "AI: Kapalı"}</span>
+                          </button>
                         </div>
 
                         {/* SAĞ KOLON: Başlık, Açıklama, Etiketler (Tam Genişlik & Tam Okunabilir) */}

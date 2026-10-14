@@ -131,6 +131,7 @@ export async function executeDueTikTokPost(postId: string): Promise<void> {
         videoPath,
         caption: fullCaption,
         visibility: "PUBLIC",
+        isAiGenerated: (row as { is_ai_generated?: number }).is_ai_generated !== 0,
       });
 
       if (!browserRes.ok) {

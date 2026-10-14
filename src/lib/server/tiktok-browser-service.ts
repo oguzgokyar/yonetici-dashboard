@@ -63,6 +63,7 @@ export async function uploadVideoViaTikTokBrowser(options: {
   caption: string;
   visibility?: "PUBLIC" | "SELF_ONLY";
   scheduleTime?: string;
+  isAiGenerated?: boolean;
 }): Promise<TikTokBrowserUploadResult> {
   try {
     if (!fs.existsSync(options.videoPath)) {
@@ -85,6 +86,7 @@ export async function uploadVideoViaTikTokBrowser(options: {
         const header = `--${boundary}\r\nContent-Disposition: form-data; name="video"; filename="${filename}"\r\nContent-Type: video/mp4\r\n\r\n`;
         const capField = `\r\n--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${options.caption}`;
         const visField = `\r\n--${boundary}\r\nContent-Disposition: form-data; name="visibility"\r\n\r\n${options.visibility || "PUBLIC"}`;
+        const aiField = `\r\n--${boundary}\r\nContent-Disposition: form-data; name="is_ai_generated"\r\n\r\n${options.isAiGenerated !== false ? "true" : "false"}`;
         const schedField = options.scheduleTime
           ? `\r\n--${boundary}\r\nContent-Disposition: form-data; name="schedule_time"\r\n\r\n${options.scheduleTime}`
           : "";
@@ -95,6 +97,7 @@ export async function uploadVideoViaTikTokBrowser(options: {
           fileData,
           Buffer.from(capField, "utf-8"),
           Buffer.from(visField, "utf-8"),
+          Buffer.from(aiField, "utf-8"),
           ...(schedField ? [Buffer.from(schedField, "utf-8")] : []),
           Buffer.from(footer, "utf-8"),
         ]);
@@ -131,6 +134,11 @@ export async function uploadVideoViaTikTokBrowser(options: {
     ];
     if (options.scheduleTime) {
       args.push("--schedule-time", options.scheduleTime);
+    }
+    if (options.isAiGenerated === false) {
+      args.push("--no-ai-generated");
+    } else {
+      args.push("--ai-generated");
     }
 
     const { stdout, stderr } = await execFileAsync(PYTHON_PATH, args, {

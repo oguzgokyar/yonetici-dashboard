@@ -2,6 +2,7 @@ import "server-only";
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
+import { migrateGrowth } from "./platform-growth-store";
 import { dedupeLegacyDriveAccounts } from "@/lib/stock-drive-architecture";
 
 const dataDir = path.join(process.cwd(), ".data");
@@ -22,6 +23,9 @@ function runMigrations(database: DatabaseSync) {
   const postColumns = database.prepare("PRAGMA table_info(content_posts)").all() as unknown as { name: string }[];
   if (postColumns.length && !postColumns.some((column) => column.name === "media_package_id")) database.exec("ALTER TABLE content_posts ADD COLUMN media_package_id TEXT");
   if (postColumns.length && !postColumns.some((column) => column.name === "media_json")) database.exec("ALTER TABLE content_posts ADD COLUMN media_json TEXT NOT NULL DEFAULT '[]'");
+  if (postColumns.length && !postColumns.some((column) => column.name === "is_ai_generated")) database.exec("ALTER TABLE content_posts ADD COLUMN is_ai_generated INTEGER NOT NULL DEFAULT 1");
+  if (postColumns.length && !postColumns.some((column) => column.name === "related_post_id")) database.exec("ALTER TABLE content_posts ADD COLUMN related_post_id TEXT");
+  if (postColumns.length && !postColumns.some((column) => column.name === "related_video_url")) database.exec("ALTER TABLE content_posts ADD COLUMN related_video_url TEXT");
   const strategyIdeaColumns = database.prepare("PRAGMA table_info(project_strategy_ideas)").all() as unknown as { name: string }[];
   if (strategyIdeaColumns.length && !strategyIdeaColumns.some((column) => column.name === "idea_type")) {
     try {
@@ -117,6 +121,9 @@ function runMigrations(database: DatabaseSync) {
       postiz_media_id TEXT,
       media_package_id TEXT,
       media_json TEXT NOT NULL DEFAULT '[]',
+      is_ai_generated INTEGER NOT NULL DEFAULT 1,
+      related_post_id TEXT,
+      related_video_url TEXT,
       release_url TEXT,
       error_message TEXT,
       created_at TEXT NOT NULL,
@@ -593,6 +600,7 @@ export function getDatabase() {
     console.error("[Migration Strategy Tables Error]", err);
   }
 
+  migrateGrowth(database);
   database.exec("PRAGMA optimize;");
   globalDatabase.__yoneticiDb = database;
   return database;
