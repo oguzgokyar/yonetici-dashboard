@@ -38,8 +38,10 @@ function assetContext(projectId: string, assetId: string) {
   const rows = getDatabase().prepare("SELECT id, request_json, response_json FROM generation_jobs WHERE project_id=? AND type='image' AND status='complete' ORDER BY created_at DESC").all(projectId) as unknown as ImageJob[];
   for (const row of rows) {
     try {
+      const requestState = JSON.parse(row.request_json || "{}");
+      if (requestState.isCharacterAnchor === true) continue;
       const assets = (JSON.parse(row.response_json) as { assets?: Asset[] }).assets || []; const index = assets.findIndex((asset) => asset.id === assetId);
-      if (index >= 0) { const requestState = JSON.parse(row.request_json) as { plans?: CreativePlan[]; ratio?: string; selectedFields?: string[] }; return { asset: assets[index], plan: requestState.plans?.[index] || {}, ratio: requestState.ratio || "9:16", selectedFields: requestState.selectedFields || [] }; }
+      if (index >= 0) { return { asset: assets[index], plan: requestState.plans?.[index] || {}, ratio: requestState.ratio || "9:16", selectedFields: requestState.selectedFields || [] }; }
     } catch { /* continue */ }
   }
   return null;

@@ -15,7 +15,15 @@ export async function GET(request: Request) {
   const projectId = new URL(request.url).searchParams.get("projectId")?.trim();
   if (!projectId) return Response.json({ ok: false, message: "Proje gerekli." }, { status: 400 });
   const rows = getDatabase().prepare("SELECT id, model, prompt, status, request_json, response_json, progress_json, created_at, completed_at FROM generation_jobs WHERE project_id=? AND type='image' AND status IN ('running','complete') ORDER BY created_at DESC LIMIT 100").all(projectId) as unknown as JobRow[];
-  const assets = rows.filter((row) => row.status === "complete").flatMap((row) => {
+  const assets = rows.filter((row) => {
+    if (row.status !== "complete") return false;
+    // Google Vids içinde üretilen Karakter DNA referans görsellerini ana medya listesinde gizle
+    try {
+      const req = JSON.parse(row.request_json || "{}");
+      if (req.isCharacterAnchor === true) return false;
+    } catch {}
+    return true;
+  }).flatMap((row) => {
     let idea: { id?: string; title?: string; concept?: string } | undefined;
     let sourceTopic: string | undefined;
     try {
@@ -34,7 +42,14 @@ export async function GET(request: Request) {
       createdAt: row.completed_at || row.created_at,
     }));
   });
-  const runningJobs = rows.filter((row) => row.status === "running").map((row) => { let progress = {}; try { progress = JSON.parse(row.progress_json || "{}"); } catch { /* use empty progress */ } return { id: row.id, model: row.model, prompt: row.prompt, createdAt: row.created_at, progress }; });
+  const runningJobs = rows.filter((row) => {
+    if (row.status !== "running") return false;
+    try {
+      const req = JSON.parse(row.request_json || "{}");
+      if (req.isCharacterAnchor === true) return false;
+    } catch {}
+    return true;
+  }).map((row) => { let progress = {}; try { progress = JSON.parse(row.progress_json || "{}"); } catch { /* use empty progress */ } return { id: row.id, model: row.model, prompt: row.prompt, createdAt: row.created_at, progress }; });
   return Response.json({ ok: true, assets, runningJobs });
 }
 

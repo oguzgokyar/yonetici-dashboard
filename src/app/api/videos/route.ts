@@ -19,8 +19,16 @@ function parseAssets(value: string) {
 }
 
 function findAsset(projectId: string, assetId: string) {
-  const rows = getDatabase().prepare("SELECT response_json FROM generation_jobs WHERE project_id=? AND type='image' AND status='complete'").all(projectId) as unknown as ImageJobRow[];
-  return rows.flatMap((row) => parseAssets(row.response_json)).find((asset) => asset.id === assetId);
+  const rows = getDatabase().prepare("SELECT id, request_json, response_json FROM generation_jobs WHERE project_id=? AND type='image' AND status='complete'").all(projectId) as unknown as (ImageJobRow & { request_json?: string })[];
+  const validRows = rows.filter((r) => {
+    try {
+      const req = JSON.parse(r.request_json || "{}");
+      return req.isCharacterAnchor !== true;
+    } catch {
+      return true;
+    }
+  });
+  return validRows.flatMap((row) => parseAssets(row.response_json)).find((asset) => asset.id === assetId);
 }
 
 function assetDataUrl(asset: ImageAsset) {

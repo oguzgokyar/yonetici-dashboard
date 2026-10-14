@@ -86,9 +86,9 @@ export async function POST(request: Request, context: Context) {
     // Enhance prompt strictly following visual-skills U7 (Character consistency anchor) and project visual mood
     const enhancedPrompt = `Visual-skills character reference portrait sheet of ${body.characterName || "Hero"}, ${body.archetypeTr || ""}. ${styleDescriptor}. PHYSICAL IDENTITY SPECS: ${body.fixedTraitsEn || promptEn}. Master character reference: consistent facial structure, distinctive wardrobe, clothing textures, eyes and silhouette. Strict character anchor reference sheet, isolated subject, no extra text, no watermarks, no split screen, no duplicate faces.`;
 
-    // Doğrudan API üzerinden üret - Sıfır sunucu yükü (tarayıcı/FFmpeg yok), FIFO kuyruğu beklemez
+    // type='character-anchor' olarak kaydedilir; böylece görsel stüdyosu ('image') ve motion video listelerine karışmaz
     db.prepare(
-      "INSERT INTO generation_jobs (id, project_id, type, provider, model, status, prompt, request_json, progress_json, created_at) VALUES (?, ?, 'image', 'cliproxy', ?, 'running', ?, ?, ?, ?)"
+      "INSERT INTO generation_jobs (id, project_id, type, provider, model, status, prompt, request_json, progress_json, created_at) VALUES (?, ?, 'character-anchor', 'cliproxy', ?, 'running', ?, ?, ?, ?)"
     ).run(
       jobId,
       projectId,
