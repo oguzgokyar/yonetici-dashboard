@@ -2,12 +2,22 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { Mic, MicOff, PhoneOff, Volume2, ArrowLeft, Sparkles, User, Radio } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Volume2, ArrowLeft, Sparkles, Radio } from "lucide-react";
 
 type Message = {
   role: "user" | "assistant";
   content: string;
 };
+
+// Base64'ten Blob'a dönüştürücü (iOS Safari için data-uri yerine Blob URL çok daha kararlıdır)
+function base64ToBlob(base64: string, mimeType = "audio/mpeg"): Blob {
+  const byteChars = atob(base64);
+  const byteNumbers = new Uint8Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) {
+    byteNumbers[i] = byteChars.charCodeAt(i);
+  }
+  return new Blob([byteNumbers], { type: mimeType });
+}
 
 export default function LiveCallPage() {
   const [isCalling, setIsCalling] = useState(false);
@@ -20,11 +30,12 @@ export default function LiveCallPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const recognitionRef = useRef<any>(null);
-  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
   const isSpeakingRef = useRef(false);
   const isCallingRef = useRef(false);
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const wakeLockRef = useRef<any>(null);
+  const activeBlobUrlRef = useRef<string | null>(null);
 
   // Çağrı süresi sayacı
   useEffect(() => {
@@ -65,11 +76,59 @@ export default function LiveCallPage() {
 
   // Ses oynatıcıyı durdurma (Barge-in / araya girme)
   function stopCurrentAudio() {
-    if (audioPlayerRef.current) {
-      audioPlayerRef.current.pause();
-      audioPlayerRef.current.currentTime = 0;
+    if (audioElRef.current) {
+      audioElRef.current.pause();
+      audioElRef.current.currentTime = 0;
+    }
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    if (activeBlobUrlRef.current) {
+      URL.revokeObjectURL(activeBlobUrlRef.current);
+      activeBlobUrlRef.current = null;
     }
     isSpeakingRef.current = false;
+  }
+
+  // Apple iOS Native SpeechSynthesis yedeği
+  function playNativeVoiceFallback(text: string) {
+    if (!("speechSynthesis" in window) || !isCallingRef.current) {
+      onSpeechEnded();
+      return;
+    }
+
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "tr-TR";
+      utterance.rate = 1.05;
+
+      const voices = window.speechSynthesis.getVoices();
+      const trVoice = voices.find((v) => v.lang.startsWith("tr"));
+      if (trVoice) utterance.voice = trVoice;
+
+      utterance.onend = () => onSpeechEnded();
+      utterance.onerror = () => onSpeechEnded();
+
+      setStatus("speaking");
+      isSpeakingRef.current = true;
+      window.speechSynthesis.speak(utterance);
+    } catch {
+      onSpeechEnded();
+    }
+  }
+
+  // Hermes'in konuşması bittiğinde tetiklenir
+  function onSpeechEnded() {
+    isSpeakingRef.current = false;
+    if (activeBlobUrlRef.current) {
+      URL.revokeObjectURL(activeBlobUrlRef.current);
+      activeBlobUrlRef.current = null;
+    }
+    if (isCallingRef.current) {
+      setStatus("listening");
+      startSpeechRecognitionSafe();
+    }
   }
 
   // Hermes'e mesaj gönderme ve ses çalma
@@ -100,38 +159,27 @@ export default function LiveCallPage() {
       const replyText = data.text;
       setMessages((prev) => [...prev, { role: "assistant", content: replyText }]);
 
-      // Eğer ses geldiyse çal
-      if (data.audioBase64 && isCallingRef.current) {
-        setStatus("speaking");
-        isSpeakingRef.current = true;
+      // 1. Önce ses dosyasıyla (Edge-TTS) çalmayı dene
+      if (data.audioBase64 && isCallingRef.current && audioElRef.current) {
+        try {
+          setStatus("speaking");
+          isSpeakingRef.current = true;
 
-        if (audioPlayerRef.current) {
-          audioPlayerRef.current.pause();
+          const blob = base64ToBlob(data.audioBase64, "audio/mpeg");
+          const blobUrl = URL.createObjectURL(blob);
+          activeBlobUrlRef.current = blobUrl;
+
+          const audio = audioElRef.current;
+          audio.src = blobUrl;
+          await audio.play();
+        } catch (playErr) {
+          console.warn("[Call] HTML5 audio.play engellendi, iOS yerel ses sentezine geçiliyor:", playErr);
+          // 2. iOS Safari engellerse anında yerel iOS Türkçe ses motorunu devreye sok
+          playNativeVoiceFallback(replyText);
         }
-
-        const audio = new Audio(`data:audio/mp3;base64,${data.audioBase64}`);
-        audioPlayerRef.current = audio;
-
-        audio.onended = () => {
-          isSpeakingRef.current = false;
-          if (isCallingRef.current) {
-            setStatus("listening");
-            startSpeechRecognitionSafe();
-          }
-        };
-
-        audio.onerror = () => {
-          isSpeakingRef.current = false;
-          if (isCallingRef.current) {
-            setStatus("listening");
-            startSpeechRecognitionSafe();
-          }
-        };
-
-        await audio.play();
       } else {
-        setStatus("listening");
-        startSpeechRecognitionSafe();
+        // Ses gelmediyse yerel ses senteziyle oku
+        playNativeVoiceFallback(replyText);
       }
     } catch (err: any) {
       console.error("[Call] Gönderim hatası:", err);
@@ -146,7 +194,7 @@ export default function LiveCallPage() {
     if (!recognitionRef.current || !isCallingRef.current) return;
     try {
       recognitionRef.current.start();
-    } catch (e: any) {
+    } catch {
       // Zaten çalışıyorsa sessizce geç
     }
   }
@@ -158,11 +206,30 @@ export default function LiveCallPage() {
     isCallingRef.current = true;
     setStatus("listening");
 
+    // 🔥 KRİTİK iOS SAFARI OPTİMİZASYONU:
+    // Kullanıcı butona dokunduğu an (User Interaction) ses motorunu kilitsiz hale getir (Prime / Unlock)
+    if (audioElRef.current) {
+      audioElRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+      audioElRef.current.play().then(() => {
+        if (audioElRef.current) {
+          audioElRef.current.pause();
+          audioElRef.current.currentTime = 0;
+        }
+      }).catch((e) => console.log("Audio unlock:", e));
+    }
+
+    if ("speechSynthesis" in window) {
+      try {
+        const dummy = new SpeechSynthesisUtterance("");
+        window.speechSynthesis.speak(dummy);
+      } catch {}
+    }
+
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      setErrorMsg("Tarayıcınız ses tanımayı desteklemiyor. Lütfen Safari veya Chrome kullanın.");
+      setErrorMsg("Tarayıcınız ses tanımayı desteklemiyor. Lütfen iPhone Safari kullanın.");
       return;
     }
 
@@ -272,6 +339,16 @@ export default function LiveCallPage() {
       position: "relative",
       overflow: "hidden",
     }}>
+      {/* Gizli ve Hazır HTML5 Ses Elementi (iOS Kilitsiz Oynatma İçin) */}
+      <audio
+        ref={audioElRef}
+        playsInline
+        preload="auto"
+        onEnded={onSpeechEnded}
+        onError={onSpeechEnded}
+        style={{ display: "none" }}
+      />
+
       {/* Üst Bar */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 }}>
         <Link href="/" style={{
