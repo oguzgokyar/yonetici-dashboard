@@ -154,8 +154,19 @@ export function triggerProductionWorker(): void {
         } else if (nextJob.type === "google-vids") {
           await withHeavyJob(`google-vids:${nextJob.id}`, `dashboard:${randomUUID()}`, () => processGoogleVidsJob(nextJob));
         } else if (nextJob.type === "canva") {
-          await runCanvaLifetime(nextJob);
-          // Continue only after completion/failure, never after mere dispatch.
+          // Eğer video export modundaysa (Magic Animate / CDP) ağır iş koordinatörü altında çalıştır,
+          // standart karusel/statik görsel ise hafif modda çalıştır.
+          let isVideoExport = false;
+          try {
+            const reqData = JSON.parse(nextJob.request_json || "{}");
+            isVideoExport = reqData.mode === "canva_video_export";
+          } catch {}
+
+          if (isVideoExport) {
+            await withHeavyJob(`canva-video:${nextJob.id}`, `dashboard:${randomUUID()}`, () => runCanvaLifetime(nextJob));
+          } else {
+            await runCanvaLifetime(nextJob);
+          }
         }
       }
     } finally {

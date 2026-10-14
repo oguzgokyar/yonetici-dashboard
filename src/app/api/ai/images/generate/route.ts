@@ -7,7 +7,6 @@ import { completeText, parseJsonResponse } from "@/lib/server/cliproxy-text";
 import { getDatabase } from "@/lib/server/database";
 import { decryptSecret } from "@/lib/server/secrets";
 import { inspectCreative, loadMedia, MediaInput, renderCreative } from "@/lib/server/cliproxy-creative";
-import { runInFifoQueue } from "@/lib/server/production-worker";
 
 export const runtime = "nodejs";
 type ProviderRow = { base_url: string; encrypted_api_key: string; text_model: string; image_model: string; vision_model: string; edit_model: string };
@@ -67,10 +66,10 @@ export async function POST(request: Request) {
 
   const promptText = input.prompt.trim();
   const jobId = crypto.randomUUID(); const now = new Date().toISOString();
-  database.prepare("INSERT INTO generation_jobs (id, project_id, type, provider, model, status, prompt, request_json, progress_json, created_at) VALUES (?, ?, 'image', 'cliproxy', ?, 'queued', ?, ?, ?, ?)").run(jobId, input.projectId, renderModel, promptText, JSON.stringify({ ...(input.settings || {}), ratio, selectedFields: selected }), JSON.stringify({ phase: "planning", completed: 0, total: amount, detail: "Kreatif fikir ve sanat yönetimi hazırlanıyor", updatedAt: now }), now);
+  // Doğrudan API tabanlı çalıştırma - Sıfır sunucu yükü, FIFO video kuyruğunu beklemez
+  database.prepare("INSERT INTO generation_jobs (id, project_id, type, provider, model, status, prompt, request_json, progress_json, created_at) VALUES (?, ?, 'image', 'cliproxy', ?, 'running', ?, ?, ?, ?)").run(jobId, input.projectId, renderModel, promptText, JSON.stringify({ ...(input.settings || {}), ratio, selectedFields: selected }), JSON.stringify({ phase: "planning", completed: 0, total: amount, detail: "Kreatif fikir ve sanat yönetimi hazırlanıyor", updatedAt: now }), now);
 
-  return await runInFifoQueue(jobId, async () => {
-    database.prepare("UPDATE generation_jobs SET status='running' WHERE id=?").run(jobId);
+  const executeGeneration = async () => {
     const plannerPrompt = `Aynı brief için ${amount} farklı reklam kreatifi planla. Yerleşim koordinatı veya şablon tarif etme; render modeline özgür ama uygulanabilir sanat yönetimi ver. Her varyasyon farklı görsel fikir ve kompozisyon kullansın. Görünen metin yalnızca doğal Türkçe olsun. Başlık en fazla 55, destek metni 120, CTA 28 karakter olsun. Uydurma iddia, sayı veya iletişim bilgisi yazma.\n\nBrief: ${promptText}\nMarka: ${brand.brandName || ""}\nSektör: ${brand.industry || ""}\nHedef kitle: ${brand.audience || ""}\nTon: ${brand.tone || ""}\nVarsayılan CTA: ${brand.defaultCta || "Detaylı bilgi alın"}\n${brandConceptInstruction(concept)}\n\nYalnızca JSON dizi döndür: [{"conceptName":"...","headline":"...","supportingText":"...","cta":"...","artDirection":"özgün sahne, kompozisyon, tipografi yaklaşımı, görsel hiyerarşi, marka entegrasyonu, ışık ve kontrast tarifi","rationale":"..."}]`;
     let plans: CreativePlan[] = [];
     try {
@@ -116,5 +115,7 @@ export async function POST(request: Request) {
       database.prepare("UPDATE generation_jobs SET status='failed', error=?, completed_at=? WHERE id=?").run(message.slice(0, 1000), new Date().toISOString(), jobId);
       return Response.json({ ok: false, message }, { status: 502 });
     }
-  });
+  };
+
+  return await executeGeneration();
 }
