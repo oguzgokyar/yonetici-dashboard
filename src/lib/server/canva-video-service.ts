@@ -44,6 +44,98 @@ export async function exportPackageVideoHelper(
   }
 }
 
+async function fetchCanvaVideoExportUrl(
+  designId: string,
+  baseUrl: string,
+  apiKey: string
+): Promise<string> {
+  // 1. Try host bridge first for ultra-fast (3-5s) direct Canva Cloud MP4 export
+  const bridgeUrls = [
+    "http://10.0.1.1:8080/api/internal/canva/export-video",
+    "http://127.0.0.1:8080/api/internal/canva/export-video",
+    "http://10.0.1.8:8080/api/internal/canva/export-video",
+  ];
+
+  for (const bUrl of bridgeUrls) {
+    try {
+      const res = await fetch(bUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ design_id: designId, quality: "horizontal_1080p" }),
+        signal: AbortSignal.timeout(90000),
+      });
+      if (res.ok) {
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          download_url?: string;
+        };
+        if (data.ok && data.download_url) {
+          return data.download_url;
+        }
+      }
+    } catch {
+      // Continue to next bridge or fallback
+    }
+  }
+
+  // 2. Fallback: Dispatch directly to Hermes Agent via /v1/runs with mcp__canva__export_design MP4
+  const prompt = `Call mcp__canva__export_design on design_id='${designId}' with format={'type':'mp4', 'quality':'horizontal_1080p'}.\nReturn the exact download URL of the exported MP4 file.`;
+  const runUrl = `${baseUrl}/v1/runs`;
+  const runResponse = await fetch(runUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+    },
+    body: JSON.stringify({ model: "hermes-agent", input: prompt }),
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!runResponse.ok && runResponse.status !== 202) {
+    throw new Error(`Hermes video export başlatılamadı (HTTP ${runResponse.status})`);
+  }
+
+  const runData = (await runResponse.json().catch(() => ({}))) as { run_id?: string; id?: string };
+  const runId = runData.run_id || runData.id;
+  if (!runId) throw new Error("Hermes görev kimliği (run_id) döndürmedi.");
+
+  const pollDeadline = Date.now() + 120000;
+  while (Date.now() < pollDeadline) {
+    await new Promise((r) => setTimeout(r, 3000));
+    const statusRes = await fetch(`${baseUrl}/v1/runs/${runId}`, {
+      headers: {
+        Accept: "application/json",
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      signal: AbortSignal.timeout(8000),
+    }).catch(() => null);
+
+    if (!statusRes || !statusRes.ok) continue;
+
+    const runStatus = (await statusRes.json().catch(() => ({}))) as {
+      status?: string;
+      output?: string;
+      error?: string;
+    };
+
+    if (["failed", "cancelled", "canceled"].includes(runStatus.status || "")) {
+      throw new Error(runStatus.error || "Canva video export başarısız oldu.");
+    }
+
+    if (runStatus.status === "completed") {
+      if (runStatus.output) {
+        const urlMatch = runStatus.output.match(/https:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/i);
+        if (urlMatch) return urlMatch[0];
+      }
+      const rawErr = (runStatus.output || runStatus.error || "").trim();
+      throw new Error(rawErr || "Canva video çıktısı üretilemedi.");
+    }
+  }
+
+  throw new Error("Canva MP4 render zaman aşımına uğradı veya indirme bağlantısı alınamadı.");
+}
+
 async function exportPackageVideoUnderClaim(
   params: ExportPackageVideoParams,
   phase: { remoteMayBeRunning: boolean },
@@ -83,100 +175,13 @@ async function exportPackageVideoUnderClaim(
   const apiKey = canvaConfig.apiKey;
   const baseUrl = canvaConfig.baseUrl.replace(/\/+$/, "");
 
-  let prompt = "";
-  if (params.useMagicAnimate) {
-    prompt = `1. If possible, apply Canva Magic Animation (Sihirli Animasyon) to all pages of design_id='${designId}' by running:
-/opt/hermes/.venv/bin/python /opt/data/scripts/canva_magic_animate_cdp.py ${designId}
-2. Call mcp__canva__export_design on design_id='${designId}' with format={'type':'mp4', 'quality':'horizontal_1080p'}.
-3. Return the exact download URL of the exported MP4 file.`;
-  } else {
-    prompt = `Call mcp__canva__export_design on design_id='${designId}' with format={'type':'mp4', 'quality':'horizontal_1080p'}.
-Return the exact download URL of the exported MP4 file.`;
-  }
-
   try {
-    // 1. Dispatch export to Hermes Agent
-    const runUrl = `${baseUrl}/v1/runs`;
-    // Validate request construction before crossing the dispatch boundary.
-    const parsedRunUrl = new URL(runUrl);
-    if (!['http:', 'https:'].includes(parsedRunUrl.protocol)) {
-      throw new Error("Hermes video export URL must use HTTP or HTTPS.");
-    }
-    const runOptions = {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      },
-      body: JSON.stringify({ model: "hermes-agent", input: prompt }),
-      signal: AbortSignal.timeout(15000),
-    };
+    // 1. Fetch direct MP4 download URL from Canva Cloud via host bridge or Canva MCP
     phase.remoteMayBeRunning = true;
-    const runResponse = await fetch(runUrl, runOptions);
+    const downloadUrl = await fetchCanvaVideoExportUrl(designId, baseUrl, apiKey);
+    phase.remoteMayBeRunning = false;
 
-    if (!runResponse.ok && runResponse.status !== 202) {
-      throw new Error(`Hermes video export başlatılamadı (HTTP ${runResponse.status})`);
-    }
-
-    const runData = (await runResponse.json().catch(() => ({}))) as { run_id?: string; id?: string };
-    const runId = runData.run_id || runData.id;
-    if (!runId) {
-      throw new Error("Hermes görev kimliği (run_id) döndürmedi.");
-    }
-
-    // 2. Poll Hermes run for completed MP4 URL (up to 120s)
-    let downloadUrl = "";
-    const pollDeadline = Date.now() + 120000;
-    while (Date.now() < pollDeadline) {
-      await new Promise((r) => setTimeout(r, 4000));
-      const statusRes = await fetch(`${baseUrl}/v1/runs/${runId}`, {
-        headers: {
-          Accept: "application/json",
-          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-        },
-        signal: AbortSignal.timeout(8000),
-      }).catch(() => null);
-
-      if (!statusRes || !statusRes.ok) continue;
-
-      const runStatus = (await statusRes.json().catch(() => ({}))) as {
-        status?: string;
-        output?: string;
-        error?: string;
-      };
-
-      if (['failed', 'cancelled', 'canceled', 'completed'].includes(runStatus.status || '')) {
-        phase.remoteMayBeRunning = false;
-      }
-
-      if (['failed', 'cancelled', 'canceled'].includes(runStatus.status || '')) {
-        throw new Error(runStatus.error || "Canva video export başarısız oldu.");
-      }
-
-      if (runStatus.status === "completed") {
-        if (runStatus.output) {
-          const urlMatch = runStatus.output.match(/https:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/i);
-          if (urlMatch) {
-            downloadUrl = urlMatch[0];
-            break;
-          }
-        }
-        const rawErr = (runStatus.output || runStatus.error || "").trim();
-        if (rawErr.toLowerCase().includes("not allowed to access design")) {
-          throw new Error(
-            "Bu tasarım eski Canva hesabına ait olduğundan erişilemiyor. Lütfen yeni oluşturulan tasarımları kullanın."
-          );
-        }
-        throw new Error(rawErr || "Canva video çıktısı üretilemedi.");
-      }
-    }
-
-    if (!downloadUrl) {
-      throw new Error("Canva MP4 render zaman aşımına uğradı veya indirme bağlantısı alınamadı.");
-    }
-
-    // 3. Download MP4 into assets
+    // 2. Download MP4 into assets
     const assetsDir = path.join(process.cwd(), ".data", "assets");
     fs.mkdirSync(assetsDir, { recursive: true });
 
@@ -198,7 +203,7 @@ Return the exact download URL of the exported MP4 file.`;
     const videoBuffer = Buffer.from(await dlRes.arrayBuffer());
     fs.writeFileSync(rawVideoPath, videoBuffer);
 
-    // 4. Retime video PTS via FFmpeg
+    // 3. Retime video PTS via FFmpeg to match requested durationPerSlide * slideCount
     let actualDuration = targetTotalDuration;
     try {
       const ffprobeOut = await execFileAsync("ffprobe", [
@@ -211,7 +216,7 @@ Return the exact download URL of the exported MP4 file.`;
         rawVideoPath,
       ]);
       const rawDur = parseFloat(ffprobeOut.stdout.trim());
-      if (rawDur > 0 && Math.abs(rawDur - targetTotalDuration) > 1.0) {
+      if (rawDur > 0 && Math.abs(rawDur - targetTotalDuration) > 0.5) {
         const speedFactor = targetTotalDuration / rawDur;
         await execFileAsync("ffmpeg", [
           "-y",
@@ -243,7 +248,7 @@ Return the exact download URL of the exported MP4 file.`;
 
     const { width: videoWidth, height: videoHeight } = await getMediaDimensions(finalVideoPath);
 
-    // 5. Write metadata JSON
+    // 4. Write metadata JSON
     fs.writeFileSync(
       metaPath,
       JSON.stringify({
@@ -257,14 +262,49 @@ Return the exact download URL of the exported MP4 file.`;
       })
     );
 
+    // 5. Physically delete old video files from disk (zero-waste)
+    const oldVideoId = pkg.video_asset_id;
+    if (oldVideoId && oldVideoId !== finalVideoId) {
+      for (const ext of [".mp4", ".json", "_thumb.webp", "_preview.webp"]) {
+        try {
+          const oldFile = path.join(assetsDir, `${oldVideoId}${ext}`);
+          if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
+        } catch {}
+      }
+      try {
+        const oldThumb = path.join(process.cwd(), ".data", "video-thumbs", `${oldVideoId}.webp`);
+        if (fs.existsSync(oldThumb)) fs.unlinkSync(oldThumb);
+      } catch {}
+    }
+
     const videoUrl = `/api/assets/${finalVideoId}`;
 
     // 6. Update database
+    const nowIso = new Date().toISOString();
     database
       .prepare(
         "UPDATE media_packages SET video_asset_id=?, video_url=?, video_duration=?, video_status='ready', updated_at=? WHERE id=?"
       )
-      .run(finalVideoId, videoUrl, actualDuration, new Date().toISOString(), packageId);
+      .run(finalVideoId, videoUrl, actualDuration, nowIso, packageId);
+
+    // If an active generation job exists for this export, mark it complete
+    try {
+      database
+        .prepare(
+          "UPDATE generation_jobs SET status='complete', completed_at=?, progress_json=? WHERE (id=? OR prompt LIKE ?) AND status NOT IN ('complete', 'failed')"
+        )
+        .run(
+          nowIso,
+          JSON.stringify({
+            phase: "complete",
+            percent: 100,
+            detail: "Canva videosu hazır ve arşive eklendi",
+            updatedAt: nowIso,
+          }),
+          params.coordinationJobId || "",
+          `%${packageId}%`
+        );
+    } catch {}
 
     return {
       ok: true,

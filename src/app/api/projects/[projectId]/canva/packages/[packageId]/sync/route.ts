@@ -130,6 +130,7 @@ export async function POST(_request: Request, context: Context) {
       item_count: number;
       canva_design_id: string;
       video_asset_id?: string | null;
+      video_duration?: number | null;
     } | undefined;
 
   if (!pkg) {
@@ -247,30 +248,37 @@ export async function POST(_request: Request, context: Context) {
       .prepare("UPDATE media_packages SET item_count=?, cover_asset_id=?, updated_at=? WHERE id=?")
       .run(exportUrls.length, newCoverAssetId, new Date().toISOString(), packageId);
 
-    // 4. If package has a video or is a video package, clean old video files and re-export with Magic Animate
+    // 5. If package has a video or is a video package, re-export from Canva Cloud
     let videoUpdated = false;
     const oldVideoAssetId = pkg.video_asset_id;
 
     if (oldVideoAssetId || pkg.package_type === "video") {
       try {
+        const durationPerSlide = pkg.video_duration && exportUrls.length > 0
+          ? Math.min(10, Math.max(1.5, pkg.video_duration / exportUrls.length))
+          : 3.5;
+
         const videoRes = await exportPackageVideoHelper({
           database,
           packageId,
           projectId,
           designId,
           slideCount: exportUrls.length,
-          durationPerSlide: 3.5,
-          useMagicAnimate: true,
+          durationPerSlide,
+          useMagicAnimate: false,
         });
 
-        // If a new video was generated and differs from oldVideoAssetId, delete the old video files immediately
         if (oldVideoAssetId && videoRes.videoAssetId && oldVideoAssetId !== videoRes.videoAssetId) {
-          for (const ext of [".mp4", ".json"]) {
+          for (const ext of [".mp4", ".json", "_thumb.webp", "_preview.webp"]) {
             try {
               const oldFile = path.join(assetsDir, `${oldVideoAssetId}${ext}`);
               if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
             } catch {}
           }
+          try {
+            const oldThumb = path.join(process.cwd(), ".data", "video-thumbs", `${oldVideoAssetId}.webp`);
+            if (fs.existsSync(oldThumb)) fs.unlinkSync(oldThumb);
+          } catch {}
         }
 
         videoUpdated = true;

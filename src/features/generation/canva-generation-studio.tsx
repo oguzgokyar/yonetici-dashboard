@@ -2177,40 +2177,32 @@ function CanvaVideoConvertModal({
           </div>
         </div>
 
-        {/* Sihirli Animasyon Onayı */}
-        <label
+        {/* Bilgilendirme ve Animasyon Notu */}
+        <div
           style={{
             display: "flex",
             alignItems: "flex-start",
             gap: "10px",
             padding: "10px 12px",
             borderRadius: "10px",
-            background: useMagicAnimate ? "#f0fdf4" : "#f8fafc",
-            border: useMagicAnimate ? "1px solid #bbf7d0" : "1px solid #e2e8f0",
-            cursor: "pointer",
+            background: "#f0fdf4",
+            border: "1px solid #bbf7d0",
           }}
         >
-          <input
-            type="checkbox"
-            checked={useMagicAnimate}
-            onChange={(e) => onMagicAnimateChange(e.target.checked)}
-            disabled={converting}
-            style={{ marginTop: "3px" }}
-          />
+          <Sparkles size={18} style={{ color: "#16a34a", flexShrink: 0, marginTop: "2px" }} />
           <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-            <span style={{ fontSize: "13px", fontWeight: 600, color: "#166534" }}>
-              ✨ Canva Sihirli Animasyon (Magic Animate) Uygula
+            <span style={{ fontSize: "12px", fontWeight: 600, color: "#166534" }}>
+              Canva Animasyonları Doğrudan Korunur
             </span>
-            <span style={{ fontSize: "11px", color: "#64748b" }}>
-              Hermes tarayıcı üzerinden Canva editörüne bağlanır ve tüm slayt öğelerine tek tıkla otomatik hareket/geçiş efekti uygular.
+            <span style={{ fontSize: "11px", color: "#15803d", lineHeight: 1.4 }}>
+              Canva editöründe tasarımınıza eklediğiniz Sihirli Animasyon, sayfa geçişleri veya metin efektleri doğrudan bulutta render edilerek MP4 videonuza aktarılır.
             </span>
           </div>
-        </label>
+        </div>
 
         {/* Bilgilendirme */}
         <div style={{ fontSize: "11px", color: "#64748b", lineHeight: 1.5 }}>
-          💡 Video render işlemi doğrudan Canva Cloud üzerinde gerçekleştirilir; sunucunuza CPU/bellek
-          yükü bindirmez. Tamamlandığında &quot;Üretilen Videolar&quot; sekmesine eklenecektir.
+          💡 Video render işlemi doğrudan Canva Cloud üzerinde gerçekleştirilir; seçtiğiniz süreye göre yerel olarak optimize edilir. Tamamlandığında &quot;Üretilen Videolar&quot; sekmesine eklenecektir.
         </div>
 
         {error && (

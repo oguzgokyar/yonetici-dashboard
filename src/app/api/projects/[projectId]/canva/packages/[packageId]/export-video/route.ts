@@ -57,7 +57,7 @@ export async function POST(request: Request, context: Context) {
     .run(now, packageId);
 
   // 2. Insert job into generation_jobs so it appears in Production Queue
-  const promptLabel = `${pkg.title || "Canva Karosel"} — Sihirli Animasyon ile Videoya Dönüştürme (${pkg.item_count || 1} Slayt × ${durationPerSlide} sn)`;
+  const promptLabel = `${pkg.title || "Canva Karosel"} — Videoya Dönüştürme (${pkg.item_count || 1} Slayt × ${durationPerSlide} sn)`;
   const requestState = {
     mode: "canva_video_export",
     contentType: "reels_video",
@@ -65,13 +65,13 @@ export async function POST(request: Request, context: Context) {
     designId: pkg.canva_design_id,
     slideCount: pkg.item_count || 1,
     durationPerSlide,
-    useMagicAnimate,
+    useMagicAnimate: false,
     coverAssetId: pkg.cover_asset_id || null,
   };
   const progressState = {
     phase: "queued",
     percent: 15,
-    detail: "Sihirli Animasyon ve MP4 video render kuyruğa alındı...",
+    detail: "Canva Cloud MP4 video render kuyruğa alındı...",
     updatedAt: now,
   };
 
