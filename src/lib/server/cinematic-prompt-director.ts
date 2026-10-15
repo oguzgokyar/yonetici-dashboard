@@ -146,6 +146,7 @@ export async function planCinematicStoryboard(input: {
   narrativeMode?: NarrativeMode;
   includeMusic?: boolean;
   brandName?: string;
+  brandConcept?: { summary?: string; visualStyle?: string; photographyStyle?: string; primaryColor?: string; secondaryColor?: string };
   revisionFeedback?: string;
   currentStoryboard?: StoryboardResponse;
 }): Promise<StoryboardResponse> {
@@ -212,8 +213,14 @@ MANDATORY LAWS FROM THE VISUAL-SKILLS REPOSITORY:
      * Leave 2 seconds buffer per scene for camera movement and breath, so voiceover NEVER overflows the 10-second clip!
    - Total video duration is scene_count * 10 seconds (~15s: 2 scenes [20s]; ~30s: 3 scenes [30s]; ~60s: 5-6 scenes [50-60s]).`;
 
+  const brandDirective = input.brandConcept?.summary ? `
+BRAND VISUAL IDENTITY & LIGHTING MANDATE (CRITICAL):
+- Brand Atmosphere: ${input.brandConcept.summary}
+${input.brandConcept.visualStyle ? `- Visual Elements & Decor: ${input.brandConcept.visualStyle}\n` : ""}${input.brandConcept.photographyStyle ? `- Lighting & Environment: ${input.brandConcept.photographyStyle} (Strictly avoid gloomy/dark cyberpunk shadows; prioritize daylight and wholesome warmth)\n` : ""}` : "";
+
   const userPrompt = `TOPIC / USER PROMPT: "${input.topic}"
 BRAND: "${input.brandName || "General"}"
+${brandDirective}
 TARGET DURATION: ${targetDur} (Approximate desired length)
 ASPECT RATIO: ${ratio}
 NARRATIVE MODE: ${narrativeMode}

@@ -116,7 +116,7 @@ export async function POST(request: Request) {
   if (cached) return Response.json({ ok: true, packageId: cached.id, spec: (JSON.parse(cached.response_json) as { spec: AnimatedCreativeProps }).spec, cached: true });
 
   const context = assetContext(input.projectId, input.assetId);
-  const project = database.prepare("SELECT brand_json FROM projects WHERE id=?").get(input.projectId) as { brand_json: string } | undefined;
+  const project = database.prepare("SELECT brand_json, brand_concept_json FROM projects WHERE id=?").get(input.projectId) as { brand_json: string; brand_concept_json?: string } | undefined;
   const provider = database.prepare("SELECT base_url, encrypted_api_key, text_model, image_model, vision_model, edit_model FROM ai_provider_configs WHERE provider='cliproxy' AND enabled=1").get() as ProviderRow | undefined;
   if (!context || !project) return Response.json({ ok: false, message: "Kreatif veya proje bulunamadı." }, { status: 404 });
   if (!provider?.base_url || !provider.encrypted_api_key) return Response.json({ ok: false, message: "Katman üretimi için CliProxyAPI ayarı gerekli." }, { status: 409 });
@@ -125,7 +125,9 @@ export async function POST(request: Request) {
   database.prepare("INSERT INTO generation_jobs (id, project_id, type, provider, model, status, prompt, request_json, created_at) VALUES (?, ?, 'video-layer', 'cliproxy', '', 'running', ?, ?, ?)").run(id, input.projectId, "Kreatifi bağımsız video katmanlarına ayır", JSON.stringify(requestState), now);
 
   try {
-    const brand = JSON.parse(project.brand_json) as Record<string, string>; const source = localAsset(context.asset); const apiKey = decryptSecret(provider.encrypted_api_key); const baseUrl = provider.base_url.replace(/\/+$/, ""); const models = await availableModels(baseUrl, apiKey);
+    const brand = JSON.parse(project.brand_json) as Record<string, string>;
+    const concept = JSON.parse(project.brand_concept_json || "{}") as Record<string, string>;
+    const source = localAsset(context.asset); const apiKey = decryptSecret(provider.encrypted_api_key); const baseUrl = provider.base_url.replace(/\/+$/, ""); const models = await availableModels(baseUrl, apiKey);
     const imageModel = provider.edit_model || provider.image_model || models.find((model) => /gemini-3\.1-flash-image|gemini-3-pro-image|gemini-2\.5-flash-image|gpt-image/i.test(model)) || "";
     const visionModel = provider.vision_model || provider.text_model || models.find((model) => /gemini.*(?:pro|flash)(?!.*image)|gpt-4\.1|gpt-5/i.test(model)) || imageModel;
     if (!imageModel || !visionModel) throw new Error("Katman üretimi için görsel ve vision modeli bulunamadı.");
@@ -161,7 +163,7 @@ export async function POST(request: Request) {
       visualLayers.push({ id: item.id, name: item.name, src: await saveAsset(await differenceLayer(source, background, item.box, width, height, item.id === "logo")), effect: item.effect, delay: item.delay });
     }
     const designAspectRatio = width / height;
-    const spec: AnimatedCreativeProps = { imageSrc: context.asset.url, backgroundSrc, visualLayers, contentGradient: contentGradient(contentBoxes.filter((item) => item.id !== "logo").map((item) => item.box)), textLayers: [], designAspectRatio, durationSeconds: 8, motionStyle: "premium", accentColor: brand.primaryColor || "#6d5dfc" };
+    const spec: AnimatedCreativeProps = { imageSrc: context.asset.url, backgroundSrc, visualLayers, contentGradient: contentGradient(contentBoxes.filter((item) => item.id !== "logo").map((item) => item.box)), textLayers: [], designAspectRatio, durationSeconds: 8, motionStyle: "premium", accentColor: concept.primaryColor || brand.primaryColor || "#6d5dfc" };
     database.prepare("UPDATE generation_jobs SET model=?, status='complete', response_json=?, completed_at=? WHERE id=?").run(`${imageModel} + ${visionModel}`, JSON.stringify({ spec }), new Date().toISOString(), id);
     return Response.json({ ok: true, packageId: id, spec });
   } catch (error) {

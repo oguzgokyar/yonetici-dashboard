@@ -3,7 +3,7 @@ import "./globals.css";
 import { ProjectsProvider } from "@/features/projects/projects-context";
 
 export const metadata: Metadata = {
-  title: "Yönetici",
+  title: "Marka Motoru",
   description: "Markalar için içerik üretim ve dağıtım paneli",
 };
 

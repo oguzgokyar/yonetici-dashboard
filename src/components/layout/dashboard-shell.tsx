@@ -83,7 +83,7 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
     <>
       <div className="brand-lockup">
         {!collapsed && <div className="brand-mark"><Sparkles size={18} /></div>}
-        {!collapsed && <span>Yönetici</span>}
+        {!collapsed && <span>Marka Motoru</span>}
         <button
           className="icon-button collapse-button"
           onClick={() => setCollapsed(!collapsed)}

@@ -1,4 +1,4 @@
-# Yönetici
+# Marka Motoru
 
 Markaların sosyal medya içerik üretimi, video hazırlığı ve yayın planlarını proje bazında yöneten Next.js uygulaması.
 

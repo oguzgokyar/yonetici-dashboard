@@ -36,8 +36,8 @@ export async function POST(request: Request, context: Context) {
 
     const db = getDatabase();
     const project = db
-      .prepare("SELECT name, brand_json FROM projects WHERE id = ?")
-      .get(projectId) as { name?: string; brand_json?: string } | undefined;
+      .prepare("SELECT name, brand_json, brand_concept_json FROM projects WHERE id = ?")
+      .get(projectId) as { name?: string; brand_json?: string; brand_concept_json?: string } | undefined;
 
     if (!project) {
       return Response.json(
@@ -47,9 +47,13 @@ export async function POST(request: Request, context: Context) {
     }
 
     let brandName = project.name || "";
+    let brandConcept: Record<string, string> | undefined;
     try {
       const brand = JSON.parse(project.brand_json || "{}") as { brandName?: string };
       if (brand.brandName) brandName = brand.brandName;
+      if (project.brand_concept_json) {
+        brandConcept = JSON.parse(project.brand_concept_json) as Record<string, string>;
+      }
     } catch {
       // ignore
     }
@@ -62,6 +66,7 @@ export async function POST(request: Request, context: Context) {
       narrativeMode: body.narrativeMode,
       includeMusic: body.includeMusic,
       brandName,
+      brandConcept,
       revisionFeedback: body.revisionFeedback,
       currentStoryboard: body.currentStoryboard,
     });

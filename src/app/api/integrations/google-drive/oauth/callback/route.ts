@@ -93,10 +93,10 @@ export async function GET(request: Request) {
             <body style="background:#0b0f19;color:#f8fafc;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
               <div style="background:#1e293b;padding:32px;border-radius:16px;text-align:center;max-width:420px;border:1px solid #334155;box-shadow:0 10px 25px rgba(0,0,0,0.5);">
                 <h2 style="color:#10b981;margin-top:0;">✓ Google Drive Başarıyla Bağlandı!</h2>
-                <p style="color:#94a3b8;font-size:14px;line-height:1.5;"><strong>${profile.displayName || profile.email}</strong> hesabı hem Yönetici hem de Kazıyıcı aracı için aktif edildi.</p>
+                <p style="color:#94a3b8;font-size:14px;line-height:1.5;"><strong>${profile.displayName || profile.email}</strong> hesabı hem Marka Motoru hem de Kazıyıcı aracı için aktif edildi.</p>
                 <div style="margin-top:20px;display:flex;gap:10px;justify-content:center;">
                   <a href="http://scraper.43.131.47.253.sslip.io/" style="background:#10b981;color:#fff;padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:13px;">Kazıyıcıya Dön</a>
-                  <a href="/projects" style="background:#334155;color:#f8fafc;padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:13px;">Yöneticiye Dön</a>
+                  <a href="/projects" style="background:#334155;color:#f8fafc;padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:13px;">Marka Motoru'na Dön</a>
                 </div>
               </div>
             </body>

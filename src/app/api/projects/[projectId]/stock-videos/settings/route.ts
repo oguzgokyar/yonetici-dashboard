@@ -108,6 +108,7 @@ export async function POST(
   const { projectId } = await context.params;
   const db = getDatabase();
   const body = (await request.json().catch(() => ({}))) as {
+    syncFromBrand?: boolean;
     frameStyle?: string;
     headlineColor?: string;
     subtitleColor?: string;
@@ -126,6 +127,29 @@ export async function POST(
     musicVolume?: number;
     selectedOutroId?: string;
   };
+
+  if (body.syncFromBrand) {
+    type ProjConceptRow = { brand_json?: string; brand_concept_json?: string };
+    const proj = db.prepare("SELECT brand_json, brand_concept_json FROM projects WHERE id = ?").get(projectId) as ProjConceptRow | undefined;
+    if (proj) {
+      try {
+        const concept = JSON.parse(proj.brand_concept_json || "{}") as Record<string, string>;
+        const brand = JSON.parse(proj.brand_json || "{}") as Record<string, string>;
+        const sec = concept.secondaryColor || brand.secondaryColor || "#0F4C81";
+        const prim = concept.primaryColor || brand.primaryColor || "#FF6B35";
+        const acc = concept.accentColor || "#FFD166";
+        if (/^#[0-9a-f]{6}$/i.test(sec)) {
+          const r = parseInt(sec.slice(1, 3), 16);
+          const g = parseInt(sec.slice(3, 5), 16);
+          const b = parseInt(sec.slice(5, 7), 16);
+          body.headlineBgColor = `rgba(${r}, ${g}, ${b}, 0.88)`;
+        }
+        body.headlineColor = "#ffffff";
+        body.subtitleColor = acc;
+        body.brandNameColor = prim;
+      } catch { /* ignore */ }
+    }
+  }
 
   const now = new Date().toISOString();
   const frameStyle = body.frameStyle || "blur_padding";

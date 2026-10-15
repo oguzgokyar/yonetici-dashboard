@@ -360,9 +360,9 @@ export function buildHermesCanvaTaskPrompt(payload: CanvaTaskPayload): string {
     brandGuardianBlock = `
 MARKANIN RENK & STİL REHBERİ (İlham ve Denge Rehberi):
 - Tasarım Ruhu: ${concept.summary}
-- Renk Dengesi İlhamı: %60 Zemin (${concept.primaryColor || "#ffffff"}), %30 Yapı (${concept.secondaryColor || "#0f172a"}), %10 Vurgu (${concept.accentColor || "#6366f1"}).
-- Tipografi Önerisi: Başlıklar güçlü ve net sans-serif (${concept.typographyStyle || "Montserrat/Poppins Bold"}), gövdeler okunaklı sans-serif (${concept.typographyStyle || "Inter"}).
-`;
+- Renk Dengesi İlhamı: %60 Zemin (${concept.groundColor || "#FDFBF7"}), %30 Yapı/Tipografi (${concept.secondaryColor || "#0f172a"}), %10 Ana Aksiyon/Vurgu (${concept.primaryColor || "#FF6B35"})${concept.accentColor ? `, Ekstra Rozet/LED Vurgusu (${concept.accentColor})` : ""}.
+- Tipografi Önerisi: Başlıklar güçlü ve net sans-serif (${concept.typographyStyle || "Inter / Plus Jakarta Sans Bold"}), gövdeler okunaklı sans-serif.
+${concept.visualStyle ? `- Görsel Stil Kuralı: ${concept.visualStyle}\n` : ""}${concept.layoutGuidelines ? `- Yerleşim ve Kenar Boşluğu: ${concept.layoutGuidelines}\n` : ""}`;
   }
 
   // Brief metnini dinamik olarak marka seçimi ve çakışma önleyici kural ile zenginleştir

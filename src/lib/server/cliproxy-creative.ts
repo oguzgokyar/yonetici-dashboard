@@ -21,6 +21,26 @@ export async function loadMedia(value?: string): Promise<MediaInput | null> {
     if (/svg/i.test(data[1])) return { mimeType: "image/png", bytes: await sharp(bytes).png().toBuffer() };
     return { mimeType: data[1], bytes };
   }
+  // Local filesystem resolution for app-relative paths
+  if (value.startsWith("/")) {
+    try {
+      const fs = await import("node:fs");
+      const path = await import("node:path");
+      let diskPath = "";
+      if (value.startsWith("/api/assets/")) {
+        const assetId = value.replace("/api/assets/", "").split("?")[0];
+        diskPath = path.join(process.cwd(), ".data", "assets", `${assetId}.png`);
+        if (!fs.existsSync(diskPath)) diskPath = path.join(process.cwd(), ".data", "assets", `${assetId}.jpg`);
+      } else {
+        diskPath = path.join(process.cwd(), "public", value.replace(/^\/+/, ""));
+      }
+      if (diskPath && fs.existsSync(diskPath)) {
+        const bytes = fs.readFileSync(diskPath);
+        const mimeType = diskPath.endsWith(".png") ? "image/png" : diskPath.endsWith(".jpg") || diskPath.endsWith(".jpeg") ? "image/jpeg" : "image/png";
+        return { bytes, mimeType };
+      }
+    } catch { /* fallback to fetch */ }
+  }
   try {
     const response = await fetch(value, { signal: AbortSignal.timeout(20_000) });
     if (!response.ok) return null;

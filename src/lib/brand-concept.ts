@@ -7,6 +7,7 @@ export type BrandConcept = {
   layoutGuidelines?: string;
   sampleVisualUrl?: string;
   sampleVisualPrompt?: string;
+  groundColor?: string;
   primaryColor: string;
   secondaryColor: string;
   accentColor: string;
@@ -22,6 +23,7 @@ export const emptyBrandConcept: BrandConcept = {
   layoutGuidelines: "%60 Ferah zemin, %30 Koyu tipografik yapı, %10 Marka vurgu rengi (60-30-10 Kuralı). 120px güvenli marjin.",
   sampleVisualUrl: "",
   sampleVisualPrompt: "",
+  groundColor: "#FDFBF7",
   primaryColor: "#6d5dfc",
   secondaryColor: "#171826",
   accentColor: "#ffffff",
@@ -41,6 +43,7 @@ export function brandConceptInstruction(concept: Partial<BrandConcept> | null | 
     concept.photographyStyle && `Fotoğraf yaklaşımı: ${concept.photographyStyle}`,
     concept.typographyStyle && `Tipografi kuralı: ${concept.typographyStyle}`,
     concept.layoutGuidelines && `Yerleşim ve renk dengesi: ${concept.layoutGuidelines}`,
-    `Renk sistemi: ${concept.primaryColor || "belirtilmedi"}, ${concept.secondaryColor || "belirtilmedi"}, vurgu ${concept.accentColor || "belirtilmedi"}`,
+    `Renk sistemi: ${concept.groundColor ? `zemin ${concept.groundColor}, ` : ""}${concept.primaryColor || "belirtilmedi"}, ${concept.secondaryColor || "belirtilmedi"}, vurgu ${concept.accentColor || "belirtilmedi"}`,
+    concept.sampleVisualUrl && `Referans anahtar stil panosu mevcuttur; renk, aydınlatma ve atmosfer bütünlüğünü bu stile sadık tut.`,
   ].filter(Boolean).join("\n");
 }
