@@ -1,5 +1,6 @@
 import path from "node:path";
 import fs from "node:fs";
+import http from "node:http";
 import sharp from "sharp";
 import { isCanvaStudioEnabled, getCanvaConfig } from "@/lib/server/canva-config";
 import { getDatabase } from "@/lib/server/database";
@@ -15,29 +16,47 @@ async function fetchCanvaExportUrls(
   baseUrl: string,
   apiKey: string
 ): Promise<string[]> {
-  // 1. Try host bridge first for ultra-fast (1-2s) direct MCP export
-  const bridgeUrls = [
-    "http://10.0.1.1:8080/api/internal/canva/export",
-    "http://127.0.0.1:8080/api/internal/canva/export",
-    "http://10.0.1.8:8080/api/internal/canva/export",
+  // 1. Try host bridge first for ultra-fast (1-2s) direct MCP export via pure HTTP/1.1
+  const bridgeEndpoints = [
+    { host: "10.0.1.1", port: 8080 },
+    { host: "127.0.0.1", port: 8080 },
+    { host: "10.0.1.8", port: 8080 },
   ];
 
-  for (const bUrl of bridgeUrls) {
+  for (const ep of bridgeEndpoints) {
     try {
-      const res = await fetch(bUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ design_id: designId, format: { type: "png" } }),
-        signal: AbortSignal.timeout(60000),
+      const data = await new Promise<{ ok?: boolean; urls?: string[] } | null>((resolve) => {
+        const payload = JSON.stringify({ design_id: designId, format: { type: "png" } });
+        const req = http.request(
+          {
+            hostname: ep.host,
+            port: ep.port,
+            path: "/api/internal/canva/export",
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Content-Length": Buffer.byteLength(payload),
+              Connection: "close",
+            },
+            timeout: 60000,
+          },
+          (res) => {
+            let body = "";
+            res.setEncoding("utf8");
+            res.on("data", (chunk) => { body += chunk; });
+            res.on("end", () => {
+              try { resolve(JSON.parse(body)); } catch { resolve(null); }
+            });
+          }
+        );
+        req.on("error", () => resolve(null));
+        req.on("timeout", () => { req.destroy(); resolve(null); });
+        req.write(payload);
+        req.end();
       });
-      if (res.ok) {
-        const data = (await res.json().catch(() => ({}))) as {
-          ok?: boolean;
-          urls?: string[];
-        };
-        if (data.ok && Array.isArray(data.urls) && data.urls.length > 0) {
-          return data.urls;
-        }
+
+      if (data && data.ok && Array.isArray(data.urls) && data.urls.length > 0) {
+        return data.urls;
       }
     } catch {
       // Continue to next bridge or fallback
