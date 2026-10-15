@@ -13,15 +13,64 @@ type SettingsTab = "api" | "system" | "server";
 export function SettingsTabs() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("api");
 
-  return <div className="system-settings">
-    <div className="settings-tabs" role="tablist" aria-label="Sistem ayarları bölümleri">
-      <button type="button" role="tab" aria-selected={activeTab === "api"} className={activeTab === "api" ? "active" : ""} onClick={() => setActiveTab("api")}><Bot size={17} /><span><strong>API Yönetimi</strong><small>AI ve Sosyal Medya (Postiz) servisleri</small></span></button>
-      <button type="button" role="tab" aria-selected={activeTab === "system"} className={activeTab === "system" ? "active" : ""} onClick={() => setActiveTab("system")}><Settings2 size={17} /><span><strong>Sistem</strong><small>Uygulama ve güncellemeler</small></span></button>
-      <button type="button" role="tab" aria-selected={activeTab === "server"} className={activeTab === "server" ? "active" : ""} onClick={() => setActiveTab("server")}><Server size={17} /><span><strong>Sunucu</strong><small>Kaynaklar ve üretim işleri</small></span></button>
-    </div>
+  return (
+    <div className="system-settings">
+      <div className="settings-tabs" role="tablist" aria-label="Sistem ayarları bölümleri">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "api"}
+          className={activeTab === "api" ? "active" : ""}
+          onClick={() => setActiveTab("api")}
+        >
+          <Bot size={18} className="tab-icon" />
+          <span>
+            <strong>API Yönetimi</strong>
+            <small>AI ve Sosyal Medya (Postiz)</small>
+          </span>
+        </button>
 
-    <div role="tabpanel" aria-label={activeTab === "api" ? "API Yönetimi" : activeTab === "server" ? "Sunucu" : "Sistem"}>
-      {activeTab === "api" ? <><AiProviders /><MusicProviderSettings /></> : activeTab === "server" ? <ServerMonitor /> : <SystemUpdates />}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "server"}
+          className={activeTab === "server" ? "active" : ""}
+          onClick={() => setActiveTab("server")}
+        >
+          <Server size={18} className="tab-icon" />
+          <span>
+            <strong>Sunucu</strong>
+            <small>Kaynaklar ve üretim işleri</small>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "system"}
+          className={activeTab === "system" ? "active" : ""}
+          onClick={() => setActiveTab("system")}
+        >
+          <Settings2 size={18} className="tab-icon" />
+          <span>
+            <strong>Sistem</strong>
+            <small>Uygulama ve güncellemeler</small>
+          </span>
+        </button>
+      </div>
+
+      <div role="tabpanel" aria-label={activeTab === "api" ? "API Yönetimi" : activeTab === "server" ? "Sunucu" : "Sistem"}>
+        {activeTab === "api" ? (
+          <>
+            <AiProviders />
+            <MusicProviderSettings />
+          </>
+        ) : activeTab === "server" ? (
+          <ServerMonitor />
+        ) : (
+          <SystemUpdates />
+        )}
+      </div>
     </div>
-  </div>;
+  );
 }
