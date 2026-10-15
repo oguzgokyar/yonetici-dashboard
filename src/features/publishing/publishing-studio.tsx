@@ -435,6 +435,7 @@ export function PublishingStudio({
             videoAssetId?: string | null;
             videoUrl?: string | null;
             createdAt?: string;
+            updatedAt?: string;
           }) => {
             const packagePrompt =
               p.prompt ||
@@ -442,15 +443,19 @@ export function PublishingStudio({
               (p.packageType === "carousel"
                 ? `Canva Carousel (${p.itemCount} sayfa)`
                 : "Canva Tasarımı");
+            const versionTs = new Date(p.updatedAt || p.createdAt || Date.now()).getTime();
+            const coverUrlWithVersion = p.coverUrl.startsWith("/api/assets/")
+              ? `${p.coverUrl}?v=${versionTs}`
+              : p.coverUrl;
             const thumbUrl = p.coverUrl.startsWith("/api/assets/")
-              ? `${p.coverUrl}?thumb=1`
+              ? `${p.coverUrl}?thumb=1&v=${versionTs}`
               : p.coverUrl;
 
             items.push({
               id: p.id,
               type: "image",
               category: "canva_package",
-              url: p.coverUrl,
+              url: coverUrlWithVersion,
               thumbnailUrl: thumbUrl,
               prompt: packagePrompt,
               sourceTopic: p.prompt || p.title,
@@ -461,11 +466,14 @@ export function PublishingStudio({
             });
 
             if (p.videoUrl) {
+              const videoUrlWithVersion = p.videoUrl.startsWith("/api/assets/")
+                ? `${p.videoUrl}?v=${versionTs}`
+                : p.videoUrl;
               items.push({
                 id: p.videoAssetId || `canva_video_${p.id}`,
                 type: "video",
                 category: "video",
-                url: p.videoUrl,
+                url: videoUrlWithVersion,
                 thumbnailUrl: thumbUrl,
                 prompt: packagePrompt,
                 sourceTopic: p.prompt || p.title,

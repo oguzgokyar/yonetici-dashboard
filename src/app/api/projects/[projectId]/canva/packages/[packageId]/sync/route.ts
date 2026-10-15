@@ -10,6 +10,106 @@ export const runtime = "nodejs";
 
 type Context = { params: Promise<{ projectId: string; packageId: string }> };
 
+async function fetchCanvaExportUrls(
+  designId: string,
+  baseUrl: string,
+  apiKey: string
+): Promise<string[]> {
+  // 1. Try host bridge first for ultra-fast (1-2s) direct MCP export
+  const bridgeUrls = [
+    "http://10.0.1.1:8080/api/internal/canva/export",
+    "http://127.0.0.1:8080/api/internal/canva/export",
+    "http://10.0.1.8:8080/api/internal/canva/export",
+  ];
+
+  for (const bUrl of bridgeUrls) {
+    try {
+      const res = await fetch(bUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ design_id: designId, format: { type: "png" } }),
+        signal: AbortSignal.timeout(60000),
+      });
+      if (res.ok) {
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          urls?: string[];
+        };
+        if (data.ok && Array.isArray(data.urls) && data.urls.length > 0) {
+          return data.urls;
+        }
+      }
+    } catch {
+      // Continue to next bridge or fallback
+    }
+  }
+
+  // 2. Fallback: Dispatch to Hermes Agent via /v1/runs with export-design prompt
+  const exportPrompt = `Call mcp__canva__export_design on design_id='${designId}' with format={'type':'png'}. Return the JSON object containing urls.`;
+  const runResponse = await fetch(`${baseUrl}/v1/runs`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+    },
+    body: JSON.stringify({
+      model: "hermes-agent",
+      input: exportPrompt,
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!runResponse.ok && runResponse.status !== 202) {
+    throw new Error(`Hermes ile Canva export başlatılamadı (HTTP ${runResponse.status})`);
+  }
+
+  const runData = (await runResponse.json().catch(() => ({}))) as { run_id?: string; id?: string };
+  const runId = runData.run_id || runData.id;
+  if (!runId) throw new Error("Hermes run_id döndürmedi.");
+
+  let exportJsonStr = "";
+  const pollDeadline = Date.now() + 90000;
+  while (Date.now() < pollDeadline) {
+    await new Promise((r) => setTimeout(r, 2500));
+    const res = await fetch(`${baseUrl}/v1/runs/${runId}`, {
+      headers: { Accept: "application/json", ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
+    }).catch(() => null);
+
+    if (!res || !res.ok) continue;
+    const statusData = (await res.json().catch(() => ({}))) as {
+      status?: string;
+      output?: string;
+      error?: string;
+    };
+    if (statusData.status === "failed") throw new Error(statusData.error || "Canva export alınamadı.");
+    if (statusData.status === "completed" && statusData.output) {
+      exportJsonStr = statusData.output;
+      break;
+    }
+  }
+
+  if (!exportJsonStr) throw new Error("Canva export zaman aşımına uğradı.");
+
+  const urlMatches = Array.from(
+    exportJsonStr.matchAll(/https:\/\/export-download\.canva\.com\/[^\s"',\]}]+/g)
+  ).map((m) => m[0]);
+
+  if (urlMatches.length > 0) {
+    return urlMatches;
+  }
+
+  try {
+    const parsed = JSON.parse(exportJsonStr);
+    const urls = parsed.urls || parsed.content?.[0]?.job?.urls || parsed.job?.urls;
+    if (Array.isArray(urls) && urls.length > 0) return urls;
+  } catch {
+    // ignore
+  }
+
+  throw new Error("Canva export görsel bağlantıları ayrıştırılamadı.");
+}
+
 export async function POST(_request: Request, context: Context) {
   if (!isCanvaStudioEnabled()) {
     return Response.json({ ok: false, message: "Canva Studio devre dışı." }, { status: 404 });
@@ -55,79 +155,28 @@ export async function POST(_request: Request, context: Context) {
     .run(new Date().toISOString(), packageId);
 
   try {
-    // 1. Fetch updated pages & thumbnails from Canva via Hermes
-    const pagesPrompt = `Call mcp__canva__get_design_pages directly on design_id='${designId}'. Return the raw JSON result.`;
-    const runResponse = await fetch(`${baseUrl}/v1/runs`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      },
-      body: JSON.stringify({
-        model: "hermes-agent",
-        input: pagesPrompt,
-      }),
-      signal: AbortSignal.timeout(15000),
-    });
+    // 1. Fetch fresh master PNG export URLs directly from Canva Connect API
+    const exportUrls = await fetchCanvaExportUrls(designId, baseUrl, apiKey);
 
-    if (!runResponse.ok && runResponse.status !== 202) {
-      throw new Error(`Hermes ile Canva sayfaları sorgulanamadı (HTTP ${runResponse.status})`);
+    if (!exportUrls.length) {
+      throw new Error("Canva'dan dışa aktarma bağlantıları alınamadı.");
     }
 
-    const runData = (await runResponse.json().catch(() => ({}))) as { run_id?: string; id?: string };
-    const runId = runData.run_id || runData.id;
-    if (!runId) throw new Error("Hermes run_id döndürmedi.");
-
-    let pagesJsonStr = "";
-    const pollDeadline = Date.now() + 60000;
-    while (Date.now() < pollDeadline) {
-      await new Promise((r) => setTimeout(r, 2500));
-      const res = await fetch(`${baseUrl}/v1/runs/${runId}`, {
-        headers: { Accept: "application/json", ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
-      }).catch(() => null);
-
-      if (!res || !res.ok) continue;
-      const statusData = (await res.json().catch(() => ({}))) as { status?: string; output?: string; error?: string };
-      if (statusData.status === "failed") throw new Error(statusData.error || "Canva sayfaları alınamadı.");
-      if (statusData.status === "completed" && statusData.output) {
-        pagesJsonStr = statusData.output;
-        break;
-      }
-    }
-
-    if (!pagesJsonStr) throw new Error("Canva sayfaları zaman aşımına uğradı.");
-
-    // Parse items array
-    let itemsList: Array<{ index?: number; thumbnail?: { url?: string }; dimensions?: { width?: number; height?: number } }> = [];
-    try {
-      const match = pagesJsonStr.match(/\{[\s\S]*"items"[\s\S]*\}/);
-      if (match) {
-        const parsed = JSON.parse(match[0]);
-        itemsList = parsed.items || [];
-      }
-    } catch {
-      // fallback
-    }
-
-    if (!itemsList.length) {
-      throw new Error("Canva tasarım sayfaları ayrıştırılamadı.");
-    }
-
-    // 2. Download and overwrite existing slide images
+    // 2. Download and overwrite existing slide images with fresh master renders
     const existingItems = database
       .prepare("SELECT id, asset_id, position FROM media_package_items WHERE package_id=? ORDER BY position ASC")
       .all(packageId) as Array<{ id: string; asset_id: string; position: number }>;
 
     let newCoverAssetId = pkg.cover_asset_id;
 
-    for (let i = 0; i < itemsList.length; i++) {
-      const page = itemsList[i];
-      const thumbUrl = page.thumbnail?.url;
-      if (!thumbUrl) continue;
-
-      const imgRes = await fetch(thumbUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
-      if (!imgRes.ok) continue;
+    for (let i = 0; i < exportUrls.length; i++) {
+      const slideUrl = exportUrls[i];
+      const imgRes = await fetch(slideUrl, {
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
+      });
+      if (!imgRes.ok) {
+        throw new Error(`Slayt ${i + 1} indirilemedi (HTTP ${imgRes.status})`);
+      }
 
       const buffer = Buffer.from(await imgRes.arrayBuffer());
       const position = i + 1;
@@ -166,6 +215,10 @@ export async function POST(_request: Request, context: Context) {
             "INSERT INTO media_package_items (id, package_id, asset_id, position, mime_type, width, height, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
           )
           .run(itemId, packageId, saved.assetId, position, saved.mimeType, saved.width, saved.height, "{}", new Date().toISOString());
+
+        if (position === 1) {
+          newCoverAssetId = saved.assetId;
+        }
       }
 
       if (position === 1 && existing) {
@@ -174,7 +227,7 @@ export async function POST(_request: Request, context: Context) {
     }
 
     // 3. Remove orphaned slides if slide count decreased in Canva
-    const newPositions = new Set(Array.from({ length: itemsList.length }, (_, i) => i + 1));
+    const newPositions = new Set(Array.from({ length: exportUrls.length }, (_, i) => i + 1));
     for (const oldItem of existingItems) {
       if (!newPositions.has(oldItem.position)) {
         // Delete all asset files for orphaned slide
@@ -192,7 +245,7 @@ export async function POST(_request: Request, context: Context) {
     // Update package count & timestamp
     database
       .prepare("UPDATE media_packages SET item_count=?, cover_asset_id=?, updated_at=? WHERE id=?")
-      .run(itemsList.length, newCoverAssetId, new Date().toISOString(), packageId);
+      .run(exportUrls.length, newCoverAssetId, new Date().toISOString(), packageId);
 
     // 4. If package has a video or is a video package, clean old video files and re-export with Magic Animate
     let videoUpdated = false;
@@ -205,7 +258,7 @@ export async function POST(_request: Request, context: Context) {
           packageId,
           projectId,
           designId,
-          slideCount: itemsList.length,
+          slideCount: exportUrls.length,
           durationPerSlide: 3.5,
           useMagicAnimate: true,
         });
@@ -237,8 +290,8 @@ export async function POST(_request: Request, context: Context) {
       ok: true,
       message: videoUpdated
         ? "Tasarım ve video Canva'dan başarıyla güncellendi."
-        : "Tasarım slaytları Canva'dan başarıyla güncellendi.",
-      itemCount: itemsList.length,
+        : `Canva'daki son değişiklikler (${exportUrls.length} sayfa) başarıyla güncellendi.`,
+      itemCount: exportUrls.length,
       videoUpdated,
     });
   } catch (err: unknown) {
