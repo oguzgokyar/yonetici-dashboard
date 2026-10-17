@@ -65,6 +65,8 @@ type RenderedItem = {
   durationSeconds?: number;
   metadata?: Record<string, unknown>;
   createdAt: string;
+  isGoogleVids?: boolean;
+  isStockRender?: boolean;
 };
 
 const frameStyles: { id: StockFrameStyle; name: string; desc: string }[] = [
@@ -144,7 +146,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
   const [selectedVideoId, setSelectedVideoId] = useState<string>("");
 
   // Pagination for stock videos
-  const PAGE_SIZE = 12;
+  const PAGE_SIZE = 15;
   const [currentPage, setCurrentPage] = useState<number>(1);
 
   // Editor states
@@ -243,7 +245,10 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
       if (vidRes.ok) {
         const vidData = await vidRes.json();
         if (request !== loadRequestRef.current) return;
-        setRenderedVideos(vidData.videos || []);
+        const stockRenders = (vidData.videos || []).filter(
+          (v: RenderedItem) => !v.isGoogleVids && v.isStockRender !== false
+        );
+        setRenderedVideos(stockRenders);
       }
 
       if (settingsRes.ok) {
@@ -458,17 +463,39 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
   });
   const durationLabel = (duration: number | undefined) => duration === undefined ? "Süre bekleniyor" : `${duration.toFixed(2)}s`;
 
-  // Filtered videos
+  // Filtered and sorted stock videos (newest first)
   const filteredVideos = useMemo(() => {
-    if (!search.trim()) return videos;
-    const term = search.toLowerCase();
-    return videos.filter((v) => v.name.toLowerCase().includes(term));
+    let list = videos;
+    if (search.trim()) {
+      const term = search.toLowerCase();
+      list = list.filter((v) => v.name.toLowerCase().includes(term));
+    }
+    return [...list].sort((a, b) => {
+      const timeA = new Date(a.createdAt).getTime();
+      const timeB = new Date(b.createdAt).getTime();
+      if (!Number.isNaN(timeA) && !Number.isNaN(timeB) && timeA !== timeB) {
+        return timeB - timeA;
+      }
+      return 0;
+    });
   }, [videos, search]);
 
   const totalPages = Math.max(1, Math.ceil(filteredVideos.length / PAGE_SIZE));
   const paginatedVideos = useMemo(() => {
     return filteredVideos.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   }, [filteredVideos, currentPage, PAGE_SIZE]);
+
+  // Sorted rendered videos (newest first)
+  const sortedRenderedVideos = useMemo(() => {
+    return [...renderedVideos].sort((a, b) => {
+      const timeA = new Date(a.createdAt).getTime();
+      const timeB = new Date(b.createdAt).getTime();
+      if (!Number.isNaN(timeA) && !Number.isNaN(timeB) && timeA !== timeB) {
+        return timeB - timeA;
+      }
+      return 0;
+    });
+  }, [renderedVideos]);
 
   // Sync with Google Drive
   async function handleSync() {
@@ -839,16 +866,16 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
           {/* Rendered Videos Tab */}
           {activeTab === "rendered" && (
             <div className="stock-video-grid">
-              {renderedVideos.length === 0 ? (
+              {sortedRenderedVideos.length === 0 ? (
                 <div className="history-empty">
                   <Clapperboard size={32} />
                   <span>Henüz çerçeveli bir video üretilmedi.</span>
                 </div>
               ) : (
-                renderedVideos.map((rv) => (
+                sortedRenderedVideos.map((rv) => (
                   <article key={rv.id} className="stock-video-card">
                     <div className="stock-thumb-wrap">
-                      <video src={rv.url} preload="metadata" controls muted />
+                      <video src={rv.url} poster={`/api/videos/${rv.id}?thumb=1`} preload="none" controls playsInline muted />
                     </div>
                     <div className="stock-card-content">
                       <strong title={rv.title || rv.id}>{rv.title || `Render-${rv.id.slice(0, 8)}`}</strong>
@@ -1282,7 +1309,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                   type="button"
                   className="button primary render-action-btn"
                   onClick={handleRender}
-                  disabled={rendering}
+                  disabled={rendering || !timeline}
                 >
                   {rendering ? (
                     <LoaderCircle className="spin" size={17} />

@@ -46,7 +46,7 @@ export async function GET(
 
   const url = new URL(request.url);
   const search = url.searchParams.get("search")?.trim() || "";
-  const limit = Math.min(Number(url.searchParams.get("limit")) || 60, 200);
+  const limit = Math.min(Number(url.searchParams.get("limit")) || 300, 500);
 
   // Get drive config
   const config = db
@@ -223,6 +223,7 @@ export async function POST(
           width = excluded.width,
           height = excluded.height,
           metadata_json = excluded.metadata_json,
+          created_at = excluded.created_at,
           updated_at = excluded.updated_at
       `);
 
@@ -255,7 +256,11 @@ export async function POST(
       for (const file of files) {
         const id = crypto.randomUUID();
         const baseName = file.name.replace(/\.[^/.]+$/, "").trim().toLowerCase();
-        let metaObj: Record<string, unknown> = { parents: file.parents || [] };
+        let metaObj: Record<string, unknown> = {
+          parents: file.parents || [],
+          driveCreatedTime: file.createdTime,
+          driveModifiedTime: file.modifiedTime,
+        };
 
         // Check if there is an existing matching json file
         const matchingJsonId = jsonFileMap.get(baseName);
@@ -274,6 +279,7 @@ export async function POST(
           } catch {}
         }
 
+        const fileCreatedAt = file.createdTime || file.modifiedTime || now;
         const res = insertStmt.run(
           id,
           projectId,
@@ -286,7 +292,7 @@ export async function POST(
           file.width || 0,
           file.height || 0,
           JSON.stringify(metaObj),
-          now,
+          fileCreatedAt,
           now
         );
         if (res.changes > 0) {

@@ -41,6 +41,8 @@ export type DriveVideoFile = {
   width?: number;
   height?: number;
   parents?: string[];
+  createdTime?: string;
+  modifiedTime?: string;
 };
 
 // Fallback to system token files if project has no custom account
@@ -338,6 +340,8 @@ export async function listDriveVideos(
         durationMillis?: string;
       };
       parents?: string[];
+      createdTime?: string;
+      modifiedTime?: string;
     }>();
   let finalNextPageToken: string | undefined;
 
@@ -354,7 +358,7 @@ export async function listDriveVideos(
 
       let url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
         finalQuery
-      )}&pageSize=${pageSize}&fields=nextPageToken,files(id,name,mimeType,size,thumbnailLink,videoMediaMetadata,parents)&orderBy=name`;
+      )}&pageSize=${pageSize}&fields=nextPageToken,files(id,name,mimeType,size,thumbnailLink,videoMediaMetadata,parents,createdTime,modifiedTime)&orderBy=createdTime desc`;
       if (currentPageToken) url += `&pageToken=${encodeURIComponent(currentPageToken)}`;
 
       const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
@@ -376,6 +380,8 @@ export async function listDriveVideos(
             durationMillis?: string;
           };
           parents?: string[];
+          createdTime?: string;
+          modifiedTime?: string;
         }>;
       };
       for (const file of data.files || []) filesById.set(file.id, file);
@@ -400,6 +406,8 @@ export async function listDriveVideos(
       width: file.videoMediaMetadata?.width,
       height: file.videoMediaMetadata?.height,
       parents: file.parents,
+      createdTime: file.createdTime,
+      modifiedTime: file.modifiedTime,
     };
   });
 
