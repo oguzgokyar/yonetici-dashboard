@@ -53,7 +53,7 @@ type DbJobRow = {
 
 function resolveTypeLabel(type: string, requestData: RequestData): string {
   if (type === "canva") {
-    if ((requestData as any)?.mode === "canva_video_export") return "Canva Sihirli Video";
+    if ((requestData as any)?.mode === "canva_video_export") return "Canva Karosel Video";
     const cType = requestData?.contentType || "";
     if (cType.includes("carousel")) return "Canva Karosel";
     if (cType.includes("story")) return "Canva Story";
@@ -76,8 +76,8 @@ function extractPreviewUrl(type: string, responseData: ResponseData, packageRow?
   if (type === "canva") {
     if (responseData?.videoUrl) return responseData.videoUrl;
     if (packageRow) {
-      if (packageRow.cover_asset_id) return `/api/assets/${packageRow.cover_asset_id}`;
       if (packageRow.video_url) return packageRow.video_url;
+      if (packageRow.cover_asset_id) return `/api/assets/${packageRow.cover_asset_id}`;
     }
   }
   if (type === "image" && Array.isArray(responseData?.assets) && responseData.assets.length > 0) {
@@ -104,6 +104,7 @@ export async function GET(
   } catch {}
 
   // 1. Fetch in-flight (active/queued) jobs
+  // Not: Tamamlanmış veya galeriye başarıyla aktarılmış işler aktif sırada tutulmaz.
   const inFlightRows = db.prepare(`
     SELECT id, project_id, type, provider, model, status, prompt, request_json, response_json, progress_json, error, created_at, completed_at
     FROM generation_jobs
@@ -113,6 +114,7 @@ export async function GET(
   `).all(projectId) as unknown as DbJobRow[];
 
   // 2. Fetch completed/failed jobs (Limit 10)
+  // Not: Galeriye/medya arşivine başarıyla düşenler (complete) aktif sıradan çıkar, yalnızca geçmiş/bitti sekmesinde yer alır.
   const completedRows = db.prepare(`
     SELECT id, project_id, type, provider, model, status, prompt, request_json, response_json, progress_json, error, created_at, completed_at
     FROM generation_jobs

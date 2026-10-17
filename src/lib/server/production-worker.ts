@@ -47,7 +47,7 @@ export function runInFifoQueue<T>(jobId: string | undefined, fn: () => Promise<T
 
 async function waitForCanvaCompletion(jobId: string): Promise<void> {
   const startedAt = Date.now();
-  const MAX_WAIT_MS = 15 * 60 * 1000; // 15 dakika tavan bekleme süresi
+  const MAX_EXECUTION_WAIT_MS = 15 * 60 * 1000; // Fiilen çalışmaya başladığı andan itibaren 15 dakika tavan bekleme süresi
 
   while (true) {
     const db = getDatabase();
@@ -60,13 +60,12 @@ async function waitForCanvaCompletion(jobId: string): Promise<void> {
     // Görev silinmişse veya tamamlanmış/başarısızsa döngüyü derhal kır
     if (!job || ['complete', 'failed'].includes(job.status)) return;
 
-    // 15 dakikadan uzun süredir takılı kalmış yetim işi zaman aşımına uğrat
-    const elapsed = Date.now() - startedAt;
-    const createdAtTime = new Date(job.created_at || 0).getTime();
-    const staleElapsed = Date.now() - createdAtTime;
+    // Yalnızca işin fiilen işletim süresi (startedAt) 15 dakikayı geçerse zaman aşımına uğrat
+    // Kuyrukta bekleme süresi (created_at) zaman aşımını tetiklemez!
+    const executionElapsed = Date.now() - startedAt;
 
-    if (elapsed > MAX_WAIT_MS || (createdAtTime > 0 && staleElapsed > MAX_WAIT_MS)) {
-      console.warn(`[Production Worker] Canva görevi (${jobId}) zaman aşımına uğradı, kilit serbest bırakılıyor.`);
+    if (executionElapsed > MAX_EXECUTION_WAIT_MS) {
+      console.warn(`[Production Worker] Canva görevi (${jobId}) çalışma süresi zaman aşımına uğradı, kilit serbest bırakılıyor.`);
       const now = new Date().toISOString();
       db.prepare(`
         UPDATE generation_jobs
@@ -80,7 +79,7 @@ async function waitForCanvaCompletion(jobId: string): Promise<void> {
   }
 }
 
-async function runCanvaLifetime(job: Parameters<typeof processCanvaJob>[0], resume = false): Promise<void> {
+export async function runCanvaLifetime(job: Parameters<typeof processCanvaJob>[0], resume = false): Promise<void> {
   const jobId = `canva:${job.id}`;
   const claim = `dashboard:${job.id}`;
   await acquireHeavyJob(jobId, claim);
@@ -154,19 +153,10 @@ export function triggerProductionWorker(): void {
         } else if (nextJob.type === "google-vids") {
           await withHeavyJob(`google-vids:${nextJob.id}`, `dashboard:${randomUUID()}`, () => processGoogleVidsJob(nextJob));
         } else if (nextJob.type === "canva") {
-          // Eğer video export modundaysa (Magic Animate / CDP) ağır iş koordinatörü altında çalıştır,
-          // standart karusel/statik görsel ise hafif modda çalıştır.
-          let isVideoExport = false;
-          try {
-            const reqData = JSON.parse(nextJob.request_json || "{}");
-            isVideoExport = reqData.mode === "canva_video_export";
-          } catch {}
-
-          if (isVideoExport) {
-            await withHeavyJob(`canva-video:${nextJob.id}`, `dashboard:${randomUUID()}`, () => runCanvaLifetime(nextJob));
-          } else {
-            await runCanvaLifetime(nextJob);
-          }
+          // İster standart karusel/statik görsel olsun, ister Canva Cloud Video Export olsun:
+          // Her ikisi de Canva REST API/Cloud üzerinden yürütüldüğü için ağır host video kuyruğunu (Google Vids / FFmpeg)
+          // beklemeden doğrudan ve hafif modda çalıştırılır.
+          void runCanvaLifetime(nextJob);
         }
       }
     } finally {

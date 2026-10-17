@@ -230,7 +230,8 @@ export function ProductionQueueDrawer({
             ) : (
               <div className="prod-drawer-list">
                 {queue.map((item, idx) => {
-                  const isWaiting = item.status === "queued" && idx > 0;
+                  const isDirectRunning = item.status === "running" || item.status === "dispatching" || item.status === "rendering" || item.status === "exporting" || item.status === "uploading";
+                  const isWaiting = item.status === "queued" && idx > 0 && !item.type.includes("canva");
                   return (
                     <div key={item.id} className={`prod-queue-card ${isWaiting ? "waiting-job" : "active-job"}`}>
                       <div className="prod-card-top">
@@ -240,7 +241,13 @@ export function ProductionQueueDrawer({
                         </span>
 
                         <div className="prod-card-meta">
-                          <span className="prod-order-tag">#{idx + 1}</span>
+                          {isDirectRunning ? (
+                            <span className="prod-order-tag" style={{ background: "rgba(16, 185, 129, 0.15)", color: "#10b981", border: "1px solid rgba(16, 185, 129, 0.3)" }}>
+                              ⚡ Üretiliyor
+                            </span>
+                          ) : (
+                            <span className="prod-order-tag">#{idx + 1}</span>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleCancelOrRemove(item.id)}
@@ -268,7 +275,7 @@ export function ProductionQueueDrawer({
                             ) : (
                               <>
                                 <RefreshCw className="spin" size={11} />
-                                <span>{item.progressDetail}</span>
+                                <span>{item.progressDetail || (item.type === "canva" ? "Canva API ile üretiliyor..." : "Üretim devam ediyor...")}</span>
                               </>
                             )}
                           </span>
@@ -280,7 +287,7 @@ export function ProductionQueueDrawer({
                           <div
                             className="prod-progress-fill"
                             style={{
-                              width: isWaiting ? "0%" : `${Math.max(8, Math.min(100, item.progressPercent))}%`,
+                              width: isWaiting ? "0%" : `${Math.max(12, Math.min(100, item.progressPercent))}%`,
                             }}
                           />
                         </div>

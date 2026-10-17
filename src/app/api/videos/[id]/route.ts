@@ -87,7 +87,13 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     if (rangeHeader) {
       const parts = rangeHeader.replace(/bytes=/, "").split("-");
       const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      let end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+      // Limit open-ended range requests (e.g. bytes=0-) to max 2MB chunk to prevent RAM exhaustion and backpressure lockups
+      const maxChunkSize = 2 * 1024 * 1024;
+      if (!parts[1] && end - start + 1 > maxChunkSize) {
+        end = Math.min(start + maxChunkSize - 1, fileSize - 1);
+      }
       const chunksize = end - start + 1;
 
       const fileStream = fs.createReadStream(videoPath, { start, end });
@@ -96,6 +102,9 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
           fileStream.on("data", (chunk) => controller.enqueue(chunk));
           fileStream.on("end", () => controller.close());
           fileStream.on("error", (err) => controller.error(err));
+        },
+        cancel() {
+          fileStream.destroy();
         },
       });
 
@@ -117,6 +126,9 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
         fileStream.on("data", (chunk) => controller.enqueue(chunk));
         fileStream.on("end", () => controller.close());
         fileStream.on("error", (err) => controller.error(err));
+      },
+      cancel() {
+        fileStream.destroy();
       },
     });
 

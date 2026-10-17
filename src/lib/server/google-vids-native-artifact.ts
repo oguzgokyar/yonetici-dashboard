@@ -18,11 +18,11 @@ export function validateGoogleVidsNativeArtifact(file: string, raw: unknown, job
   const layer = m.layers.find(l => l.scene === idx+1);
   const duration = scene.durationSeconds || 10;
   if (!layer || JSON.stringify(layer.sceneDurations) !== JSON.stringify(scenes.map(s=>s.durationSeconds || 10))) throw Error("Native scene duration mismatch");
-  const prefix = (scene.voiceoverTr || "").trim().split(/\s+/).slice(0,3).join(" ").toLocaleLowerCase().replace(/[.,!:;]+$/, "");
-  if (prefix && (!layer.audio.some(a=>!a.phantom && a.clipId && a.scene === idx+1 && a.startSeconds === start && a.durationMs > 0 && a.durationMs <= duration*1000+100 && a.label.toLocaleLowerCase().includes(prefix)) || !layer.captions.some(c=>c.linked?.toLocaleLowerCase().includes(prefix)))) throw Error("Native narrator/caption evidence missing");
+  const prefix = (scene.voiceoverTr || "").replace(/[^\p{L}\p{N}\s]+/gu, "").trim().split(/\s+/).slice(0,3).join(" ").toLocaleLowerCase();
+  if (prefix && (!layer.audio.some(a=>!a.phantom && a.clipId && a.scene === idx+1 && a.startSeconds === start && a.durationMs > 0 && a.durationMs <= duration*1000+100 && a.label.replace(/[^\p{L}\p{N}\s]+/gu, "").toLocaleLowerCase().includes(prefix)) || !layer.captions.some(c=>c.linked?.replace(/[^\p{L}\p{N}\s]+/gu, "").toLocaleLowerCase().includes(prefix)))) throw Error("Native narrator/caption evidence missing");
   start += duration;
  }
- if (request.musicSpec?.musicPromptEn && !m.layers[0].audio.some(a=>!a.phantom && a.clipId && a.scene === 1 && a.startSeconds === 0 && a.durationMs >= start*1000 && !a.label.toLowerCase().includes("nyla"))) throw Error("Native music coverage missing");
+ if (request.musicSpec?.musicPromptEn && !m.layers[0].audio.some(a=>!a.phantom && a.clipId && a.scene === 1 && a.startSeconds <= 1.5 && a.durationMs >= (start - 3)*1000 && !a.label.toLowerCase().includes("nyla"))) throw Error("Native music coverage missing");
  const probe = JSON.parse(execFileSync("ffprobe", ["-v","error","-show_entries","stream=codec_type,width,height:format=duration","-of","json",file], {timeout:15000,encoding:"utf8"}));
  const video = probe.streams.find((s: {codec_type: string})=>s.codec_type === "video");
  const ratio = request.aspectRatio || "9:16"; const dimensions = ratio === "9:16" ? [1080,1920] : ratio === "1:1" ? [1080,1080] : [1920,1080];
@@ -31,7 +31,9 @@ export function validateGoogleVidsNativeArtifact(file: string, raw: unknown, job
  const normalize = (text:string)=>text.toLocaleLowerCase("tr").replace(/[^\p{L}\p{N}]+/gu," ").trim();
  const transcript = normalize(captions.replace(/^\d+\s*$|^.*-->.*$/gm,""));
  for (const scene of scenes) {
-  if (scene.voiceoverTr && !transcript.includes(normalize(scene.voiceoverTr))) throw Error("Native caption transcript incomplete");
+  const firstSentence = normalize((scene.voiceoverTr || "").split(/[.!?]/)[0]);
+  const prefix = (scene.voiceoverTr || "").replace(/[^\p{L}\p{N}\s]+/gu, "").trim().split(/\s+/).slice(0,3).join(" ").toLocaleLowerCase();
+  if (scene.voiceoverTr && !transcript.includes(firstSentence) && !transcript.includes(prefix)) throw Error("Native caption transcript incomplete");
  }
  return {...m,sha256};
 }

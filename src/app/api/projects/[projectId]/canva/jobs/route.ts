@@ -1,6 +1,6 @@
 import { createJobCallbackToken, getCanvaConfig, isCanvaStudioEnabled } from "@/lib/server/canva-config";
 import { getDatabase } from "@/lib/server/database";
-import { triggerProductionWorker } from "@/lib/server/production-worker";
+import { triggerProductionWorker, runCanvaLifetime } from "@/lib/server/production-worker";
 import {
   HERMES_CANVA_PIPELINE_VERSION,
   buildHermesCanvaTaskPrompt,
@@ -200,13 +200,22 @@ export async function POST(request: Request, context: Context) {
     `)
     .run(jobId, projectId, validatedInput.prompt, requestJson, progressJson, now);
 
-  // Trigger FIFO background worker to process sequentially
+  // Statik görsel / karusel işlerini video render kuyruğunu beklemeden ANINDA asenkron olarak başlat
+  const createdJobRecord = {
+    id: jobId,
+    project_id: projectId,
+    prompt: validatedInput.prompt,
+    request_json: requestJson,
+  };
+  void runCanvaLifetime(createdJobRecord);
+
+  // Arka plan işçisini de diğer bekleyen işler için uyar
   triggerProductionWorker();
 
   return Response.json({
     ok: true,
     jobId,
-    message: "Canva üretim görevi sıraya alındı (FIFO).",
+    message: "Canva üretim görevi anında başlatıldı.",
   }, { status: 202 });
 }
 

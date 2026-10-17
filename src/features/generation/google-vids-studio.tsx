@@ -1673,7 +1673,13 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
           <div className="video-history-grid">
             {videos.map((video) => (
               <article key={video.id}>
-                <video src={video.url} controls preload="metadata" />
+                <video
+                  src={video.url}
+                  poster={`/api/videos/${video.id}?thumb=1`}
+                  controls
+                  preload="none"
+                  playsInline
+                />
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                   <span>
                     {video.title || "Google Vids"} • {video.durationSeconds || 30} sn
