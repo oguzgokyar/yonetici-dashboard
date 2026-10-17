@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useProjects } from "./projects-context";
 import { BrandSettings } from "./brand-settings";
+import { SinematikStudioControl } from "./sinematik-studio-control";
 
 export function ProjectHub({ projectId }: { projectId: string }) {
   const searchParams = useSearchParams();
@@ -184,7 +185,10 @@ export function ProjectHub({ projectId }: { projectId: string }) {
               text="Statik görselleri hareketli posterlere ve videolara dönüştürün."
             />
 
-            {/* 5. Stok Video & Altyazı Motoru */}
+            {/* 5. Sinematik Video Stüdyosu (Aç/Kapat Kontrollü) */}
+            <SinematikStudioControl variant="card" />
+
+            {/* 6. Stok Video & Altyazı Motoru */}
             <WorkflowCard
               href={`/projects/${projectId}/stock-videos`}
               icon={<Film size={20} />}
