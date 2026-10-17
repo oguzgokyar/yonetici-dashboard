@@ -200,16 +200,7 @@ export async function POST(request: Request, context: Context) {
     `)
     .run(jobId, projectId, validatedInput.prompt, requestJson, progressJson, now);
 
-  // Statik görsel / karusel işlerini video render kuyruğunu beklemeden ANINDA asenkron olarak başlat
-  const createdJobRecord = {
-    id: jobId,
-    project_id: projectId,
-    prompt: validatedInput.prompt,
-    request_json: requestJson,
-  };
-  void runCanvaLifetime(createdJobRecord);
-
-  // Arka plan işçisini de diğer bekleyen işler için uyar
+  // Arka plan işçisini uyararak görevi sıraya al ve işlet
   triggerProductionWorker();
 
   return Response.json({

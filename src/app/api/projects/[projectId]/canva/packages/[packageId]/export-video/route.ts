@@ -91,14 +91,6 @@ export async function POST(request: Request, context: Context) {
     );
 
   // 3. Trigger background worker and return immediately
-  // Canva Video Export tamamen bulut/API tabanlı olduğu için ağır video kuyruğunu beklemeden ANINDA işletilir
-  const createdJobRecord = {
-    id: jobId,
-    project_id: projectId,
-    prompt: promptLabel,
-    request_json: JSON.stringify(requestState),
-  };
-  void runCanvaLifetime(createdJobRecord);
   triggerProductionWorker();
 
   return Response.json(

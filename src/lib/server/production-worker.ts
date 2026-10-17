@@ -153,10 +153,7 @@ export function triggerProductionWorker(): void {
         } else if (nextJob.type === "google-vids") {
           await withHeavyJob(`google-vids:${nextJob.id}`, `dashboard:${randomUUID()}`, () => processGoogleVidsJob(nextJob));
         } else if (nextJob.type === "canva") {
-          // İster standart karusel/statik görsel olsun, ister Canva Cloud Video Export olsun:
-          // Her ikisi de Canva REST API/Cloud üzerinden yürütüldüğü için ağır host video kuyruğunu (Google Vids / FFmpeg)
-          // beklemeden doğrudan ve hafif modda çalıştırılır.
-          void runCanvaLifetime(nextJob);
+          await runCanvaLifetime(nextJob);
         }
       }
     } finally {
