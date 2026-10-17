@@ -66,6 +66,7 @@ type RenderedItem = {
   metadata?: Record<string, unknown>;
   createdAt: string;
   isGoogleVids?: boolean;
+  googleVidsUrl?: string;
   isStockRender?: boolean;
 };
 
@@ -148,6 +149,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
   // Pagination for stock videos
   const PAGE_SIZE = 15;
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [renderedPage, setRenderedPage] = useState<number>(1);
 
   // Editor states
   const [frameStyle, setFrameStyle] = useState<StockFrameStyle>("none");
@@ -246,7 +248,7 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
         const vidData = await vidRes.json();
         if (request !== loadRequestRef.current) return;
         const stockRenders = (vidData.videos || []).filter(
-          (v: RenderedItem) => !v.isGoogleVids && v.isStockRender !== false
+          (v: RenderedItem) => !v.isGoogleVids && !v.googleVidsUrl && v.isStockRender !== false
         );
         setRenderedVideos(stockRenders);
       }
@@ -481,9 +483,10 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
   }, [videos, search]);
 
   const totalPages = Math.max(1, Math.ceil(filteredVideos.length / PAGE_SIZE));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
   const paginatedVideos = useMemo(() => {
-    return filteredVideos.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-  }, [filteredVideos, currentPage, PAGE_SIZE]);
+    return filteredVideos.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
+  }, [filteredVideos, safeCurrentPage, PAGE_SIZE]);
 
   // Sorted rendered videos (newest first)
   const sortedRenderedVideos = useMemo(() => {
@@ -496,6 +499,12 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
       return 0;
     });
   }, [renderedVideos]);
+
+  const totalRenderedPages = Math.max(1, Math.ceil(sortedRenderedVideos.length / PAGE_SIZE));
+  const safeRenderedPage = Math.min(Math.max(1, renderedPage), totalRenderedPages);
+  const paginatedRenderedVideos = useMemo(() => {
+    return sortedRenderedVideos.slice((safeRenderedPage - 1) * PAGE_SIZE, safeRenderedPage * PAGE_SIZE);
+  }, [sortedRenderedVideos, safeRenderedPage, PAGE_SIZE]);
 
   // Sync with Google Drive
   async function handleSync() {
@@ -830,13 +839,13 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                   {totalPages > 1 && (
                     <div className="stock-pagination-bar">
                       <span className="stock-pagination-info">
-                        Toplam {filteredVideos.length} videodan {(currentPage - 1) * PAGE_SIZE + 1} -{" "}
-                        {Math.min(currentPage * PAGE_SIZE, filteredVideos.length)} arası
+                        Toplam {filteredVideos.length} videodan {(safeCurrentPage - 1) * PAGE_SIZE + 1} -{" "}
+                        {Math.min(safeCurrentPage * PAGE_SIZE, filteredVideos.length)} arası
                       </span>
                       <div className="stock-pagination-btns">
                         <button
                           type="button"
-                          disabled={currentPage === 1}
+                          disabled={safeCurrentPage === 1}
                           onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                           className="button secondary"
                           style={{ height: "30px", fontSize: "11px", padding: "0 10px" }}
@@ -844,11 +853,11 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                           ‹ Önceki
                         </button>
                         <span className="stock-page-indicator">
-                          {currentPage} / {totalPages}
+                          {safeCurrentPage} / {totalPages}
                         </span>
                         <button
                           type="button"
-                          disabled={currentPage === totalPages}
+                          disabled={safeCurrentPage === totalPages}
                           onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                           className="button secondary"
                           style={{ height: "30px", fontSize: "11px", padding: "0 10px" }}
@@ -865,47 +874,82 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
 
           {/* Rendered Videos Tab */}
           {activeTab === "rendered" && (
-            <div className="stock-video-grid">
-              {sortedRenderedVideos.length === 0 ? (
-                <div className="history-empty">
-                  <Clapperboard size={32} />
-                  <span>Henüz çerçeveli bir video üretilmedi.</span>
-                </div>
-              ) : (
-                sortedRenderedVideos.map((rv) => (
-                  <article key={rv.id} className="stock-video-card">
-                    <div className="stock-thumb-wrap">
-                      <video src={rv.url} poster={`/api/videos/${rv.id}?thumb=1`} preload="none" controls playsInline muted />
-                    </div>
-                    <div className="stock-card-content">
-                      <strong title={rv.title || rv.id}>{rv.title || `Render-${rv.id.slice(0, 8)}`}</strong>
-                      <div className="stock-card-actions">
-                        <Link
-                          href={`/projects/${projectId}/publishing?assetId=${rv.id}`}
-                          className="stock-btn-share"
-                        >
-                          <Send size={12} />
-                          <span>Planla</span>
-                        </Link>
-                        <a href={rv.url} download className="stock-btn-edit">
-                          <Download size={12} />
-                          <span>İndir</span>
-                        </a>
-                        <TelegramSendButton mediaUrl={rv.url} mediaType="video" variant="button" label="Telegram" size={12} />
-                        <button
-                          type="button"
-                          className="stock-btn-del"
-                          title="Videoyu Sil"
-                          onClick={() => void handleDeleteVideo(rv.id)}
-                        >
-                          <Trash2 size={12} />
-                        </button>
+            <>
+              <div className="stock-video-grid">
+                {sortedRenderedVideos.length === 0 ? (
+                  <div className="history-empty">
+                    <Clapperboard size={32} />
+                    <span>Henüz çerçeveli bir video üretilmedi.</span>
+                  </div>
+                ) : (
+                  paginatedRenderedVideos.map((rv) => (
+                    <article key={rv.id} className="stock-video-card">
+                      <div className="stock-thumb-wrap">
+                        <video src={rv.url} poster={`/api/videos/${rv.id}?thumb=1`} preload="none" controls playsInline muted />
                       </div>
-                    </div>
-                  </article>
-                ))
+                      <div className="stock-card-content">
+                        <strong title={rv.title || rv.id}>{rv.title || `Render-${rv.id.slice(0, 8)}`}</strong>
+                        <div className="stock-card-actions">
+                          <Link
+                            href={`/projects/${projectId}/publishing?assetId=${rv.id}`}
+                            className="stock-btn-share"
+                          >
+                            <Send size={12} />
+                            <span>Planla</span>
+                          </Link>
+                          <a href={rv.url} download className="stock-btn-edit">
+                            <Download size={12} />
+                            <span>İndir</span>
+                          </a>
+                          <TelegramSendButton mediaUrl={rv.url} mediaType="video" variant="button" label="Telegram" size={12} />
+                          <button
+                            type="button"
+                            className="stock-btn-del"
+                            title="Videoyu Sil"
+                            onClick={() => void handleDeleteVideo(rv.id)}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  ))
+                )}
+              </div>
+
+              {/* Rendered Pagination Bar */}
+              {totalRenderedPages > 1 && (
+                <div className="stock-pagination-bar">
+                  <span className="stock-pagination-info">
+                    Toplam {sortedRenderedVideos.length} videodan {(safeRenderedPage - 1) * PAGE_SIZE + 1} -{" "}
+                    {Math.min(safeRenderedPage * PAGE_SIZE, sortedRenderedVideos.length)} arası
+                  </span>
+                  <div className="stock-pagination-btns">
+                    <button
+                      type="button"
+                      disabled={safeRenderedPage === 1}
+                      onClick={() => setRenderedPage((p) => Math.max(1, p - 1))}
+                      className="button secondary"
+                      style={{ height: "30px", fontSize: "11px", padding: "0 10px" }}
+                    >
+                      ‹ Önceki
+                    </button>
+                    <span className="stock-page-indicator">
+                      {safeRenderedPage} / {totalRenderedPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={safeRenderedPage === totalRenderedPages}
+                      onClick={() => setRenderedPage((p) => Math.min(totalRenderedPages, p + 1))}
+                      className="button secondary"
+                      style={{ height: "30px", fontSize: "11px", padding: "0 10px" }}
+                    >
+                      Sonraki ›
+                    </button>
+                  </div>
+                </div>
               )}
-            </div>
+            </>
           )}
         </section>
 

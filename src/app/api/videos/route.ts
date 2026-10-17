@@ -49,7 +49,7 @@ function localUrlToDataUrl(url: string | undefined) {
 export async function GET(request: Request) {
   const projectId = new URL(request.url).searchParams.get("projectId")?.trim();
   if (!projectId) return Response.json({ ok: false, message: "Proje gerekli." }, { status: 400 });
-  const rows = getDatabase().prepare("SELECT id, type, request_json, response_json, created_at, completed_at FROM generation_jobs WHERE project_id=? AND type IN ('video', 'google-vids') AND status='complete' ORDER BY created_at DESC LIMIT 50").all(projectId) as unknown as (VideoJobRow & { type?: string })[];
+  const rows = getDatabase().prepare("SELECT id, type, model, request_json, response_json, created_at, completed_at FROM generation_jobs WHERE project_id=? AND type IN ('video', 'google-vids') AND status='complete' ORDER BY created_at DESC LIMIT 50").all(projectId) as unknown as (VideoJobRow & { type?: string; model?: string })[];
   const videos = rows.map((row) => {
     let idea: { id?: string; title?: string; concept?: string } | undefined;
     let sourceTopic: string | undefined;
@@ -70,7 +70,10 @@ export async function GET(request: Request) {
       sourceTopic = requestState.sourceTopic || requestState.topic;
       metadata = requestState.metadata;
       isStockRender = Boolean(
-        requestState.sourceStockVideoId || requestState.renderer === "ffmpeg-frame-engine"
+        requestState.stockVideoId ||
+        requestState.sourceStockVideoId ||
+        requestState.renderer === "ffmpeg-frame-engine" ||
+        row.model === "ffmpeg-frame-engine"
       );
     } catch { /* ignore */ }
 
