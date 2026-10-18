@@ -78,20 +78,19 @@ async function fetchCanvaExportUrls(
         });
 
         if (data && data.ok && Array.isArray(data.urls) && data.urls.length > 0) {
-          if (data.is_quota_fallback || data.fallback === "thumbnails") {
-            if (activeAcc) {
-              markCanvaAccountExhausted(activeAcc.id, "Too many daily export requests for user");
-            }
-            // Check if there's another available account in the pool
-            const nextAcc = getNextAvailableCanvaAccount();
-            if (nextAcc && nextAcc.id !== activeAcc?.id) {
-              tryNextAccount = true;
-              break; // break inner endpoint loop and try with next account
-            }
-          } else {
-            if (activeAcc) recordCanvaAccountSuccess(activeAcc.id);
-          }
+          if (activeAcc) recordCanvaAccountSuccess(activeAcc.id);
           return data.urls;
+        }
+
+        if (data && (data.code === "quota_exceeded" || (data.error && data.error.includes("Too many daily export requests")))) {
+          if (activeAcc) {
+            markCanvaAccountExhausted(activeAcc.id, "Too many daily export requests for user");
+          }
+          const nextAcc = getNextAvailableCanvaAccount();
+          if (nextAcc && nextAcc.id !== activeAcc?.id) {
+            tryNextAccount = true;
+            break;
+          }
         }
       } catch {
         // Continue to next bridge or fallback
@@ -258,47 +257,27 @@ export async function POST(_request: Request, context: Context) {
       // If item already exists at this position, save or update
       const existing = existingItems.find((it) => it.position === position);
       if (existing) {
-        // Decode metadata & check for mandatory 1080p upscale gate
-        let finalBuffer = buffer;
-        let finalWidth = 1080;
-        let finalHeight = 1350;
-        try {
-          const meta = await sharp(buffer).metadata();
-          finalWidth = meta.width || 1080;
-          finalHeight = meta.height || 1350;
-          if (finalWidth < 1080) {
-            const targetWidth = 1080;
-            const targetHeight = Math.round(targetWidth * (finalHeight / finalWidth));
-            finalBuffer = await sharp(buffer)
-              .resize(targetWidth, targetHeight, { kernel: sharp.kernel.lanczos3 })
-              .sharpen({ sigma: 1.2, m1: 1.5, m2: 0.7 })
-              .png()
-              .toBuffer();
-            finalWidth = targetWidth;
-            finalHeight = targetHeight;
-          }
-        } catch {}
-
         // Overwrite file directly with master resolution
         const filePath = path.join(assetsDir, `${existing.asset_id}.png`);
-        fs.writeFileSync(filePath, finalBuffer);
+        fs.writeFileSync(filePath, buffer);
 
         // Update JSON metadata file
         try {
+          const meta = await sharp(buffer).metadata();
           fs.writeFileSync(
             path.join(assetsDir, `${existing.asset_id}.json`),
-            JSON.stringify({ mimeType: "image/png", extension: "png", width: finalWidth, height: finalHeight })
+            JSON.stringify({ mimeType: "image/png", extension: "png", width: meta.width || 1080, height: meta.height || 1350 })
           );
         } catch {}
 
-        // WebP önbelleklerini anında ve senkron yeniden üret (tarayıcının anında taze görseli görmesi için)
+        // WebP önbelleklerini anında ve senkron yeniden üret
         try {
           const [previewBytes, thumbBytes] = await Promise.all([
-            sharp(finalBuffer)
+            sharp(buffer)
               .resize(720, null, { withoutEnlargement: true })
               .webp({ quality: 85 })
               .toBuffer(),
-            sharp(finalBuffer)
+            sharp(buffer)
               .resize(360, null, { withoutEnlargement: true })
               .webp({ quality: 80 })
               .toBuffer(),

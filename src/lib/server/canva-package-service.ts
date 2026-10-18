@@ -141,26 +141,11 @@ export async function saveSinglePackageAsset(params: {
   fs.mkdirSync(params.assetsDir, { recursive: true });
 
   // Decode & validate through sharp
-  let image = sharp(params.buffer);
+  const image = sharp(params.buffer);
   const metadata = await image.metadata();
 
   if (!metadata.width || !metadata.height) {
     throw new Error(`Görsel verisi çözümlenemedi veya bozuk (assetId: ${assetId})`);
-  }
-
-  // Mandatory 1080p Upscaling Gate: If width < 1080 (e.g. 400x500 quota fallback thumbnail),
-  // upscale to 1080p with Lanczos3 and unsharp mask so low-res images never pollute gallery or Instagram
-  let finalWidth = metadata.width;
-  let finalHeight = metadata.height;
-
-  if (metadata.width < 1080) {
-    const targetWidth = 1080;
-    const targetHeight = Math.round(targetWidth * (metadata.height / metadata.width));
-    image = sharp(params.buffer)
-      .resize(targetWidth, targetHeight, { kernel: sharp.kernel.lanczos3 })
-      .sharpen({ sigma: 1.2, m1: 1.5, m2: 0.7 });
-    finalWidth = targetWidth;
-    finalHeight = targetHeight;
   }
 
   const extension = "png";
@@ -183,8 +168,8 @@ export async function saveSinglePackageAsset(params: {
     JSON.stringify({
       mimeType,
       extension,
-      width: finalWidth,
-      height: finalHeight,
+      width: metadata.width,
+      height: metadata.height,
     })
   );
 

@@ -28,6 +28,57 @@ export function CanvaAccountSettings() {
   const [newEmail, setNewEmail] = useState("");
   const [newTokenJson, setNewTokenJson] = useState("");
   const [adding, setAdding] = useState(false);
+  const [copiedCommand, setCopiedCommand] = useState(false);
+
+  // Live validator for pasted token JSON
+  const tokenValidation = (() => {
+    const trimmed = newTokenJson.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed !== "object" || parsed === null) {
+        return { valid: false, text: "✕ Geçersiz veri (JSON nesnesi bekleniyor)", color: "#ef4444" };
+      }
+      const hasAccess = Boolean(parsed.access_token);
+      const hasRefresh = Boolean(parsed.refresh_token);
+      if (hasAccess && hasRefresh) {
+        return { valid: true, text: "✓ Geçerli Canva Belirteci (access_token & refresh_token doğrulandı)", color: "#16a34a" };
+      }
+      if (hasAccess) {
+        return { valid: true, text: "✓ Geçerli Belirteç (access_token doğrulandı)", color: "#16a34a" };
+      }
+      if (hasRefresh) {
+        return { valid: true, text: "✓ Geçerli Belirteç (refresh_token doğrulandı)", color: "#16a34a" };
+      }
+      return { valid: false, text: "⚠️ JSON geçerli ancak access_token veya refresh_token anahtarı eksik", color: "#f59e0b" };
+    } catch {
+      return { valid: false, text: "✕ Geçersiz JSON sözdizimi. Lütfen tırnak ve parantezleri kontrol edin.", color: "#ef4444" };
+    }
+  })();
+
+  function handleFillSampleTemplate() {
+    setNewTokenJson(
+      JSON.stringify(
+        {
+          access_token: "Örnek_Access_Token_Buraya",
+          refresh_token: "Örnek_Refresh_Token_Buraya",
+          token_type: "Bearer",
+          expires_in: 14400,
+          scope: "profile:read design:meta:read design:content:write design:content:read folder:read folder:write",
+        },
+        null,
+        2
+      )
+    );
+  }
+
+  function handleCopyCommand(cmd: string) {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(cmd).catch(() => {});
+      setCopiedCommand(true);
+      setTimeout(() => setCopiedCommand(false), 2000);
+    }
+  }
 
   const loadData = useCallback(async () => {
     try {
@@ -160,7 +211,7 @@ export function CanvaAccountSettings() {
   return (
     <section
       style={{
-        marginTop: "24px",
+        marginTop: "4px",
         background: "white",
         border: "1px solid #e2e8f0",
         borderRadius: "14px",
@@ -662,10 +713,88 @@ export function CanvaAccountSettings() {
                 />
               </div>
 
+              {/* 3 Adımlı Canva Token Rehberi */}
+              <div
+                style={{
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "8px",
+                  padding: "12px 14px",
+                  fontSize: "12px",
+                  color: "#334155",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 700, color: "#0f172a", marginBottom: "8px" }}>
+                  <Info size={14} color="#0284c7" />
+                  Canva Belirteç Verisi (Token JSON) Nasıl Alınır?
+                </div>
+                <ol style={{ margin: 0, paddingLeft: "18px", display: "flex", flexDirection: "column", gap: "6px", lineHeight: 1.4 }}>
+                  <li>
+                    <strong>Tarayıcıda Giriş:</strong> 2. Canva hesabınıza tarayıcınızda (tercihen gizli sekmede) giriş yapın.
+                  </li>
+                  <li>
+                    <strong>Yetkilendirme Komutu:</strong> Terminalde şu komutu çalıştırıp ekrandaki bağlantıyı tarayıcıda açarak izin verin:
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "4px" }}>
+                      <code
+                        style={{
+                          background: "#0f172a",
+                          color: "#38bdf8",
+                          padding: "4px 8px",
+                          borderRadius: "4px",
+                          fontSize: "11px",
+                          fontFamily: "monospace",
+                        }}
+                      >
+                        codex mcp login canva
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyCommand("codex mcp login canva")}
+                        style={{
+                          padding: "3px 8px",
+                          borderRadius: "4px",
+                          border: "1px solid #cbd5e1",
+                          background: "white",
+                          fontSize: "10px",
+                          cursor: "pointer",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {copiedCommand ? "✓ Kopyalandı" : "Kopyala"}
+                      </button>
+                    </div>
+                  </li>
+                  <li>
+                    <strong>Belirteci Yapıştırma:</strong> İşlem tamamlandığında oluşturulan{" "}
+                    <code style={{ background: "#e2e8f0", padding: "2px 4px", borderRadius: "3px" }}>
+                      /opt/data/mcp-tokens/canva.json
+                    </code>{" "}
+                    dosyasının tüm içeriğini aşağıdaki kutucuğa yapıştırın.
+                  </li>
+                </ol>
+              </div>
+
               <div>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "#334155", display: "block", marginBottom: "4px" }}>
-                  OAuth Belirteç Verisi (Token JSON) *
-                </label>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                  <label style={{ fontSize: "12px", fontWeight: 600, color: "#334155" }}>
+                    OAuth Belirteç Verisi (Token JSON) *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleFillSampleTemplate}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#6366f1",
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      padding: 0,
+                    }}
+                  >
+                    📋 Örnek Şablonu Doldur
+                  </button>
+                </div>
                 <textarea
                   required
                   rows={5}
@@ -676,15 +805,33 @@ export function CanvaAccountSettings() {
                     width: "100%",
                     padding: "8px 12px",
                     borderRadius: "6px",
-                    border: "1px solid #cbd5e1",
+                    border: tokenValidation ? (tokenValidation.valid ? "1px solid #86efac" : "1px solid #fca5a5") : "1px solid #cbd5e1",
                     fontSize: "11px",
                     fontFamily: "monospace",
                   }}
                 />
-                <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px" }}>
-                  <Sparkles size={11} style={{ display: "inline", marginRight: "4px", color: "#8b5cf6" }} />
-                  Canva hesabınızla yetkilendirilmiş OAuth JSON içeriğini buraya yapıştırın.
-                </div>
+
+                {/* Live Token Validator Badge */}
+                {tokenValidation ? (
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      color: tokenValidation.color,
+                      fontWeight: 600,
+                      marginTop: "5px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                  >
+                    {tokenValidation.text}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px" }}>
+                    <Sparkles size={11} style={{ display: "inline", marginRight: "4px", color: "#8b5cf6" }} />
+                    Canva hesabınızla yetkilendirilmiş OAuth JSON içeriğini buraya yapıştırın.
+                  </div>
+                )}
               </div>
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "12px" }}>

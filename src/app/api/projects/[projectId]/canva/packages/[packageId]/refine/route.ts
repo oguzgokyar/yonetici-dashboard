@@ -74,19 +74,19 @@ async function exportCanvaDesignPages(designId: string, baseUrl: string, apiKey:
         });
 
         if (data && data.ok && Array.isArray(data.urls) && data.urls.length > 0) {
-          if (data.is_quota_fallback || data.fallback === "thumbnails") {
-            if (activeAcc) {
-              markCanvaAccountExhausted(activeAcc.id, "Too many daily export requests for user");
-            }
-            const nextAcc = getNextAvailableCanvaAccount();
-            if (nextAcc && nextAcc.id !== activeAcc?.id) {
-              tryNextAccount = true;
-              break;
-            }
-          } else {
-            if (activeAcc) recordCanvaAccountSuccess(activeAcc.id);
-          }
+          if (activeAcc) recordCanvaAccountSuccess(activeAcc.id);
           return data.urls;
+        }
+
+        if (data && (data.code === "quota_exceeded" || (data.error && data.error.includes("Too many daily export requests")))) {
+          if (activeAcc) {
+            markCanvaAccountExhausted(activeAcc.id, "Too many daily export requests for user");
+          }
+          const nextAcc = getNextAvailableCanvaAccount();
+          if (nextAcc && nextAcc.id !== activeAcc?.id) {
+            tryNextAccount = true;
+            break;
+          }
         }
       } catch {
         // Continue to next bridge or fallback
