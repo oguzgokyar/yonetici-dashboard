@@ -78,7 +78,7 @@ async function exportCanvaDesignPages(designId: string, baseUrl: string, apiKey:
           return data.urls;
         }
 
-        if (data && (data.code === "quota_exceeded" || (data.error && data.error.includes("Too many daily export requests")))) {
+        if (data && ((data as { code?: string }).code === "quota_exceeded" || (data.error && data.error.includes("Too many daily export requests")))) {
           if (activeAcc) {
             markCanvaAccountExhausted(activeAcc.id, "Too many daily export requests for user");
           }

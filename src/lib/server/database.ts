@@ -15,6 +15,9 @@ function runMigrations(database: DatabaseSync) {
   if (projectColumns.length && !projectColumns.some((column) => column.name === "brand_concept_json")) {
     database.exec("ALTER TABLE projects ADD COLUMN brand_concept_json TEXT NOT NULL DEFAULT '{}'");
   }
+  if (projectColumns.length && !projectColumns.some((column) => column.name === "brand_visuals_json")) {
+    database.exec("ALTER TABLE projects ADD COLUMN brand_visuals_json TEXT NOT NULL DEFAULT '{}'");
+  }
   const providerColumns = database.prepare("PRAGMA table_info(ai_provider_configs)").all() as unknown as { name: string }[];
   if (providerColumns.length && !providerColumns.some((column) => column.name === "vision_model")) database.exec("ALTER TABLE ai_provider_configs ADD COLUMN vision_model TEXT NOT NULL DEFAULT ''");
   if (providerColumns.length && !providerColumns.some((column) => column.name === "edit_model")) database.exec("ALTER TABLE ai_provider_configs ADD COLUMN edit_model TEXT NOT NULL DEFAULT ''");

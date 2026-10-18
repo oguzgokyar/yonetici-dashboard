@@ -20,11 +20,12 @@ import {
 } from "lucide-react";
 import { BrandConcept, normalizeBrandConcept } from "@/lib/brand-concept";
 import { BrandProfile, useProjects } from "./projects-context";
+import { BrandVisualsTab } from "./brand-visuals-tab";
 
 export function BrandSettings({ projectId }: { projectId: string }) {
   const { getProject, updateProject, ready } = useProjects();
   const project = getProject(projectId);
-  const [tab, setTab] = useState<"brand" | "concept">("brand");
+  const [tab, setTab] = useState<"brand" | "concept" | "visuals">("brand");
   const [saved, setSaved] = useState(false);
   const [importing, setImporting] = useState(false);
   const [generatingConcept, setGeneratingConcept] = useState(false);
@@ -265,6 +266,16 @@ export function BrandSettings({ projectId }: { projectId: string }) {
           <SwatchBook size={17} />
           Marka stili &amp; tasarım
         </button>
+        <button
+          className={tab === "visuals" ? "active" : ""}
+          onClick={() => {
+            setTab("visuals");
+            setResult(null);
+          }}
+        >
+          <ImagePlus size={17} />
+          Marka Görselleri
+        </button>
       </aside>
 
       {tab === "brand" ? (
@@ -431,7 +442,7 @@ export function BrandSettings({ projectId }: { projectId: string }) {
             />
           </div>
         </section>
-      ) : (
+      ) : tab === "concept" ? (
         <section className="settings-card" style={{ width: "100%", boxSizing: "border-box" }}>
           {/* HEADER WITH WIZARD & SAVE ACTIONS */}
           <div className="settings-heading" style={{ alignItems: "flex-start", flexWrap: "wrap", gap: "12px" }}>
@@ -1065,6 +1076,8 @@ export function BrandSettings({ projectId }: { projectId: string }) {
             </div>
           )}
         </section>
+      ) : (
+        <BrandVisualsTab projectId={projectId} />
       )}
     </div>
   );

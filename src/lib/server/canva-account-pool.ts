@@ -238,7 +238,7 @@ export function updateCanvaAccount(
   const db = getDatabase();
   const now = new Date().toISOString();
   const updates: string[] = ["updated_at = ?"];
-  const args: unknown[] = [now];
+  const args: (string | number | null)[] = [now];
 
   if (typeof params.displayName === "string") {
     updates.push("display_name = ?");
