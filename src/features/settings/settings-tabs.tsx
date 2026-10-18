@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Bot, Settings2, Server } from "lucide-react";
 import { AiProviders } from "@/features/settings/ai-providers";
+import { CanvaAccountSettings } from "@/features/settings/canva-account-settings";
 import { MusicProviderSettings } from "@/features/settings/music-provider-settings";
 import { SystemUpdates } from "@/features/settings/system-updates";
 
@@ -63,6 +64,7 @@ export function SettingsTabs() {
         {activeTab === "api" ? (
           <>
             <AiProviders />
+            <CanvaAccountSettings />
             <MusicProviderSettings />
           </>
         ) : activeTab === "server" ? (

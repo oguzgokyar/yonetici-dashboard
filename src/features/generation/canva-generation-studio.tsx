@@ -146,6 +146,10 @@ export function CanvaGenerationStudio({
     status: "normal" | "quota_exceeded";
     statusLabel: string;
     dailyExportsCount: number;
+    totalDailyCapacity?: number;
+    availableAccounts?: number;
+    activeAccounts?: number;
+    totalAccounts?: number;
     resetTimeFormatted: string;
     hoursUntilReset: number;
     minutesUntilReset: number;
@@ -631,7 +635,7 @@ export function CanvaGenerationStudio({
                         display: "inline-block",
                       }}
                     />
-                    {quotaInfo.status === "quota_exceeded" ? "Kota Doldu" : "API Aktif"}
+                    {quotaInfo.status === "quota_exceeded" ? "Kota Doldu" : quotaInfo.statusLabel || "API Aktif"}
                   </button>
 
                   {/* Dropdown Popover */}
@@ -663,7 +667,7 @@ export function CanvaGenerationStudio({
                           paddingBottom: "6px",
                         }}
                       >
-                        <strong style={{ fontSize: "12px", color: "#0f172a" }}>Canva API Durumu</strong>
+                        <strong style={{ fontSize: "12px", color: "#0f172a" }}>Canva Hesap Havuzu</strong>
                         <span style={{ fontSize: "10px", color: "#64748b" }}>24s Kota</span>
                       </div>
 
@@ -676,7 +680,7 @@ export function CanvaGenerationStudio({
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
                           <span style={{ color: "#64748b" }}>Bugünkü İşlemler:</span>
-                          <strong>{quotaInfo.dailyExportsCount} işlem</strong>
+                          <strong>{quotaInfo.dailyExportsCount} / {quotaInfo.totalDailyCapacity || 500}</strong>
                         </div>
                         {quotaInfo.status === "quota_exceeded" ? (
                           <div style={{ display: "flex", justifyContent: "space-between", color: "#b45309" }}>
@@ -690,6 +694,24 @@ export function CanvaGenerationStudio({
                           </div>
                         )}
                       </div>
+
+                      <Link
+                        href="/settings"
+                        style={{
+                          display: "block",
+                          marginBottom: "8px",
+                          textAlign: "center",
+                          fontSize: "11px",
+                          color: "#6366f1",
+                          fontWeight: 600,
+                          textDecoration: "none",
+                          padding: "4px 0",
+                          borderRadius: "4px",
+                          background: "#eef2ff",
+                        }}
+                      >
+                        ⚙️ Hesap Havuzunu Yönet ➔
+                      </Link>
 
                       <button
                         type="button"

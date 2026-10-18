@@ -5,59 +5,95 @@ import { isCanvaStudioEnabled, getCanvaConfig } from "@/lib/server/canva-config"
 import { getDatabase } from "@/lib/server/database";
 import { saveSinglePackageAsset } from "@/lib/server/canva-package-service";
 
+import {
+  getNextAvailableCanvaAccount,
+  markCanvaAccountExhausted,
+  recordCanvaAccountSuccess,
+} from "@/lib/server/canva-account-pool";
+
 export const runtime = "nodejs";
 
 type Context = { params: Promise<{ projectId: string; packageId: string }> };
 
 /**
- * Direct fast export via host bridge (1-2 seconds)
+ * Direct fast export via host bridge (1-2 seconds) with Multi-Account Pool failover
  */
 async function exportCanvaDesignPages(designId: string, baseUrl: string, apiKey: string): Promise<string[]> {
-  // 1. Host bridge for ultra-fast (1-2s) direct MCP export
   const bridgeEndpoints = [
     { host: "10.0.1.1", port: 8080 },
     { host: "127.0.0.1", port: 8080 },
     { host: "10.0.1.8", port: 8080 },
   ];
 
-  for (const ep of bridgeEndpoints) {
-    try {
-      const data = await new Promise<{ ok?: boolean; urls?: string[] } | null>((resolve) => {
-        const payload = JSON.stringify({ design_id: designId, format: { type: "png" } });
-        const req = http.request(
-          {
-            hostname: ep.host,
-            port: ep.port,
-            path: "/api/internal/canva/export",
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Content-Length": Buffer.byteLength(payload),
-              Connection: "close",
-            },
-            timeout: 60000,
-          },
-          (res) => {
-            let body = "";
-            res.setEncoding("utf8");
-            res.on("data", (chunk) => { body += chunk; });
-            res.on("end", () => {
-              try { resolve(JSON.parse(body)); } catch { resolve(null); }
-            });
-          }
-        );
-        req.on("error", () => resolve(null));
-        req.on("timeout", () => { req.destroy(); resolve(null); });
-        req.write(payload);
-        req.end();
-      });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const activeAcc = getNextAvailableCanvaAccount();
+    const payload = JSON.stringify({
+      design_id: designId,
+      format: { type: "png" },
+      account_id: activeAcc?.id,
+      token_json: activeAcc?.tokenJson,
+    });
 
-      if (data && data.ok && Array.isArray(data.urls) && data.urls.length > 0) {
-        return data.urls;
+    let tryNextAccount = false;
+
+    for (const ep of bridgeEndpoints) {
+      try {
+        const data = await new Promise<{
+          ok?: boolean;
+          urls?: string[];
+          is_quota_fallback?: boolean;
+          fallback?: string;
+          error?: string;
+        } | null>((resolve) => {
+          const req = http.request(
+            {
+              hostname: ep.host,
+              port: ep.port,
+              path: "/api/internal/canva/export",
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(payload),
+                Connection: "close",
+              },
+              timeout: 60000,
+            },
+            (res) => {
+              let body = "";
+              res.setEncoding("utf8");
+              res.on("data", (chunk) => { body += chunk; });
+              res.on("end", () => {
+                try { resolve(JSON.parse(body)); } catch { resolve(null); }
+              });
+            }
+          );
+          req.on("error", () => resolve(null));
+          req.on("timeout", () => { req.destroy(); resolve(null); });
+          req.write(payload);
+          req.end();
+        });
+
+        if (data && data.ok && Array.isArray(data.urls) && data.urls.length > 0) {
+          if (data.is_quota_fallback || data.fallback === "thumbnails") {
+            if (activeAcc) {
+              markCanvaAccountExhausted(activeAcc.id, "Too many daily export requests for user");
+            }
+            const nextAcc = getNextAvailableCanvaAccount();
+            if (nextAcc && nextAcc.id !== activeAcc?.id) {
+              tryNextAccount = true;
+              break;
+            }
+          } else {
+            if (activeAcc) recordCanvaAccountSuccess(activeAcc.id);
+          }
+          return data.urls;
+        }
+      } catch {
+        // Continue to next bridge or fallback
       }
-    } catch {
-      // Continue to next bridge or fallback
     }
+
+    if (!tryNextAccount) break;
   }
 
   // 2. Fallback: Dispatch to Hermes Agent via /v1/runs with export-design prompt

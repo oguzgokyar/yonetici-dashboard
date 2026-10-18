@@ -7,6 +7,12 @@ import { getDatabase } from "@/lib/server/database";
 import { saveSinglePackageAsset } from "@/lib/server/canva-package-service";
 import { exportPackageVideoHelper } from "@/lib/server/canva-video-service";
 
+import {
+  getNextAvailableCanvaAccount,
+  markCanvaAccountExhausted,
+  recordCanvaAccountSuccess,
+} from "@/lib/server/canva-account-pool";
+
 export const runtime = "nodejs";
 
 type Context = { params: Promise<{ projectId: string; packageId: string }> };
@@ -16,51 +22,83 @@ async function fetchCanvaExportUrls(
   baseUrl: string,
   apiKey: string
 ): Promise<string[]> {
-  // 1. Try host bridge first for ultra-fast (1-2s) direct MCP export via pure HTTP/1.1
   const bridgeEndpoints = [
     { host: "10.0.1.1", port: 8080 },
     { host: "127.0.0.1", port: 8080 },
     { host: "10.0.1.8", port: 8080 },
   ];
 
-  for (const ep of bridgeEndpoints) {
-    try {
-      const data = await new Promise<{ ok?: boolean; urls?: string[] } | null>((resolve) => {
-        const payload = JSON.stringify({ design_id: designId, format: { type: "png" } });
-        const req = http.request(
-          {
-            hostname: ep.host,
-            port: ep.port,
-            path: "/api/internal/canva/export",
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Content-Length": Buffer.byteLength(payload),
-              Connection: "close",
-            },
-            timeout: 60000,
-          },
-          (res) => {
-            let body = "";
-            res.setEncoding("utf8");
-            res.on("data", (chunk) => { body += chunk; });
-            res.on("end", () => {
-              try { resolve(JSON.parse(body)); } catch { resolve(null); }
-            });
-          }
-        );
-        req.on("error", () => resolve(null));
-        req.on("timeout", () => { req.destroy(); resolve(null); });
-        req.write(payload);
-        req.end();
-      });
+  // Try up to 3 accounts from the pool with automatic failover
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const activeAcc = getNextAvailableCanvaAccount();
+    const payload = JSON.stringify({
+      design_id: designId,
+      format: { type: "png" },
+      account_id: activeAcc?.id,
+      token_json: activeAcc?.tokenJson,
+    });
 
-      if (data && data.ok && Array.isArray(data.urls) && data.urls.length > 0) {
-        return data.urls;
+    let tryNextAccount = false;
+
+    for (const ep of bridgeEndpoints) {
+      try {
+        const data = await new Promise<{
+          ok?: boolean;
+          urls?: string[];
+          is_quota_fallback?: boolean;
+          fallback?: string;
+          error?: string;
+        } | null>((resolve) => {
+          const req = http.request(
+            {
+              hostname: ep.host,
+              port: ep.port,
+              path: "/api/internal/canva/export",
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(payload),
+                Connection: "close",
+              },
+              timeout: 60000,
+            },
+            (res) => {
+              let body = "";
+              res.setEncoding("utf8");
+              res.on("data", (chunk) => { body += chunk; });
+              res.on("end", () => {
+                try { resolve(JSON.parse(body)); } catch { resolve(null); }
+              });
+            }
+          );
+          req.on("error", () => resolve(null));
+          req.on("timeout", () => { req.destroy(); resolve(null); });
+          req.write(payload);
+          req.end();
+        });
+
+        if (data && data.ok && Array.isArray(data.urls) && data.urls.length > 0) {
+          if (data.is_quota_fallback || data.fallback === "thumbnails") {
+            if (activeAcc) {
+              markCanvaAccountExhausted(activeAcc.id, "Too many daily export requests for user");
+            }
+            // Check if there's another available account in the pool
+            const nextAcc = getNextAvailableCanvaAccount();
+            if (nextAcc && nextAcc.id !== activeAcc?.id) {
+              tryNextAccount = true;
+              break; // break inner endpoint loop and try with next account
+            }
+          } else {
+            if (activeAcc) recordCanvaAccountSuccess(activeAcc.id);
+          }
+          return data.urls;
+        }
+      } catch {
+        // Continue to next bridge or fallback
       }
-    } catch {
-      // Continue to next bridge or fallback
     }
+
+    if (!tryNextAccount) break;
   }
 
   // 2. Fallback: Dispatch to Hermes Agent via /v1/runs with export-design prompt
@@ -170,9 +208,25 @@ export async function POST(_request: Request, context: Context) {
   const assetsDir = path.join(process.cwd(), ".data", "assets");
 
   // IMMEDIATELY mark package as syncing / video as rendering in database before long network operations
+  const now = new Date().toISOString();
   database
     .prepare("UPDATE media_packages SET video_status='rendering', updated_at=? WHERE id=?")
-    .run(new Date().toISOString(), packageId);
+    .run(now, packageId);
+
+  // Üretim Listesinde (Production Queue) canlı takip edilebilmesi için iş kaydı oluştur
+  const jobId = crypto.randomUUID();
+  database.prepare(`
+    INSERT INTO generation_jobs (
+      id, project_id, type, provider, model, status, prompt, request_json, progress_json, created_at
+    ) VALUES (?, ?, 'canva', 'canva-mcp', 'canva-mcp-sync', 'running', ?, ?, ?, ?)
+  `).run(
+    jobId,
+    projectId,
+    `${pkg.title || 'Canva Tasarımı'} — 🔄 Canva Eşitleme`,
+    JSON.stringify({ packageId, mode: 'canva_mcp_sync' }),
+    JSON.stringify({ phase: 'exporting', percent: 30, detail: 'Canva bulutundan güncel sayfalar alınıyor...' }),
+    now
+  );
 
   try {
     // 1. Fetch fresh master PNG export URLs directly from Canva Connect API
@@ -204,18 +258,47 @@ export async function POST(_request: Request, context: Context) {
       // If item already exists at this position, save or update
       const existing = existingItems.find((it) => it.position === position);
       if (existing) {
-        // Overwrite file directly
+        // Decode metadata & check for mandatory 1080p upscale gate
+        let finalBuffer = buffer;
+        let finalWidth = 1080;
+        let finalHeight = 1350;
+        try {
+          const meta = await sharp(buffer).metadata();
+          finalWidth = meta.width || 1080;
+          finalHeight = meta.height || 1350;
+          if (finalWidth < 1080) {
+            const targetWidth = 1080;
+            const targetHeight = Math.round(targetWidth * (finalHeight / finalWidth));
+            finalBuffer = await sharp(buffer)
+              .resize(targetWidth, targetHeight, { kernel: sharp.kernel.lanczos3 })
+              .sharpen({ sigma: 1.2, m1: 1.5, m2: 0.7 })
+              .png()
+              .toBuffer();
+            finalWidth = targetWidth;
+            finalHeight = targetHeight;
+          }
+        } catch {}
+
+        // Overwrite file directly with master resolution
         const filePath = path.join(assetsDir, `${existing.asset_id}.png`);
-        fs.writeFileSync(filePath, buffer);
+        fs.writeFileSync(filePath, finalBuffer);
+
+        // Update JSON metadata file
+        try {
+          fs.writeFileSync(
+            path.join(assetsDir, `${existing.asset_id}.json`),
+            JSON.stringify({ mimeType: "image/png", extension: "png", width: finalWidth, height: finalHeight })
+          );
+        } catch {}
 
         // WebP önbelleklerini anında ve senkron yeniden üret (tarayıcının anında taze görseli görmesi için)
         try {
           const [previewBytes, thumbBytes] = await Promise.all([
-            sharp(buffer)
+            sharp(finalBuffer)
               .resize(720, null, { withoutEnlargement: true })
               .webp({ quality: 85 })
               .toBuffer(),
-            sharp(buffer)
+            sharp(finalBuffer)
               .resize(360, null, { withoutEnlargement: true })
               .webp({ quality: 80 })
               .toBuffer(),
@@ -313,6 +396,16 @@ export async function POST(_request: Request, context: Context) {
         .run(packageId);
     }
 
+    // Üretim Listesindeki iş kaydını tamamlandıya geçir
+    const syncFinishNow = new Date().toISOString();
+    database
+      .prepare("UPDATE generation_jobs SET status='complete', progress_json=?, completed_at=? WHERE id=?")
+      .run(
+        JSON.stringify({ phase: "complete", percent: 100, detail: `Canva'dan ${exportUrls.length} sayfa başarıyla eşitlendi` }),
+        syncFinishNow,
+        jobId
+      );
+
     return Response.json({
       ok: true,
       message: videoUpdated
@@ -322,10 +415,14 @@ export async function POST(_request: Request, context: Context) {
       videoUpdated,
     });
   } catch (err: unknown) {
+    const syncErrNow = new Date().toISOString();
     database
       .prepare("UPDATE media_packages SET video_status='idle' WHERE id=?")
       .run(packageId);
     const errorMsg = err instanceof Error ? err.message : String(err);
+    database
+      .prepare("UPDATE generation_jobs SET status='failed', error=?, completed_at=? WHERE id=?")
+      .run(errorMsg.slice(0, 500), syncErrNow, jobId);
     return Response.json({ ok: false, message: errorMsg }, { status: 500 });
   }
 }
