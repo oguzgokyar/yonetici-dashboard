@@ -75,6 +75,29 @@ export async function GET(_request: Request, context: Context) {
       // ignore
     }
 
+    let videoStatus = row.video_status || (row.video_url ? "ready" : "idle");
+    if (videoStatus === "rendering") {
+      const activeJob = database
+        .prepare(
+          "SELECT id FROM generation_jobs WHERE project_id=? AND type='canva' AND status IN ('queued', 'dispatching', 'running', 'rendering', 'exporting', 'uploading') AND request_json LIKE ? LIMIT 1"
+        )
+        .get(projectId, `%"packageId":"${row.id}"%`);
+      if (!activeJob) {
+        database.prepare("UPDATE media_packages SET video_status='failed' WHERE id=?").run(row.id);
+        videoStatus = row.video_url ? "ready" : "failed";
+      }
+    } else if (videoStatus === "refining") {
+      const activeRefineJob = database
+        .prepare(
+          "SELECT id FROM generation_jobs WHERE project_id=? AND type='canva' AND status IN ('queued', 'dispatching', 'running', 'rendering', 'exporting', 'uploading') AND request_json LIKE ? LIMIT 1"
+        )
+        .get(projectId, `%"packageId":"${row.id}"%`);
+      if (!activeRefineJob) {
+        database.prepare("UPDATE media_packages SET video_status='idle' WHERE id=?").run(row.id);
+        videoStatus = "idle";
+      }
+    }
+
     return {
       id: row.id,
       projectId: row.project_id,
@@ -91,7 +114,7 @@ export async function GET(_request: Request, context: Context) {
       videoAssetId: row.video_asset_id || null,
       videoUrl: row.video_url || null,
       videoDuration: row.video_duration || null,
-      videoStatus: row.video_status || (row.video_url ? "ready" : "idle"),
+      videoStatus,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       items,

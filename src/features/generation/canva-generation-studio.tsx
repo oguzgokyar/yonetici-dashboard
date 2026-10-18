@@ -25,6 +25,9 @@ import {
   Download,
   Film,
   RefreshCw,
+  Palette,
+  CalendarPlus,
+  Clapperboard,
 } from "lucide-react";
 import { TelegramSendButton } from "@/components/ui/telegram-send-button";
 import { CANVA_CONTENT_TYPES, type CanvaContentType } from "@/lib/server/hermes-canva-task";
@@ -133,8 +136,23 @@ export function CanvaGenerationStudio({
 
   // Gallery / Lightbox state for Carousel packages
   const [syncingPkgId, setSyncingPkgId] = useState<string | null>(null);
+  const [refiningPkgId, setRefiningPkgId] = useState<string | null>(null);
   const [activePackage, setActivePackage] = useState<CanvaPackage | null>(null);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+
+  // Canva API Quota / Status State
+  const [quotaInfo, setQuotaInfo] = useState<{
+    ok: boolean;
+    status: "normal" | "quota_exceeded";
+    statusLabel: string;
+    dailyExportsCount: number;
+    resetTimeFormatted: string;
+    hoursUntilReset: number;
+    minutesUntilReset: number;
+    lastError?: string | null;
+  } | null>(null);
+  const [showQuotaDropdown, setShowQuotaDropdown] = useState(false);
+  const [probingQuota, setProbingQuota] = useState(false);
 
   const available = useMemo(() => project.brand || {}, [project]);
 
@@ -208,8 +226,10 @@ export function CanvaGenerationStudio({
   const activeJob = jobs.find((j) =>
     ["queued", "dispatching", "running", "exporting", "uploading"].includes(j.status)
   );
-  // Also track any package that is currently rendering video in background
-  const activeRenderingPackage = packages.find((p) => p.videoStatus === "rendering" || p.id === syncingPkgId);
+  // Also track any package that is currently rendering video or AI layout refining in background
+  const activeRenderingPackage = packages.find(
+    (p) => p.videoStatus === "rendering" || p.videoStatus === "refining" || p.id === syncingPkgId
+  );
 
   const latestFailedJob = jobs.find(
     (j) => j.status === "failed" && !dismissedFailedJobIds.has(j.id)
@@ -254,16 +274,57 @@ export function CanvaGenerationStudio({
     }
   }, [projectId]);
 
+  const loadQuotaStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/canva/status`);
+      if (res.ok) {
+        const data = await res.json();
+        setQuotaInfo(data);
+      }
+    } catch {}
+  }, [projectId]);
+
+  async function handleProbeQuota() {
+    setProbingQuota(true);
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/canva/status`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setQuotaInfo(data);
+      }
+    } catch {} finally {
+      setProbingQuota(false);
+    }
+  }
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadJobs();
     void loadPackages(false);
-  }, [loadJobs, loadPackages]);
+    void loadQuotaStatus();
+  }, [loadJobs, loadPackages, loadQuotaStatus]);
 
-  // Polling when a job is in-flight or when packages have pending videos
+  // Periodic quota check
   useEffect(() => {
-    const hasPendingVideo = packages.some((p) => p.videoStatus === "rendering" || (p.packageType === "video" && !p.videoUrl));
-    if (!isProducing && !hasPendingVideo) return;
+    const t = setInterval(() => {
+      void loadQuotaStatus();
+    }, 45000);
+    return () => clearInterval(t);
+  }, [loadQuotaStatus]);
+
+  // Polling when a job is in-flight or when packages have pending videos/refining
+  useEffect(() => {
+    const hasPendingActivity =
+      isProducing ||
+      packages.some(
+        (p) =>
+          p.videoStatus === "rendering" ||
+          p.videoStatus === "refining" ||
+          (p.packageType === "video" && !p.videoUrl)
+      );
+    if (!hasPendingActivity) return;
     const timer = window.setInterval(async () => {
       await loadJobs();
       await loadPackages(true);
@@ -365,6 +426,10 @@ export function CanvaGenerationStudio({
     if (syncingPkgId) return; // Concurrency guard: only one sync at a time
     setSyncingPkgId(packageId);
     setMessage("");
+    // Üretim listesi çekmecesini canlı olarak aç ve kuyruğu uyar
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("production-queue-updated", { detail: { openDrawer: true } }));
+    }
     try {
       const res = await fetch(
         `/api/projects/${encodeURIComponent(projectId)}/canva/packages/${encodeURIComponent(
@@ -385,6 +450,42 @@ export function CanvaGenerationStudio({
       setMessage(err instanceof Error ? err.message : "Canva'dan güncellenemedi.");
     } finally {
       setSyncingPkgId(null);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("production-queue-updated", { detail: { openDrawer: false } }));
+      }
+    }
+  }
+
+  async function handleRefinePackage(packageId: string, slideIndex?: number) {
+    if (refiningPkgId) return;
+    setRefiningPkgId(packageId);
+    setMessage("");
+    // Üretim listesi çekmecesini canlı olarak aç ve kuyruğu uyar
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("production-queue-updated", { detail: { openDrawer: true } }));
+    }
+    try {
+      const res = await fetch(
+        `/api/projects/${encodeURIComponent(projectId)}/canva/packages/${encodeURIComponent(packageId)}/refine`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slideIndex }),
+        }
+      );
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        message?: string;
+      };
+      if (!res.ok || !data.ok) {
+        throw new Error(data.message || "Tasarım düzeni onarılamadı.");
+      }
+      setMessage(data.message || "🪄 AI düzen onarımı başlatıldı! Üretim listesinden takip edebilirsiniz.");
+      await loadPackages(true);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Onarım işlemi gerçekleştirilemedi.");
+    } finally {
+      setRefiningPkgId(null);
     }
   }
 
@@ -498,7 +599,126 @@ export function CanvaGenerationStudio({
         <div className="generation-control-header">
           <div>
             <span>HERMES + CODEX + CANVA MCP</span>
-            <h2>Canva Stüdyosu</h2>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", position: "relative" }}>
+              <h2>Canva Stüdyosu</h2>
+              {quotaInfo && (
+                <div style={{ position: "relative" }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowQuotaDropdown((v) => !v)}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px",
+                      padding: "3px 8px",
+                      borderRadius: "12px",
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      border: quotaInfo.status === "quota_exceeded" ? "1px solid #fca5a5" : "1px solid #86efac",
+                      background: quotaInfo.status === "quota_exceeded" ? "#fef2f2" : "#f0fdf4",
+                      color: quotaInfo.status === "quota_exceeded" ? "#b91c1c" : "#15803d",
+                      cursor: "pointer",
+                      lineHeight: 1.2,
+                    }}
+                    title="Canva API Kota ve Durum Detayı için tıklayın"
+                  >
+                    <span
+                      style={{
+                        width: "6px",
+                        height: "6px",
+                        borderRadius: "50%",
+                        background: quotaInfo.status === "quota_exceeded" ? "#dc2626" : "#16a34a",
+                        display: "inline-block",
+                      }}
+                    />
+                    {quotaInfo.status === "quota_exceeded" ? "Kota Doldu" : "API Aktif"}
+                  </button>
+
+                  {/* Dropdown Popover */}
+                  {showQuotaDropdown && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "100%",
+                        left: 0,
+                        marginTop: "6px",
+                        width: "250px",
+                        background: "white",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: "10px",
+                        boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
+                        padding: "12px",
+                        zIndex: 100,
+                        fontSize: "12px",
+                        color: "#334155",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: "8px",
+                          borderBottom: "1px solid #f1f5f9",
+                          paddingBottom: "6px",
+                        }}
+                      >
+                        <strong style={{ fontSize: "12px", color: "#0f172a" }}>Canva API Durumu</strong>
+                        <span style={{ fontSize: "10px", color: "#64748b" }}>24s Kota</span>
+                      </div>
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "10px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ color: "#64748b" }}>Durum:</span>
+                          <strong style={{ color: quotaInfo.status === "quota_exceeded" ? "#dc2626" : "#16a34a" }}>
+                            {quotaInfo.statusLabel}
+                          </strong>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ color: "#64748b" }}>Bugünkü İşlemler:</span>
+                          <strong>{quotaInfo.dailyExportsCount} işlem</strong>
+                        </div>
+                        {quotaInfo.status === "quota_exceeded" ? (
+                          <div style={{ display: "flex", justifyContent: "space-between", color: "#b45309" }}>
+                            <span>Sıfırlanma:</span>
+                            <strong>Gece 03:00 TSİ ({quotaInfo.hoursUntilReset}s {quotaInfo.minutesUntilReset}d)</strong>
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", justifyContent: "space-between", color: "#64748b" }}>
+                            <span>Yenilenme:</span>
+                            <span>Gece 03:00 TSİ</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleProbeQuota}
+                        disabled={probingQuota}
+                        style={{
+                          width: "100%",
+                          padding: "6px 0",
+                          borderRadius: "6px",
+                          border: "1px solid #e2e8f0",
+                          background: probingQuota ? "#f8fafc" : "#f1f5f9",
+                          color: "#1e293b",
+                          fontWeight: 500,
+                          fontSize: "11px",
+                          cursor: probingQuota ? "wait" : "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: "5px",
+                        }}
+                      >
+                        <RefreshCw className={probingQuota ? "spin" : ""} size={12} />
+                        {probingQuota ? "Kontrol ediliyor..." : "Durumu Test Et"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           <WandSparkles size={21} />
         </div>
@@ -834,25 +1054,61 @@ export function CanvaGenerationStudio({
               <RefreshCw className="spin" size={26} color="#a5b4fc" />
               <div>
                 <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "1px", color: "#a5b4fc" }}>
-                  CANVA SİHİRLİ ANİMASYONLU VİDEO RENDER EDİLİYOR
+                  {activeRenderingPackage.videoStatus === "refining"
+                    ? "CANVA AI DÜZEN ONARIMI YAPILIYOR"
+                    : "CANVA SİHİRLİ ANİMASYONLU VİDEO RENDER EDİLİYOR"}
                 </div>
                 <div style={{ fontSize: "13px", fontWeight: 600, color: "#f8fafc", marginTop: "2px" }}>
-                  &quot;{activeRenderingPackage.title}&quot; bulutta işleniyor, MP4 hazırlanıyor...
+                  {activeRenderingPackage.videoStatus === "refining"
+                    ? `"${activeRenderingPackage.title}" AI ile cerrahi olarak düzenleniyor...`
+                    : `"${activeRenderingPackage.title}" bulutta işleniyor, MP4 hazırlanıyor...`}
                 </div>
               </div>
             </div>
-            <span
-              style={{
-                fontSize: "11px",
-                padding: "4px 10px",
-                borderRadius: "20px",
-                background: "rgba(255, 255, 255, 0.15)",
-                color: "#e0e7ff",
-                fontWeight: 600,
-              }}
-            >
-              Arka Planda Devam Ediyor
-            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span
+                style={{
+                  fontSize: "11px",
+                  padding: "4px 10px",
+                  borderRadius: "20px",
+                  background: "rgba(255, 255, 255, 0.15)",
+                  color: "#e0e7ff",
+                  fontWeight: 600,
+                }}
+              >
+                Arka Planda Devam Ediyor
+              </span>
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                style={{
+                  color: "#fca5a5",
+                  border: "1px solid rgba(252, 165, 165, 0.4)",
+                  fontSize: "11px",
+                  padding: "3px 8px",
+                  cursor: "pointer",
+                }}
+                title={
+                  activeRenderingPackage.videoStatus === "refining"
+                    ? "Askıda kalan düzenleme durumunu sıfırla"
+                    : "Askıda kalan render durumunu sıfırla"
+                }
+                onClick={async () => {
+                  try {
+                    await fetch(`/api/projects/${encodeURIComponent(projectId)}/canva/packages/${activeRenderingPackage.id}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        videoStatus: activeRenderingPackage.videoStatus === "refining" ? "idle" : "failed",
+                      }),
+                    });
+                    await loadPackages(false);
+                  } catch {}
+                }}
+              >
+                Sıfırla ✕
+              </button>
+            </div>
           </div>
         ) : null}
 
@@ -875,7 +1131,8 @@ export function CanvaGenerationStudio({
                   deleting={deletingId === pkg.id}
                   convertingVideo={convertingVideoPkgId === pkg.id}
                   syncing={syncingPkgId === pkg.id}
-                  isAnySyncing={Boolean(syncingPkgId)}
+                  refining={refiningPkgId === pkg.id}
+                  isAnySyncing={Boolean(syncingPkgId || refiningPkgId)}
                   onOpenGallery={() => openGallery(pkg)}
                   onOpenVideoModal={() => {
                     setVideoConvertError(null);
@@ -883,6 +1140,7 @@ export function CanvaGenerationStudio({
                   }}
                   onWatchVideo={() => setActiveVideoPlayerPkg(pkg)}
                   onSync={() => void handleSyncPackage(pkg.id)}
+                  onRefine={() => void handleRefinePackage(pkg.id)}
                   onDelete={() => void handleDeletePackage(pkg.id)}
                 />
               ))}
@@ -973,6 +1231,10 @@ export function CanvaGenerationStudio({
             currentIndex={activeSlideIndex}
             onIndexChange={setActiveSlideIndex}
             onClose={() => setActivePackage(null)}
+            onSync={() => void handleSyncPackage(activePackage.id)}
+            syncing={syncingPkgId === activePackage.id}
+            onRefine={(slideIdx?: number) => void handleRefinePackage(activePackage.id, slideIdx)}
+            refining={refiningPkgId === activePackage.id}
           />
         )}
 
@@ -1117,11 +1379,13 @@ function CanvaPackageCard({
   deleting,
   convertingVideo,
   syncing,
+  refining,
   isAnySyncing,
   onOpenGallery,
   onOpenVideoModal,
   onWatchVideo,
   onSync,
+  onRefine,
   onDelete,
 }: {
   pkg: CanvaPackage;
@@ -1129,11 +1393,13 @@ function CanvaPackageCard({
   deleting: boolean;
   convertingVideo: boolean;
   syncing?: boolean;
+  refining?: boolean;
   isAnySyncing?: boolean;
   onOpenGallery: () => void;
   onOpenVideoModal?: () => void;
   onWatchVideo?: () => void;
   onSync?: () => void;
+  onRefine?: () => void;
   onDelete: () => void;
 }) {
   const isCarousel = pkg.packageType === "carousel";
@@ -1145,20 +1411,30 @@ function CanvaPackageCard({
       : "4/5";
 
   const isCardSyncing = syncing || pkg.videoStatus === "rendering";
+  const isCardRefining = refining || pkg.videoStatus === "refining";
+  const isBusy = isCardSyncing || isCardRefining;
 
   return (
     <article
-      className={`generated-card ${isCardSyncing ? "syncing-card-pulse" : ""}`}
+      className={`generated-card ${isCardSyncing ? "syncing-card-pulse" : isCardRefining ? "refining-card-pulse" : ""}`}
       style={{
         display: "flex",
         flexDirection: "column",
-        border: isCardSyncing ? "2px solid #3b82f6" : "1px solid #e5e7eb",
+        border: isCardRefining
+          ? "2px solid #a855f7"
+          : isCardSyncing
+          ? "2px solid #3b82f6"
+          : "1px solid #e5e7eb",
         borderRadius: "14px",
         overflow: "hidden",
         background: "white",
         position: "relative",
-        boxShadow: isCardSyncing ? "0 0 16px rgba(59, 130, 246, 0.45)" : undefined,
-        animation: isCardSyncing ? "pulseGlow 1.4s ease-in-out infinite" : undefined,
+        boxShadow: isCardRefining
+          ? "0 0 16px rgba(168, 85, 247, 0.45)"
+          : isCardSyncing
+          ? "0 0 16px rgba(59, 130, 246, 0.45)"
+          : undefined,
+        animation: isBusy ? "pulseGlow 1.4s ease-in-out infinite" : undefined,
       }}
     >
       <div
@@ -1167,9 +1443,9 @@ function CanvaPackageCard({
           width: "100%",
           aspectRatio: cardAspectRatio,
           background: "#f3f4f6",
-          cursor: isCardSyncing ? "wait" : "pointer",
+          cursor: isBusy ? "wait" : "pointer",
         }}
-        onClick={isCardSyncing ? undefined : onOpenGallery}
+        onClick={isBusy ? undefined : onOpenGallery}
       >
         {thumbUrl ? (
           <Image
@@ -1178,7 +1454,7 @@ function CanvaPackageCard({
             fill
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             unoptimized
-            style={{ objectFit: "cover", opacity: isCardSyncing ? 0.4 : 1 }}
+            style={{ objectFit: "cover", opacity: isBusy ? 0.35 : 1 }}
           />
         ) : (
           <div
@@ -1194,8 +1470,37 @@ function CanvaPackageCard({
           </div>
         )}
 
+        {/* Refining Overlay Feedback */}
+        {isCardRefining && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "rgba(88, 28, 135, 0.75)",
+              backdropFilter: "blur(3px)",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              color: "white",
+              zIndex: 10,
+              padding: "16px",
+              textAlign: "center",
+            }}
+          >
+            <WandSparkles className="spin" size={28} color="#c084fc" />
+            <span style={{ fontSize: "12px", fontWeight: 700, letterSpacing: "0.3px" }}>
+              🪄 AI Düzeni Onarıyor...
+            </span>
+            <span style={{ fontSize: "10px", color: "#e9d5ff" }}>
+              Binişmeler ve yazı boyutları ferahlatılıyor
+            </span>
+          </div>
+        )}
+
         {/* Syncing Overlay Feedback */}
-        {isCardSyncing && (
+        {isCardSyncing && !isCardRefining && (
           <div
             style={{
               position: "absolute",
@@ -1284,13 +1589,83 @@ function CanvaPackageCard({
           })}
         </span>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          {/* Videoya Dönüştür / İzle Butonu */}
+        <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+          {/* 1. 🪄 AI ile Düzeni Onar (İsteğe Bağlı) */}
+          {pkg.canvaDesignId && onRefine && (
+            <button
+              type="button"
+              onClick={onRefine}
+              disabled={isAnySyncing}
+              title="🪄 AI ile Düzeni Onar (Nesne binişmelerini ve metin yerleşimini düzelt)"
+              style={{
+                display: "grid",
+                placeItems: "center",
+                width: "28px",
+                height: "28px",
+                borderRadius: "6px",
+                border: "1px solid #e9d5ff",
+                color: "#9333ea",
+                background: "#faf5ff",
+                cursor: isAnySyncing ? "not-allowed" : "pointer",
+                opacity: isAnySyncing && !refining ? 0.5 : 1,
+              }}
+            >
+              {refining ? <LoaderCircle className="spin" size={13} /> : <WandSparkles size={13} />}
+            </button>
+          )}
+
+          {/* 2. 🎨 Canva'da Canlı Aç & Düzenle (Tasarım Paleti İkonu) */}
+          {pkg.canvaEditUrl && (
+            <a
+              href={pkg.canvaEditUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="🎨 Canva'da Canlı Aç & Düzenle"
+              style={{
+                display: "grid",
+                placeItems: "center",
+                width: "28px",
+                height: "28px",
+                borderRadius: "6px",
+                border: "1px solid #bae6fd",
+                color: "#0284c7",
+                background: "#f0f9ff",
+              }}
+            >
+              <Palette size={13} />
+            </a>
+          )}
+
+          {/* 3. 🔄 Canva'dan Güncelle / Eşitle */}
+          {pkg.canvaDesignId && onSync && (
+            <button
+              type="button"
+              onClick={onSync}
+              disabled={isAnySyncing}
+              title="🔄 Canva'da yaptığınız son değişiklikleri indirip eşitleyin"
+              style={{
+                display: "grid",
+                placeItems: "center",
+                width: "28px",
+                height: "28px",
+                borderRadius: "6px",
+                border: "1px solid #e2e8f0",
+                color: isAnySyncing ? "#94a3b8" : "#0ea5e9",
+                background: isAnySyncing ? "#f1f5f9" : "#f0f9ff",
+                cursor: isAnySyncing ? "not-allowed" : "pointer",
+                opacity: isAnySyncing && !syncing ? 0.5 : 1,
+              }}
+            >
+              {syncing ? <LoaderCircle className="spin" size={13} /> : <RefreshCw size={13} />}
+            </button>
+          )}
+
+          {/* 4. 🎬 Videoya Dönüştür / İzle */}
           {hasVideo ? (
             <button
               type="button"
               onClick={onWatchVideo}
-              title="Videoyu İzle (MP4)"
+              title="▶️ Videoyu İzle (MP4)"
               style={{
                 display: "grid",
                 placeItems: "center",
@@ -1310,7 +1685,7 @@ function CanvaPackageCard({
               type="button"
               onClick={onOpenVideoModal}
               disabled={convertingVideo}
-              title="Sihirli Animasyonlu Videoya Dönüştür (MP4)"
+              title="🎬 Videoya Dönüştür (MP4)"
               style={{
                 display: "grid",
                 placeItems: "center",
@@ -1326,92 +1701,47 @@ function CanvaPackageCard({
               {convertingVideo ? (
                 <LoaderCircle className="spin" size={13} />
               ) : (
-                <Video size={13} />
+                <Clapperboard size={13} />
               )}
             </button>
           ) : null}
 
-          {/* Canva Edit Link */}
-          {pkg.canvaEditUrl && (
-            <a
-              href={pkg.canvaEditUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Canva'da Aç"
-              style={{
-                display: "grid",
-                placeItems: "center",
-                width: "28px",
-                height: "28px",
-                borderRadius: "6px",
-                border: "1px solid #e5e7eb",
-                color: "#4f46e5",
-              }}
-            >
-              <ExternalLink size={14} />
-            </a>
-          )}
-
-          {/* Canva'dan Yeniden İndir / Eşitle Butonu */}
-          {pkg.canvaDesignId && onSync && (
-            <button
-              type="button"
-              onClick={onSync}
-              disabled={isAnySyncing}
-              title={
-                isAnySyncing
-                  ? "Başka bir güncelleme işlemi devam ediyor..."
-                  : "Canva'da yaptığınız son değişiklikleri yeniden indirip güncelleyin"
-              }
-              style={{
-                display: "grid",
-                placeItems: "center",
-                width: "28px",
-                height: "28px",
-                borderRadius: "6px",
-                border: "1px solid #e2e8f0",
-                color: isAnySyncing ? "#94a3b8" : "#0284c7",
-                background: isAnySyncing ? "#f1f5f9" : "#f0f9ff",
-                cursor: isAnySyncing ? "not-allowed" : "pointer",
-                opacity: isAnySyncing && !syncing ? 0.5 : 1,
-              }}
-            >
-              {syncing ? <LoaderCircle className="spin" size={13} /> : <RefreshCw size={13} />}
-            </button>
-          )}
-
+          {/* 5. 📅 Paylaşım Takvimine Ekle (Takvim İkonu - Kağıt Uçak Karışıklığını Önler) */}
           <Link
             href={`/projects/${projectId}/publishing?packageId=${pkg.id}`}
-            title="Paylaşım Planına Ekle"
+            title="📅 Paylaşım Takvimine Ekle"
             style={{
               display: "grid",
               placeItems: "center",
               width: "28px",
               height: "28px",
               borderRadius: "6px",
-              border: "1px solid #e5e7eb",
+              border: "1px solid #a7f3d0",
               color: "#059669",
+              background: "#ecfdf5",
             }}
           >
-            <Send size={14} />
+            <CalendarPlus size={13} />
           </Link>
 
+          {/* 6. ✈️ Telegram'a Gönder (Tek Kağıt Uçak Simgesi) */}
           {pkg.coverUrl && (
             <TelegramSendButton
               mediaUrl={pkg.coverUrl}
               mediaType="image"
               caption={`📸 ${pkg.title || "Canva Tasarımı"}`}
-              title="Telegram'a Gönder"
+              title="✈️ Telegram'a Gönder"
               size={13}
             />
           )}
 
+          {/* 7. 🗑️ Paketi Sil */}
           <button
             type="button"
             className="danger"
             onClick={onDelete}
             disabled={deleting}
-            title="Paketi Sil"
+            title="🗑️ Paketi Sil"
             style={{
               display: "grid",
               placeItems: "center",
@@ -1438,12 +1768,20 @@ function CanvaGalleryModal({
   currentIndex,
   onIndexChange,
   onClose,
+  onSync,
+  syncing,
+  onRefine,
+  refining,
 }: {
   pkg: CanvaPackage;
   projectId: string;
   currentIndex: number;
   onIndexChange: (idx: number) => void;
   onClose: () => void;
+  onSync?: () => void;
+  syncing?: boolean;
+  onRefine?: (slideIdx?: number) => void;
+  refining?: boolean;
 }) {
   const items = pkg.items || [];
   const currentItem = items[currentIndex] || items[0];
@@ -1505,6 +1843,29 @@ function CanvaGalleryModal({
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          {pkg.canvaDesignId && onRefine && (
+            <button
+              type="button"
+              onClick={() => onRefine(currentIndex)}
+              disabled={refining}
+              className="button secondary"
+              style={{
+                height: "32px",
+                fontSize: "12px",
+                background: refining ? "rgba(255, 255, 255, 0.1)" : "rgba(168, 85, 247, 0.25)",
+                color: "#c084fc",
+                border: "1px solid rgba(168, 85, 247, 0.4)",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                cursor: refining ? "wait" : "pointer",
+              }}
+              title="Bu slayttaki obje binişmelerini ve metin yerleşimini yapay zekayla onar"
+            >
+              {refining ? <LoaderCircle className="spin" size={13} /> : <WandSparkles size={13} />}
+              {refining ? "Onarılıyor..." : "🪄 AI ile Düzeni Onar"}
+            </button>
+          )}
           {pkg.canvaEditUrl && (
             <a
               href={pkg.canvaEditUrl}
@@ -1517,18 +1878,53 @@ function CanvaGalleryModal({
                 background: "#ffffff20",
                 color: "white",
                 border: "none",
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
               }}
+              title="Tasarımı Canva'da açıp objeleri serbestçe taşıyın veya düzenleyin"
             >
-              <ExternalLink size={13} />
-              Canva&apos;da Aç
+              <Palette size={13} />
+              Canva&apos;da Aç &amp; Düzenle
             </a>
+          )}
+          {onSync && (
+            <button
+              type="button"
+              onClick={onSync}
+              disabled={syncing}
+              className="button secondary"
+              style={{
+                height: "32px",
+                fontSize: "12px",
+                background: syncing ? "rgba(255, 255, 255, 0.1)" : "rgba(56, 189, 248, 0.2)",
+                color: "#38bdf8",
+                border: "1px solid rgba(56, 189, 248, 0.4)",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                cursor: syncing ? "wait" : "pointer",
+              }}
+              title="Canva'da yaptığınız yerleşim ve nesne değişikliklerini anında galeriye senkronize edin"
+            >
+              {syncing ? <LoaderCircle className="spin" size={13} /> : <RefreshCw size={13} />}
+              {syncing ? "Eşitleniyor..." : "Canva'dan Güncelle"}
+            </button>
           )}
           <Link
             href={`/projects/${projectId}/publishing?packageId=${pkg.id}`}
             className="button primary"
-            style={{ height: "32px", fontSize: "12px" }}
+            style={{
+              height: "32px",
+              fontSize: "12px",
+              background: "#10b981",
+              color: "white",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
           >
-            <Send size={13} />
+            <CalendarPlus size={13} />
             Paylaşım Planına Ekle
           </Link>
           <button
