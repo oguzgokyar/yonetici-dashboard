@@ -959,6 +959,75 @@ export async function PATCH(request: Request, context: Context) {
         { status: 500 }
       );
     }
+  } else if (
+    status === "scheduled" &&
+    postizPostId &&
+    (scheduledAt !== existing.scheduled_at || caption !== existing.caption || title !== existing.title) &&
+    existing.integration_id &&
+    (existing.media_url || existing.postiz_media_id)
+  ) {
+    // If post date or content changed while scheduled in Postiz, re-sync with Postiz
+    try {
+      await deletePostizPost(postizPostId).catch(() => false);
+
+      const targetAccount = database
+        .prepare("SELECT identifier FROM project_social_accounts WHERE project_id=? AND integration_id=?")
+        .get(projectId, existing.integration_id as string) as { identifier?: string } | undefined;
+      const platformIdentifier = targetAccount?.identifier || "instagram";
+
+      let fullCaption = caption;
+      if (hashtags) {
+        const formattedTags = hashtags
+          .split(/[\s,]+/)
+          .map((t) => (t.startsWith("#") ? t : `#${t}`))
+          .join(" ");
+        fullCaption = `${caption}\n\n${formattedTags}`.trim();
+      }
+
+      const isYt = Boolean(platformIdentifier.includes("youtube"));
+      const isTt = Boolean(platformIdentifier.includes("tiktok"));
+
+      const ytTags = hashtags
+        ? hashtags.split(/\s+/).map((t) => t.trim().replace(/^#+/, "").trim()).filter(Boolean)
+        : [];
+
+      const postizMedia = existing.postiz_media_id
+        ? [{ id: existing.postiz_media_id as string, path: (existing.media_url as string) || "" }]
+        : [];
+
+      const postizResult = await createPostizPost({
+        type: scheduleType === "now" || scheduleType === "draft" ? scheduleType : "schedule",
+        date: scheduledAt || (existing.scheduled_at as string | undefined),
+        integrationId: existing.integration_id as string,
+        platformIdentifier,
+        caption: fullCaption,
+        media: postizMedia,
+        postType: (postType || "post") as "post" | "reel" | "story",
+        youtubeSettings: isYt
+          ? {
+              title: title.slice(0, 100),
+              type: "public",
+              selfDeclaredMadeForKids: "no",
+              tags: ytTags,
+            }
+          : undefined,
+        tiktokSettings: isTt
+          ? {
+              title: title.slice(0, 90),
+              content_posting_method: "DIRECT_POST",
+              privacy_level: "SELF_ONLY",
+              video_made_with_ai: true,
+            }
+          : undefined,
+      });
+
+      if (postizResult[0]?.postId) {
+        postizPostId = postizResult[0].postId;
+        errorMessage = null;
+      }
+    } catch (err) {
+      console.warn("Postiz re-schedule warning:", err);
+    }
   }
 
   const now = new Date().toISOString();
