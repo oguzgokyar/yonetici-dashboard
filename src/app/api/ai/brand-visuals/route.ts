@@ -216,12 +216,17 @@ export async function POST(request: Request) {
       fs.mkdirSync(assetsDir, { recursive: true });
     }
 
-    const assetId = `brand-visual-${input.projectId}-${input.type}-${Date.now()}`;
+    const assetId = crypto.randomUUID();
     const mainFilePath = path.join(assetsDir, `${assetId}.png`);
     const thumbFilePath = path.join(assetsDir, `${assetId}_thumb.webp`);
+    const metaFilePath = path.join(assetsDir, `${assetId}.json`);
 
     fs.writeFileSync(mainFilePath, processedBuffer);
     fs.writeFileSync(thumbFilePath, thumbBuffer);
+    fs.writeFileSync(
+      metaFilePath,
+      JSON.stringify({ mimeType: "image/png", extension: "png" })
+    );
 
     const assetUrl = `/api/assets/${assetId}`;
     const nowIso = new Date().toISOString();
