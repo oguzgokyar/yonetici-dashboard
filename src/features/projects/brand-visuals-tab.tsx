@@ -1053,6 +1053,52 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                 </div>
               </div>
 
+              {/* Canlı Üretim Geri Bildirim Barı (Kullanıcının gözü önünde) */}
+              {generatingLogo && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    padding: "10px 14px",
+                    background: "#f5f3ff",
+                    border: "1.5px solid #d8b4fe",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                    color: "#6d28d9",
+                    marginBottom: "12px",
+                    boxShadow: "0 2px 8px rgba(124, 58, 237, 0.08)",
+                  }}
+                >
+                  <LoaderCircle className="spin" size={18} color="#7c3aed" />
+                  <span style={{ fontWeight: 700 }}>Logo Yaratım Süreci Başlatıldı:</span>
+                  <span style={{ color: "#7c3aed" }}>
+                    Yapay zeka marka kimliğinizi, tipografiyi ve {logoStyle} arketipini sentezliyor... (~3-6 sn)
+                  </span>
+                </div>
+              )}
+
+              {/* Alt Hata Bildirimi (Kullanıcının gözü önünde) */}
+              {statusMessage && !statusMessage.ok && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "10px 14px",
+                    background: "#fff1f2",
+                    border: "1px solid #fecdd3",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                    color: "#be123c",
+                    marginBottom: "12px",
+                  }}
+                >
+                  <CircleAlert size={16} />
+                  <span>{statusMessage.text}</span>
+                </div>
+              )}
+
               {/* Üretim Butonları */}
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
                 <button
@@ -1065,12 +1111,13 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                     padding: "0 18px",
                     fontSize: "12.5px",
                     fontWeight: 600,
-                    borderColor: "#d8b4fe",
-                    color: "#7e22ce",
+                    borderColor: generatingLogo ? "#cbd5e1" : "#d8b4fe",
+                    color: generatingLogo ? "#94a3b8" : "#7e22ce",
+                    cursor: generatingLogo ? "wait" : "pointer",
                   }}
                 >
                   {generatingLogo ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} color="#9333ea" />}
-                  <span>Tekil Konsept Üret</span>
+                  <span>{generatingLogo ? "Logo Hazırlanıyor..." : "Tekil Konsept Üret"}</span>
                 </button>
                 <button
                   type="button"
@@ -1082,13 +1129,14 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                     padding: "0 20px",
                     fontSize: "12.5px",
                     fontWeight: 700,
-                    background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
+                    background: generatingLogo ? "#94a3b8" : "linear-gradient(135deg, #7c3aed, #4f46e5)",
                     border: "none",
-                    boxShadow: "0 4px 14px rgba(124, 58, 237, 0.28)",
+                    boxShadow: generatingLogo ? "none" : "0 4px 14px rgba(124, 58, 237, 0.28)",
+                    cursor: generatingLogo ? "wait" : "pointer",
                   }}
                 >
                   {generatingLogo ? <LoaderCircle className="spin" size={16} /> : <Layers size={16} />}
-                  <span>3 Farklı Alternatif Üret (A/B/C)</span>
+                  <span>{generatingLogo ? "3 Alternatif Hazırlanıyor..." : "3 Farklı Alternatif Üret (A/B/C)"}</span>
                 </button>
               </div>
             </div>

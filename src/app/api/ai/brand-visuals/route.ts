@@ -303,65 +303,148 @@ ${input.customDirection?.trim() ? `User Direction: ${input.customDirection.trim(
             .filter(Boolean)
             .join("\n");
 
-          const renderModel = provider.image_model || "gemini-3.1-flash-image";
-          const renderedImage = await renderCreative({
-            baseUrl,
-            apiKey,
-            model: renderModel,
-            prompt: promptLayers,
-            ratio: layout === "horizontal" ? "16:9" : "1:1",
-            references: references.length > 0 ? references : undefined,
-          });
+          let renderedImage: MediaInput | null = null;
+          let usedFallback = false;
 
-          if (!renderedImage?.bytes) {
-            throw new Error("Görsel difüzyon modeli geçerli bir logo çıktısı üretemedi.");
+          try {
+            const renderModel = provider.image_model || "gemini-3.1-flash-image";
+            renderedImage = await renderCreative({
+              baseUrl,
+              apiKey,
+              model: renderModel,
+              prompt: promptLayers,
+              ratio: layout === "horizontal" ? "16:9" : "1:1",
+              references: references.length > 0 ? references : undefined,
+            });
+          } catch (imgError) {
+            console.warn("Gemini 3D difüzyon motoru geçici olarak kullanılamadı, SVG Vektör kurtarmasına geçiliyor:", imgError);
+            usedFallback = true;
           }
 
-          const targetWidth = layout === "horizontal" ? 1600 : 1080;
-          const targetHeight = layout === "horizontal" ? 900 : 1080;
+          if (usedFallback || !renderedImage?.bytes) {
+            // Otomatik Vektör SVG Kurtarma Motoru
+            const systemPrompt = `You are a world-class principal brand identity designer and SVG vector master.
+Generate a pristine, standalone, scalable XML SVG logo according to the exact brand contract.
+Output ONLY the raw <svg>...</svg> element. Do NOT wrap in markdown fences or conversational text.`;
 
-          const processedBuffer = await sharp(renderedImage.bytes)
-            .resize({
-              width: targetWidth,
-              height: targetHeight,
-              fit: "contain",
-              background: groundColor,
-            })
-            .png({ quality: 95 })
-            .toBuffer();
+            const userPrompt = `Create a master logo SVG for the brand "${brandName}".
+- Industry: ${industry}
+${
+  hasTagline
+    ? `- Slogan/Tagline: "${tagline}" (Render this text neatly beneath or beside the brand name)`
+    : `- Slogan/Tagline: STRICTLY NONE. ABSOLUTELY NO TAGLINE, NO MOTTO, NO SUBTITLE TEXT. Render ONLY the emblem and the brand name "${brandName}".`
+}
+- Design Archetype: ${styleMeta.name} (${styleMeta.promptDirectives})
+- Typography Style: ${typographyMeta.name} (${typographyMeta.fontCategory})
+- Layout Architecture: ${
+              layout === "horizontal"
+                ? `Horizontal lockup: Symbol on the left, brand name typography on the right${hasTagline ? ' with tagline underneath' : ' with NO tagline'}. (viewBox 0 0 1200 400)`
+                : layout === "icon_only"
+                ? "Standalone iconic symbol/emblem without brand name or any text (viewBox 0 0 800 800)"
+                : layout === "badge"
+                ? `Circular crest/badge seal with concentric rings and curved/straight brand name${hasTagline ? ' and tagline' : ' (NO tagline)'}. (viewBox 0 0 800 800)`
+                : `Stacked composition: Striking emblem on top, brand name "${brandName}" centered below${hasTagline ? ` and tagline "${tagline}" under brand name` : ' with STRICTLY NO tagline'}. (viewBox 0 0 800 800)`
+            }
+- Color Palette:
+  * Background fill: ${groundColor}
+  * Primary brand action color: ${primaryColor}
+  * Secondary structural/text color: ${secondaryColor}
+  * Accent highlight: ${accentColor}
+- Creative Variation Seed #${randomSeed}: Focus on unique 3D tactile geometry, depth layers, and clean negative space.
+${input.customDirection?.trim() ? `User Direction: ${input.customDirection.trim()}` : ""}`;
 
-          const thumbBuffer = await sharp(processedBuffer)
-            .resize({
-              width: Math.min(targetWidth, 480),
-              height: Math.min(targetHeight, Math.round((targetHeight / targetWidth) * 480)),
-              fit: "contain",
-              background: groundColor,
-            })
-            .webp({ quality: 82 })
-            .toBuffer();
+            const textModel = "gemini-3-flash";
+            const { content: svgRaw } = await completeText(systemPrompt, userPrompt, {
+              model: textModel,
+              temperature: 0.7,
+              maxTokens: 2500,
+            });
 
-          fs.writeFileSync(path.join(assetsDir, `${conceptId}.png`), processedBuffer);
-          fs.writeFileSync(path.join(assetsDir, `${conceptId}_thumb.webp`), thumbBuffer);
-          fs.writeFileSync(
-            path.join(assetsDir, `${conceptId}.json`),
-            JSON.stringify({ mimeType: "image/png", extension: "png" })
-          );
+            const svgCleanMatch = svgRaw.match(/<svg[\s\S]*<\/svg>/i);
+            if (!svgCleanMatch) throw new Error("Logo motoru geçerli bir çıktı üretemedi.");
+            const svgContent = svgCleanMatch[0];
 
-          generatedConcepts.push({
-            id: conceptId,
-            title: `${styleMeta.name} Logo ${count > 1 ? `#${i + 1}` : ""}`.trim(),
-            style: styleId,
-            engine: "gemini_image",
-            layout,
-            typography: {
-              brandName,
-              tagline: tagline || undefined,
-              fontStyle,
-            },
-            url: `/api/assets/${conceptId}`,
-            createdAt: nowIso,
-            promptUsed: input.customDirection || undefined,
-          });
+            const processedBuffer = await sharp(Buffer.from(svgContent))
+              .resize(1080, 1080, { fit: "contain", background: groundColor })
+              .png({ quality: 95 })
+              .toBuffer();
+
+            const thumbBuffer = await sharp(processedBuffer)
+              .resize(360, 360, { fit: "contain", background: groundColor })
+              .webp({ quality: 82 })
+              .toBuffer();
+
+            fs.writeFileSync(path.join(assetsDir, `${conceptId}.svg`), svgContent, "utf8");
+            fs.writeFileSync(path.join(assetsDir, `${conceptId}.png`), processedBuffer);
+            fs.writeFileSync(path.join(assetsDir, `${conceptId}_thumb.webp`), thumbBuffer);
+            fs.writeFileSync(
+              path.join(assetsDir, `${conceptId}.json`),
+              JSON.stringify({ mimeType: "image/svg+xml", extension: "svg" })
+            );
+
+            generatedConcepts.push({
+              id: conceptId,
+              title: `${styleMeta.name} Logo ${count > 1 ? `#${i + 1}` : ""}`.trim(),
+              style: styleId,
+              engine: "svg_vector",
+              layout,
+              typography: {
+                brandName,
+                tagline: tagline || undefined,
+                fontStyle,
+              },
+              url: `/api/assets/${conceptId}`,
+              svgContent,
+              createdAt: nowIso,
+              promptUsed: input.customDirection || undefined,
+            });
+          } else {
+            const targetWidth = layout === "horizontal" ? 1600 : 1080;
+            const targetHeight = layout === "horizontal" ? 900 : 1080;
+
+            const processedBuffer = await sharp(renderedImage.bytes)
+              .resize({
+                width: targetWidth,
+                height: targetHeight,
+                fit: "contain",
+                background: groundColor,
+              })
+              .png({ quality: 95 })
+              .toBuffer();
+
+            const thumbBuffer = await sharp(processedBuffer)
+              .resize({
+                width: Math.min(targetWidth, 480),
+                height: Math.min(targetHeight, Math.round((targetHeight / targetWidth) * 480)),
+                fit: "contain",
+                background: groundColor,
+              })
+              .webp({ quality: 82 })
+              .toBuffer();
+
+            fs.writeFileSync(path.join(assetsDir, `${conceptId}.png`), processedBuffer);
+            fs.writeFileSync(path.join(assetsDir, `${conceptId}_thumb.webp`), thumbBuffer);
+            fs.writeFileSync(
+              path.join(assetsDir, `${conceptId}.json`),
+              JSON.stringify({ mimeType: "image/png", extension: "png" })
+            );
+
+            generatedConcepts.push({
+              id: conceptId,
+              title: `${styleMeta.name} 3D Logo ${count > 1 ? `#${i + 1}` : ""}`.trim(),
+              style: styleId,
+              engine: "gemini_image",
+              layout,
+              typography: {
+                brandName,
+                tagline: tagline || undefined,
+                fontStyle,
+              },
+              url: `/api/assets/${conceptId}`,
+              createdAt: nowIso,
+              promptUsed: input.customDirection || undefined,
+            });
+          }
         }
       }
 
