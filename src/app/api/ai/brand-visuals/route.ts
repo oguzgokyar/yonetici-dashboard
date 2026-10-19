@@ -195,7 +195,7 @@ ${input.customDirection?.trim() ? `User Direction: ${input.customDirection.trim(
   * Scalable vector paths, polygons, circles, and clean <text> elements
   * High contrast, professional corporate finish, clean negative space.`;
 
-          const textModel = provider.text_model || "gemini-3.8-flash-high";
+          const textModel = "gemini-3-flash";
           const { content: svgRaw } = await completeText(systemPrompt, userPrompt, {
             model: textModel,
             temperature: 0.7,
