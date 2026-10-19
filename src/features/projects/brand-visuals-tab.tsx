@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Image from "next/image";
 import {
   Sparkles,
@@ -206,9 +206,11 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
   const [logoBrandName, setLogoBrandName] = useState("");
   const [logoTagline, setLogoTagline] = useState("");
   const [logoFontStyle, setLogoFontStyle] = useState<LogoTypographyStyle>("sans");
+  const [includeTagline, setIncludeTagline] = useState(false); // Slogan tercihi (Varsayılan: Slogansız)
   const [logoCustomPrompt, setLogoCustomPrompt] = useState("");
   const [generatingLogo, setGeneratingLogo] = useState(false);
   const [canvasBgDark, setCanvasBgDark] = useState(false);
+  const initializedRef = useRef(false);
 
   // ── SOSYAL MEDYA KİTİ SEÇİMLERİ ──
   const [generatingType, setGeneratingType] = useState<BrandVisualType | null>(null);
@@ -225,10 +227,12 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
   const [previewModalSpec, setPreviewModalSpec] = useState<BrandVisualSpec | null>(null);
   const [previewConcept, setPreviewConcept] = useState<GeneratedLogoConcept | null>(null);
 
+  // İlk açılışta marka bilgilerini bir kez doldur (Kullanıcı tercihlerini ezmemek için ref kullanılır)
   useEffect(() => {
-    if (project) {
+    if (project && !initializedRef.current) {
+      initializedRef.current = true;
       setLogoBrandName(project.brand.brandName || project.name || "");
-      setLogoTagline(project.brand.industry || "STEM & Maker Atölyesi");
+      // Varsayılan olarak slogan kapalıdır; ancak kayıtlı tercih varsa oradan yüklenecektir
     }
   }, [project]);
 
@@ -241,6 +245,18 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
         const data = await res.json();
         if (mounted && data.ok && data.visuals) {
           setVisuals(data.visuals);
+          // Hafızadaki kullanıcı tercihlerini geri yükle
+          if (data.visuals.preferences) {
+            const p = data.visuals.preferences;
+            if (p.style) setLogoStyle(p.style);
+            if (p.engine) setLogoEngine(p.engine);
+            if (p.layout) setLogoLayout(p.layout);
+            if (p.referenceMode) setLogoRefMode(p.referenceMode);
+            if (p.fontStyle) setLogoFontStyle(p.fontStyle);
+            if (p.brandName) setLogoBrandName(p.brandName);
+            if (typeof p.includeTagline === "boolean") setIncludeTagline(p.includeTagline);
+            if (p.tagline !== undefined) setLogoTagline(p.tagline);
+          }
         }
       } catch (err) {
         console.error("Visuals load error:", err);
@@ -282,7 +298,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
           referenceMode: logoRefMode,
           typography: {
             brandName: logoBrandName.trim(),
-            tagline: logoTagline.trim(),
+            tagline: includeTagline ? logoTagline.trim() : "",
             fontStyle: logoFontStyle,
           },
           customDirection: logoCustomPrompt.trim() || undefined,
@@ -970,16 +986,58 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                   />
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: "#475569", marginBottom: "4px" }}>
-                    Slogan / Açıklama
-                  </label>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+                    <label style={{ fontSize: "11px", fontWeight: 700, color: "#475569", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span>Slogan / Alt Metin</span>
+                    </label>
+                    {/* Slogan Aç/Kapat Butonu */}
+                    <button
+                      type="button"
+                      onClick={() => setIncludeTagline(!includeTagline)}
+                      style={{
+                        border: 0,
+                        background: includeTagline ? "rgba(16, 185, 129, 0.12)" : "#f1f5f9",
+                        color: includeTagline ? "#059669" : "#64748b",
+                        fontSize: "10.5px",
+                        fontWeight: 700,
+                        padding: "2px 8px",
+                        borderRadius: "6px",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                      }}
+                    >
+                      {includeTagline ? <Check size={11} strokeWidth={3} /> : <X size={11} />}
+                      <span>{includeTagline ? "Sloganlı" : "Slogansız (Yalnızca İsim)"}</span>
+                    </button>
+                  </div>
                   <input
                     type="text"
-                    value={logoTagline}
+                    disabled={!includeTagline}
+                    value={includeTagline ? logoTagline : ""}
                     onChange={(e) => setLogoTagline(e.target.value)}
-                    placeholder="Slogan / Alt Başlık"
-                    style={{ width: "100%", padding: "8px 10px", fontSize: "12px", borderRadius: "7px", background: "#f8fafc", border: "1px solid #cbd5e1", color: "#0f172a" }}
+                    placeholder={includeTagline ? "Örn: STEM & Maker Atölyesi" : "Slogansız — Yalnızca marka adı ve amblem üretilecek"}
+                    style={{
+                      width: "100%",
+                      padding: "8px 10px",
+                      fontSize: "12px",
+                      borderRadius: "7px",
+                      background: includeTagline ? "#f8fafc" : "#f1f5f9",
+                      border: `1px solid ${includeTagline ? "#cbd5e1" : "#e2e8f0"}`,
+                      color: includeTagline ? "#0f172a" : "#94a3b8",
+                      fontStyle: includeTagline ? "normal" : "italic",
+                      cursor: includeTagline ? "text" : "not-allowed",
+                    }}
                   />
+                  <div style={{ fontSize: "10px", color: includeTagline ? "#059669" : "#64748b", marginTop: "4px", display: "flex", alignItems: "center", gap: "4px" }}>
+                    <Info size={11} />
+                    <span>
+                      {includeTagline
+                        ? "Logonun altında veya yanında yukarıdaki slogan yer alacak."
+                        : "Slogan kapatıldı. Logo sadece amblem ve ana marka isminden oluşacak."}
+                    </span>
+                  </div>
                 </div>
                 <div style={{ gridColumn: "1 / -1" }}>
                   <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: "#475569", marginBottom: "4px" }}>

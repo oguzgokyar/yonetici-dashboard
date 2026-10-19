@@ -15,6 +15,7 @@ import {
   LogoReferenceMode,
   LogoStyleArchetype,
   LogoTypographyStyle,
+  LogoStudioPreferences,
   SavedVisualItem,
 } from "@/lib/brand-visuals";
 import { normalizeBrandConcept } from "@/lib/brand-concept";
@@ -141,8 +142,16 @@ export async function POST(request: Request) {
       const engine = input.engine || "gemini_image";
       const layout = input.layout || "stacked";
       const referenceMode = input.referenceMode || "none";
-      const brandName = input.typography?.brandName || brand.brandName || project.name || "Marka";
-      const tagline = input.typography?.tagline || brand.industry || "";
+      const brandName = (input.typography?.brandName !== undefined && input.typography.brandName !== null)
+        ? input.typography.brandName.trim()
+        : (brand.brandName || project.name || "Marka");
+
+      // ÖNEMLİ KURAL: Eğer kullanıcı sloganı sildiyse veya boş bıraktıysa ASLA brand.industry'yi yedekleme!
+      // Boş ise kesinlikle SLOGANSIZ üretilmeli.
+      const hasTagline = Boolean(
+        input.typography?.tagline && input.typography.tagline.trim().length > 0
+      );
+      const tagline = hasTagline ? input.typography!.tagline!.trim() : "";
       const fontStyle = input.typography?.fontStyle || "sans";
       const typographyMeta = LOGO_TYPOGRAPHY_STYLES.find((t) => t.id === fontStyle) || LOGO_TYPOGRAPHY_STYLES[0];
 
@@ -171,17 +180,21 @@ Output ONLY the raw <svg>...</svg> element. Do NOT wrap in markdown fences or co
 
           const userPrompt = `Create a master logo SVG for the brand "${brandName}".
 - Industry: ${industry}
-- Slogan/Tagline: "${tagline}"
+${
+  hasTagline
+    ? `- Slogan/Tagline: "${tagline}" (Render this text neatly beneath or beside the brand name)`
+    : `- Slogan/Tagline: STRICTLY NONE. ABSOLUTELY NO TAGLINE, NO MOTTO, NO SUBTITLE TEXT. The user explicitly chose NO SLOGAN. Render ONLY the emblem and the brand name "${brandName}". Do NOT invent, add or render any secondary text words below the brand name!`
+}
 - Design Archetype: ${styleMeta.name} (${styleMeta.promptDirectives})
 - Typography Style: ${typographyMeta.name} (${typographyMeta.fontCategory})
 - Layout Architecture: ${
             layout === "horizontal"
-              ? "Horizontal lockup: Symbol on the left, typography on the right (viewBox 0 0 1200 400)"
+              ? `Horizontal lockup: Symbol on the left, brand name typography on the right${hasTagline ? ' with tagline underneath' : ' with NO tagline'}. (viewBox 0 0 1200 400)`
               : layout === "icon_only"
-              ? "Standalone iconic symbol/emblem without brand name text (viewBox 0 0 800 800)"
+              ? "Standalone iconic symbol/emblem without brand name or any text (viewBox 0 0 800 800)"
               : layout === "badge"
-              ? "Circular crest/badge seal with concentric rings and curved/straight text (viewBox 0 0 800 800)"
-              : "Stacked composition: Striking emblem on top, brand name and tagline centered below (viewBox 0 0 800 800)"
+              ? `Circular crest/badge seal with concentric rings and curved/straight brand name${hasTagline ? ' and tagline' : ' (NO tagline)'}. (viewBox 0 0 800 800)`
+              : `Stacked composition: Striking emblem on top, brand name "${brandName}" centered below${hasTagline ? ` and tagline "${tagline}" under brand name` : ' with STRICTLY NO tagline or secondary text'}. (viewBox 0 0 800 800)`
           }
 - Color Palette:
   * Background fill: ${groundColor}
@@ -193,7 +206,7 @@ ${input.customDirection?.trim() ? `User Direction: ${input.customDirection.trim(
 - Requirements:
   * Must be 100% valid XML SVG with xmlns="http://www.w3.org/2000/svg"
   * Scalable vector paths, polygons, circles, and clean <text> elements
-  * High contrast, professional corporate finish, clean negative space.`;
+  * High contrast, professional corporate finish, clean negative space.${!hasTagline ? '\n  * STRICT NEGATIVE CONSTRAINT: Zero subtitle or slogan words. Only "' + brandName + '" text is allowed.' : ''}`;
 
           const textModel = "gemini-3-flash";
           const { content: svgRaw } = await completeText(systemPrompt, userPrompt, {
@@ -267,7 +280,9 @@ ${input.customDirection?.trim() ? `User Direction: ${input.customDirection.trim(
           const promptLayers = [
             `[BRAND GUARDIAN LOGO DESIGN CONTRACT]`,
             `Brand Name: "${brandName}"`,
-            tagline && `Tagline/Subtitle: "${tagline}"`,
+            hasTagline
+              ? `Tagline/Subtitle: "${tagline}"`
+              : `MANDATORY NEGATIVE TEXT RULE: ABSOLUTELY NO SLOGAN, NO SUBTITLE, NO MOTTO, NO EXTRA TEXT. Render ONLY the emblem icon and the brand name "${brandName}". Zero secondary text lines allowed.`,
             `Industry: ${industry}`,
             `Color Palette: 60% Ground ${groundColor}, 30% Structure ${secondaryColor}, 10% Primary Action ${primaryColor}, Accent Highlight ${accentColor}.`,
             ``,
@@ -355,6 +370,17 @@ ${input.customDirection?.trim() ? `User Direction: ${input.customDirection.trim(
         ...generatedConcepts,
         ...(currentVisuals.logoConcepts || []),
       ];
+      // Tercihleri kalıcı hafızaya kaydet
+      currentVisuals.preferences = {
+        style: styleId,
+        engine,
+        layout,
+        referenceMode,
+        fontStyle,
+        brandName,
+        tagline: input.typography?.tagline || "",
+        includeTagline: hasTagline,
+      };
       currentVisuals.updatedAt = new Date().toISOString();
 
       database
@@ -561,10 +587,11 @@ export async function PUT(request: Request) {
   try {
     const input = (await request.json()) as {
       projectId?: string;
-      action?: "set_primary_logo" | "delete_item" | "delete_logo_concept";
+      action?: "set_primary_logo" | "delete_item" | "delete_logo_concept" | "save_preferences";
       type?: BrandVisualType;
       conceptId?: string;
       url?: string;
+      preferences?: LogoStudioPreferences;
     };
 
     if (!input.projectId || !input.action) {
@@ -648,6 +675,21 @@ export async function PUT(request: Request) {
         ok: true,
         visuals,
         message: "Logo konsepti kaldırıldı.",
+      });
+    }
+
+    // 4. Tercihleri Hafızaya Kaydet
+    if (input.action === "save_preferences") {
+      visuals.preferences = (input as { preferences?: any }).preferences;
+      visuals.updatedAt = new Date().toISOString();
+      database
+        .prepare("UPDATE projects SET brand_visuals_json = ? WHERE id = ?")
+        .run(JSON.stringify(visuals), input.projectId);
+
+      return Response.json({
+        ok: true,
+        visuals,
+        message: "Tercihler hafızaya kaydedildi.",
       });
     }
 

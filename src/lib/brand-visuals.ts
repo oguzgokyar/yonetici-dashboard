@@ -88,10 +88,22 @@ export type SavedVisualItem = {
   dimensions: string;
 };
 
+export type LogoStudioPreferences = {
+  style?: LogoStyleArchetype;
+  engine?: LogoEngine;
+  layout?: LogoLayout;
+  referenceMode?: LogoReferenceMode;
+  fontStyle?: LogoTypographyStyle;
+  brandName?: string;
+  tagline?: string;
+  includeTagline?: boolean;
+};
+
 export type BrandVisualsState = {
   items: Partial<Record<BrandVisualType, SavedVisualItem>>;
   logoConcepts?: GeneratedLogoConcept[];
   activeLogoConceptId?: string;
+  preferences?: LogoStudioPreferences;
   updatedAt: string;
 };
 
