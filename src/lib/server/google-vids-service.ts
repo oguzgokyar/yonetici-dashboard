@@ -256,7 +256,68 @@ export async function processGoogleVidsJob(job: {
     ? ` --reference-image "/tmp/vids_ref_${job.id}.png"`
     : "";
 
-  const taskPrompt = `Create the Google Vids video for job_id='${job.id}' by executing this exact python command:
+  try {
+    // 1. Try Direct Host Runner Bridge on :8080 (0.05s instant launch, no LLM overhead)
+    const HOST_BRIDGE_URLS = [
+      "http://10.0.1.1:8080/api/internal/google-vids/run",
+      "http://127.0.0.1:8080/api/internal/google-vids/run",
+      "http://10.0.1.8:8080/api/internal/google-vids/run",
+    ];
+
+  let bridgeStarted = false;
+  for (const bridgeUrl of HOST_BRIDGE_URLS) {
+    try {
+      const res = await fetch(bridgeUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_id: job.id,
+          title,
+          aspect_ratio: aspectRatio,
+          music_prompt: musicPrompt,
+          narrative_mode: narrativeMode,
+          authuser: authuserIndex,
+          profile_dir: profileDir,
+          scenes,
+          reference_image_url: referenceImagePublicUrl,
+          callback_url: callbackUrl,
+          callback_token: callbackToken,
+          remove_watermark: true,
+        }),
+        signal: AbortSignal.timeout(6000),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok) {
+          bridgeStarted = true;
+          break;
+        }
+      }
+    } catch {}
+  }
+
+  let runId: string | undefined = undefined;
+
+  if (bridgeStarted) {
+    db.prepare(`
+      UPDATE generation_jobs
+      SET status = 'running',
+          progress_json = ?
+      WHERE id = ? AND status IN ('running','rendering')
+    `).run(
+      JSON.stringify({
+        phase: "running",
+        percent: 10,
+        detail: "Google Vids doğrudan host köprüsünde başlatıldı...",
+        runId: "host_bridge",
+        updatedAt: new Date().toISOString(),
+      }),
+      job.id
+    );
+  } else {
+    // Fallback to Hermes /v1/runs if bridge is unavailable
+    const taskPrompt = `Create the Google Vids video for job_id='${job.id}' by executing this exact python command:
 cat << 'EOF' > "${scenesTempFile}"
 ${JSON.stringify(scenes, null, 2)}
 EOF
@@ -270,43 +331,52 @@ rm -f "/tmp/vids_out_${job.id}.mp4" "${scenesTempFile}" "/tmp/vids_job_${job.id}
 
 Return the completion output.`;
 
-  try {
-    const runResponse = await fetch(`${baseUrl}/v1/runs`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      },
-      body: JSON.stringify({
-        model: "hermes-agent",
-        input: taskPrompt,
-      }),
-      signal: AbortSignal.timeout(15000),
-    });
+    try {
+      const runResponse = await fetch(`${baseUrl}/v1/runs`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        },
+        body: JSON.stringify({
+          model: "hermes-agent",
+          input: taskPrompt,
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
 
-    if (!runResponse.ok && runResponse.status !== 202) {
-      throw new Error(`Hermes Vids görevi başlatılamadı (HTTP ${runResponse.status})`);
+      if (!runResponse.ok && runResponse.status !== 202) {
+        throw new Error(`Hermes Vids görevi başlatılamadı (HTTP ${runResponse.status})`);
+      }
+
+      const runData = (await runResponse.json().catch(() => ({}))) as { run_id?: string; id?: string };
+      runId = runData.run_id || runData.id;
+
+      db.prepare(`
+        UPDATE generation_jobs
+        SET status = 'running',
+            progress_json = ?
+        WHERE id = ? AND status IN ('running','rendering')
+      `).run(
+        JSON.stringify({
+          phase: "running",
+          percent: 15,
+          detail: "Hermes Agent Google Vids otomasyonunu başlattı",
+          runId: runId || null,
+          updatedAt: new Date().toISOString(),
+        }),
+        job.id
+      );
+    } catch (hermesErr) {
+      db.prepare("UPDATE generation_jobs SET status='failed', error=?, completed_at=? WHERE id=? AND status='rendering'").run(
+        String(hermesErr).slice(0, 1000),
+        new Date().toISOString(),
+        job.id
+      );
+      return;
     }
-
-    const runData = (await runResponse.json().catch(() => ({}))) as { run_id?: string; id?: string };
-    const runId = runData.run_id || runData.id;
-
-    db.prepare(`
-      UPDATE generation_jobs
-      SET status = 'running',
-          progress_json = ?
-      WHERE id = ? AND status IN ('running','rendering')
-    `).run(
-      JSON.stringify({
-        phase: "running",
-        percent: 15,
-        detail: "Hermes Agent Google Vids otomasyonunu başlattı",
-        runId: runId || null,
-        updatedAt: new Date().toISOString(),
-      }),
-      job.id
-    );
+  }
 
     // Native multi-scene generation + three layer phases + native export.
     const started = Date.now();
