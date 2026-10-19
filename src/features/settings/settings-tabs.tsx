@@ -1,16 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Bot, Settings2, Server, Palette, Music2 } from "lucide-react";
+import { Bot, Settings2, Server, Palette, Music2, Video } from "lucide-react";
 import { AiProviders } from "@/features/settings/ai-providers";
 import { CanvaAccountSettings } from "@/features/settings/canva-account-settings";
+import { GoogleVidsAccountSettings } from "@/features/settings/google-vids-account-settings";
 import { MusicProviderSettings } from "@/features/settings/music-provider-settings";
 import { SystemUpdates } from "@/features/settings/system-updates";
 
 import { ServerMonitor } from "@/features/settings/server-monitor";
 
 type SettingsTab = "api" | "system" | "server";
-type ApiSubTab = "ai_postiz" | "canva" | "music";
+type ApiSubTab = "ai_postiz" | "canva" | "google_vids" | "music";
 
 export function SettingsTabs() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("api");
@@ -128,6 +129,30 @@ export function SettingsTabs() {
               <button
                 type="button"
                 role="tab"
+                aria-selected={apiSubTab === "google_vids"}
+                onClick={() => setApiSubTab("google_vids")}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "7px",
+                  padding: "7px 14px",
+                  borderRadius: "8px",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                  border: apiSubTab === "google_vids" ? "1px solid #2563eb" : "1px solid #e2e8f0",
+                  background: apiSubTab === "google_vids" ? "#eff6ff" : "white",
+                  color: apiSubTab === "google_vids" ? "#1e40af" : "#64748b",
+                }}
+              >
+                <Video size={15} color={apiSubTab === "google_vids" ? "#2563eb" : "#64748b"} />
+                Google Vids Havuzu
+              </button>
+
+              <button
+                type="button"
+                role="tab"
                 aria-selected={apiSubTab === "music"}
                 onClick={() => setApiSubTab("music")}
                 style={{
@@ -153,6 +178,7 @@ export function SettingsTabs() {
             {/* Alt Sekme İçeriği */}
             {apiSubTab === "ai_postiz" && <AiProviders />}
             {apiSubTab === "canva" && <CanvaAccountSettings />}
+            {apiSubTab === "google_vids" && <GoogleVidsAccountSettings />}
             {apiSubTab === "music" && <MusicProviderSettings />}
           </div>
         ) : activeTab === "server" ? (

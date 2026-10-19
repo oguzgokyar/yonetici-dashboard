@@ -5,6 +5,7 @@ import type { Metrics, HostMonitorJob } from "@/lib/server/server-monitor";
 import type { MonitorJob } from "@/lib/server/server-monitor-jobs";
 import { startVisiblePolling } from "./server-monitor-polling";
 import { SinematikStudioControl } from "@/features/projects/sinematik-studio-control";
+import { NovncServiceControl } from "@/features/settings/novnc-service-control";
 import "./server-monitor.css";
 type Status = { local: Metrics | null; host: { state: string; metrics: Metrics | null; jobs: HostMonitorJob[]; jobsAvailable: boolean }; production: { jobs: MonitorJob[]; total: number; hasMore: boolean } | null };
 const labels: Record<string, string> = { canva: "Canva", image: "AI Görsel", video: "Video", "video-layer": "Video Katmanı", other: "Diğer", queued: "Sırada", dispatching: "Gönderiliyor", running: "Çalışıyor", rendering: "İşleniyor", exporting: "Dışa aktarılıyor", uploading: "Yükleniyor", video_exporting: "Video dışa aktarılıyor", complete: "Tamamlandı", failed: "Başarısız" };
@@ -138,8 +139,9 @@ export function ServerMonitor() {
         )}
       </div>
 
-      <div style={{ marginTop: "16px" }}>
+      <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "10px" }}>
         <SinematikStudioControl variant="banner" />
+        <NovncServiceControl variant="banner" />
       </div>
 
       <p className="server-scope" style={{ marginTop: "12px" }}>{metrics?.scope === "host" ? "Host kaynağı" : "Yerel /proc görünümü (namespace / ortak kernel)"} {status?.host.state === "unconfigured" ? "Host bağlantısı yapılandırılmadı." : status?.host.state === "unavailable" ? "Host bağlantısı kullanılamıyor." : status?.host.metrics?.scope === "local-proc" ? "Uzak kaynak da namespace ile sınırlı; host olarak gösterilmez." : ""}</p>
