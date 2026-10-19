@@ -30,6 +30,8 @@ import {
   FileCode,
   Image as ImageIcon,
   Wand2,
+  Sun,
+  Moon,
 } from "lucide-react";
 import {
   BRAND_VISUAL_SPECS,
@@ -63,7 +65,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
 
   // ── LOGO STÜDYOSU FORM DURUMU ──
   const [logoStyle, setLogoStyle] = useState<LogoStyleArchetype>("geometric");
-  const [logoEngine, setLogoEngine] = useState<LogoEngine>("gemini_image");
+  const [logoEngine, setLogoEngine] = useState<LogoEngine>("svg_vector");
   const [logoLayout, setLogoLayout] = useState<LogoLayout>("stacked");
   const [logoRefMode, setLogoRefMode] = useState<LogoReferenceMode>("none");
   const [logoBrandName, setLogoBrandName] = useState("");
@@ -71,6 +73,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
   const [logoFontStyle, setLogoFontStyle] = useState<LogoTypographyStyle>("sans");
   const [logoCustomPrompt, setLogoCustomPrompt] = useState("");
   const [generatingLogo, setGeneratingLogo] = useState(false);
+  const [canvasBgDark, setCanvasBgDark] = useState(false); // Canlı Zemin Kontrastı (Açık/Koyu)
 
   // ── SOSYAL MEDYA KİTİ DURUMU ──
   const [generatingType, setGeneratingType] = useState<BrandVisualType | null>(null);
@@ -345,12 +348,23 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
   }
 
   return (
-    <section className="settings-card" style={{ maxWidth: "100%", width: "100%", boxSizing: "border-box" }}>
+    <section
+      className="settings-card"
+      style={{
+        maxWidth: "100%",
+        width: "100%",
+        boxSizing: "border-box",
+        background: "#ffffff",
+        border: "1px solid var(--border)",
+        borderRadius: "16px",
+        padding: "24px",
+      }}
+    >
       {/* ── ÜST BAŞLIK & İKİ ANA BÖLÜM SEÇİCİ ── */}
       <div
         style={{
-          borderBottom: "1px solid var(--border)",
-          paddingBottom: "16px",
+          borderBottom: "1px solid #e2e8f0",
+          paddingBottom: "18px",
           marginBottom: "20px",
           display: "flex",
           alignItems: "center",
@@ -361,64 +375,85 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
       >
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
-            <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 800 }}>Marka Görselleri &amp; Kimlik Merkezi</h2>
+            <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 800, color: "#0f172a", fontFamily: "Manrope, sans-serif" }}>
+              Marka Görselleri &amp; Kimlik Merkezi
+            </h2>
             <span
               style={{
                 fontSize: "11px",
                 fontWeight: 700,
-                padding: "2px 8px",
-                borderRadius: "12px",
-                background: "rgba(147, 51, 234, 0.15)",
-                color: "#a855f7",
-                border: "1px solid rgba(147, 51, 234, 0.3)",
+                padding: "3px 9px",
+                borderRadius: "99px",
+                background: "#faf5ff",
+                color: "#7e22ce",
+                border: "1px solid #e9d5ff",
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "4px",
               }}
             >
-              <Sparkles size={12} />
+              <Sparkles size={12} color="#9333ea" />
               Agency Agents
             </span>
           </div>
-          <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "13px" }}>
-            Marka stilinize sadık özel logo tasarım stüdyosu ve tüm sosyal medya platformları için güvenli alan uyumlu görseller.
+          <p style={{ margin: 0, color: "#64748b", fontSize: "12.5px", lineHeight: "1.5" }}>
+            Marka stilinize ve renk sözleşmenize sadık profesyonel logo tasarım masası ve tüm sosyal medya platformları için güvenli alan uyumlu görseller.
           </p>
         </div>
 
-        {/* Görünüm Modu Değiştirici: [🎨 Logo Stüdyosu] vs [📱 Sosyal Medya Kiti] */}
-        <div style={{ display: "flex", background: "rgba(255, 255, 255, 0.04)", padding: "4px", borderRadius: "10px", border: "1px solid var(--border)", gap: "4px" }}>
+        {/* Segmented Controller (Görünüm Seçici) */}
+        <div
+          style={{
+            display: "inline-flex",
+            background: "#f1f5f9",
+            padding: "4px",
+            borderRadius: "12px",
+            border: "1px solid #e2e8f0",
+            gap: "4px",
+          }}
+        >
           <button
             type="button"
             onClick={() => setViewMode("logo_studio")}
-            className={`button compact ${viewMode === "logo_studio" ? "primary" : "ghost"}`}
             style={{
+              border: 0,
+              background: viewMode === "logo_studio" ? "#ffffff" : "transparent",
+              color: viewMode === "logo_studio" ? "#4338ca" : "#64748b",
+              fontWeight: viewMode === "logo_studio" ? 700 : 500,
+              boxShadow: viewMode === "logo_studio" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
               fontSize: "12px",
-              fontWeight: 700,
-              padding: "6px 14px",
-              borderRadius: "6px",
+              padding: "7px 16px",
+              borderRadius: "8px",
+              cursor: "pointer",
               display: "inline-flex",
               alignItems: "center",
               gap: "6px",
+              transition: "all 0.18s ease",
             }}
           >
-            <Palette size={14} />
+            <Palette size={14} color={viewMode === "logo_studio" ? "#6366f1" : "currentColor"} />
             <span>Logo Tasarım Stüdyosu ({logoConcepts.length})</span>
           </button>
           <button
             type="button"
             onClick={() => setViewMode("social_kit")}
-            className={`button compact ${viewMode === "social_kit" ? "primary" : "ghost"}`}
             style={{
+              border: 0,
+              background: viewMode === "social_kit" ? "#ffffff" : "transparent",
+              color: viewMode === "social_kit" ? "#4338ca" : "#64748b",
+              fontWeight: viewMode === "social_kit" ? 700 : 500,
+              boxShadow: viewMode === "social_kit" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
               fontSize: "12px",
-              fontWeight: 700,
-              padding: "6px 14px",
-              borderRadius: "6px",
+              padding: "7px 16px",
+              borderRadius: "8px",
+              cursor: "pointer",
               display: "inline-flex",
               alignItems: "center",
               gap: "6px",
+              transition: "all 0.18s ease",
             }}
           >
-            <Layers size={14} />
+            <Layers size={14} color={viewMode === "social_kit" ? "#6366f1" : "currentColor"} />
             <span>Sosyal Medya Varlıkları ({generatedSocialCount}/{allSpecs.length})</span>
           </button>
         </div>
@@ -429,23 +464,23 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
         <div
           style={{
             padding: "12px 16px",
-            borderRadius: "8px",
+            borderRadius: "10px",
             marginBottom: "20px",
             display: "flex",
             alignItems: "center",
             gap: "10px",
             fontSize: "13px",
-            background: statusMessage.ok ? "rgba(16, 185, 129, 0.12)" : "rgba(239, 68, 68, 0.12)",
-            border: `1px solid ${statusMessage.ok ? "rgba(16, 185, 129, 0.3)" : "rgba(239, 68, 68, 0.3)"}`,
-            color: statusMessage.ok ? "#34d399" : "#f87171",
+            background: statusMessage.ok ? "#ecfdf5" : "#fff1f2",
+            border: `1px solid ${statusMessage.ok ? "#a7f3d0" : "#fecdd3"}`,
+            color: statusMessage.ok ? "#047857" : "#be123c",
           }}
         >
           {statusMessage.ok ? <CheckCircle2 size={16} /> : <CircleAlert size={16} />}
-          <span>{statusMessage.text}</span>
+          <span style={{ fontWeight: 500 }}>{statusMessage.text}</span>
           <button
             type="button"
             onClick={() => setStatusMessage(null)}
-            style={{ marginLeft: "auto", background: "none", border: "none", color: "inherit", cursor: "pointer" }}
+            style={{ marginLeft: "auto", background: "none", border: "none", color: "inherit", cursor: "pointer", padding: "4px" }}
           >
             <X size={14} />
           </button>
@@ -460,28 +495,62 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
           {/* Logo Tasarım Masası (Workbench Kontrolleri) */}
           <div
             style={{
-              background: "rgba(255, 255, 255, 0.02)",
-              border: "1px solid var(--border)",
+              background: "#f8fafc",
+              border: "1px solid #e2e8f0",
               borderRadius: "14px",
               padding: "20px",
             }}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Compass size={18} style={{ color: "#a855f7" }} />
-                <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 700 }}>Logo Yaratım &amp; Tasarım Masası</h3>
+                <span
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    borderRadius: "8px",
+                    background: "#eeebff",
+                    color: "#6d5dfc",
+                    display: "grid",
+                    placeItems: "center",
+                  }}
+                >
+                  <Compass size={17} />
+                </span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "#1e293b" }}>Logo Yaratım &amp; Tasarım Masası</h3>
+                  <small style={{ color: "#64748b", fontSize: "11px" }}>Tipografi, referans modu ve 7 farklı arketiple özgün amblem sentezi</small>
+                </div>
               </div>
-              <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                Tipografi, referans modu ve 7 farklı arketiple özgün amblem sentezi
-              </span>
+
+              {/* Açık / Koyu Önizleme Zemin Değiştirici */}
+              <button
+                type="button"
+                onClick={() => setCanvasBgDark(!canvasBgDark)}
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  padding: "5px 10px",
+                  borderRadius: "8px",
+                  background: canvasBgDark ? "#1e293b" : "#ffffff",
+                  color: canvasBgDark ? "#f8fafc" : "#475569",
+                  border: "1px solid #cbd5e1",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  cursor: "pointer",
+                }}
+              >
+                {canvasBgDark ? <Moon size={13} color="#f59e0b" /> : <Sun size={13} color="#f59e0b" />}
+                <span>Zemin: {canvasBgDark ? "Koyu Tema" : "Açık Tema"}</span>
+              </button>
             </div>
 
             {/* Kontrol Alanları Grid */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px", marginBottom: "18px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "14px", marginBottom: "16px" }}>
               {/* Tipografi: Marka Adı & Slogan */}
-              <div style={{ background: "rgba(0,0,0,0.2)", padding: "14px", borderRadius: "10px", border: "1px solid var(--border)" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 700, marginBottom: "8px" }}>
-                  <Type size={14} style={{ color: "#38bdf8" }} />
+              <div style={{ background: "#ffffff", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" }}>
+                  <Type size={13} color="#0284c7" />
                   <span>Marka İsmi &amp; Slogan</span>
                 </label>
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -490,28 +559,28 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                     value={logoBrandName}
                     onChange={(e) => setLogoBrandName(e.target.value)}
                     placeholder="Marka Adı (Örn: Atölye Hanem)"
-                    style={{ width: "100%", padding: "7px 10px", fontSize: "12px", borderRadius: "6px", background: "rgba(255,255,255,0.05)", border: "1px solid var(--border)", color: "#fff" }}
+                    style={{ width: "100%", padding: "7px 10px", fontSize: "12px", borderRadius: "7px", background: "#f8fafc", border: "1px solid #cbd5e1", color: "#0f172a" }}
                   />
                   <input
                     type="text"
                     value={logoTagline}
                     onChange={(e) => setLogoTagline(e.target.value)}
                     placeholder="Slogan / Açıklama (Örn: STEM & Maker Atölyesi)"
-                    style={{ width: "100%", padding: "7px 10px", fontSize: "12px", borderRadius: "6px", background: "rgba(255,255,255,0.05)", border: "1px solid var(--border)", color: "#fff" }}
+                    style={{ width: "100%", padding: "7px 10px", fontSize: "12px", borderRadius: "7px", background: "#f8fafc", border: "1px solid #cbd5e1", color: "#0f172a" }}
                   />
                 </div>
               </div>
 
               {/* Tipografi Karakteri & Font Ekolü */}
-              <div style={{ background: "rgba(0,0,0,0.2)", padding: "14px", borderRadius: "10px", border: "1px solid var(--border)" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 700, marginBottom: "8px" }}>
-                  <SlidersHorizontal size={14} style={{ color: "#f59e0b" }} />
+              <div style={{ background: "#ffffff", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" }}>
+                  <SlidersHorizontal size={13} color="#d97706" />
                   <span>Yazı Karakteri Ekolü</span>
                 </label>
                 <select
                   value={logoFontStyle}
                   onChange={(e) => setLogoFontStyle(e.target.value as LogoTypographyStyle)}
-                  style={{ width: "100%", padding: "8px 10px", fontSize: "12px", borderRadius: "6px", background: "#1a1b24", border: "1px solid var(--border)", color: "#fff", marginBottom: "6px" }}
+                  style={{ width: "100%", padding: "7px 10px", fontSize: "12px", borderRadius: "7px", background: "#f8fafc", border: "1px solid #cbd5e1", color: "#0f172a", marginBottom: "6px" }}
                 >
                   {LOGO_TYPOGRAPHY_STYLES.map((t) => (
                     <option key={t.id} value={t.id}>
@@ -519,30 +588,30 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                     </option>
                   ))}
                 </select>
-                <div style={{ fontSize: "11px", color: "var(--text-muted)", fontStyle: "italic" }}>
+                <div style={{ fontSize: "11px", color: "#64748b" }}>
                   {LOGO_TYPOGRAPHY_STYLES.find((t) => t.id === logoFontStyle)?.fontCategory}
                 </div>
               </div>
 
               {/* Referans Modu (Aynı Logoyu Önleme) */}
-              <div style={{ background: "rgba(0,0,0,0.2)", padding: "14px", borderRadius: "10px", border: "1px solid var(--border)" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 700, marginBottom: "8px" }}>
-                  <ShieldCheck size={14} style={{ color: "#10b981" }} />
+              <div style={{ background: "#ffffff", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" }}>
+                  <ShieldCheck size={13} color="#059669" />
                   <span>Referans Mantığı</span>
                 </label>
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", cursor: "pointer" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", cursor: "pointer", color: logoRefMode === "none" ? "#1e293b" : "#64748b" }}>
                     <input
                       type="radio"
                       name="refMode"
                       checked={logoRefMode === "none"}
                       onChange={() => setLogoRefMode("none")}
                     />
-                    <span style={{ color: logoRefMode === "none" ? "#38bdf8" : "inherit" }}>
-                      <strong>Sıfırdan Özgün Keşif (Tavsiye Edilen)</strong>
+                    <span style={{ fontWeight: logoRefMode === "none" ? 700 : 400 }}>
+                      Sıfırdan Özgün Keşif (Tavsiye Edilen)
                     </span>
                   </label>
-                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", cursor: "pointer" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", cursor: "pointer", color: logoRefMode === "evolve" ? "#1e293b" : "#64748b" }}>
                     <input
                       type="radio"
                       name="refMode"
@@ -552,24 +621,24 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                     <span>Mevcut Logodan Evrimleştirme (Refresh)</span>
                   </label>
                 </div>
-                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>
+                <div style={{ fontSize: "10.5px", color: "#64748b", marginTop: "6px" }}>
                   {logoRefMode === "none"
-                    ? "✓ Eski logoyu tamamen unutur; sadece marka kimliği ve renklere odaklı %100 yeni fikirler üretir."
+                    ? "✓ Eski logoyu referans almaz; %100 taze ve bağımsız konseptler türetir."
                     : "Mevcut logonun ana hatlarını koruyarak daha modern veya taktil varyantlara dönüştürür."}
                 </div>
               </div>
 
               {/* Yerleşim Mimarisi & Motor Tercihi */}
-              <div style={{ background: "rgba(0,0,0,0.2)", padding: "14px", borderRadius: "10px", border: "1px solid var(--border)" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 700, marginBottom: "8px" }}>
-                  <Cpu size={14} style={{ color: "#ec4899" }} />
+              <div style={{ background: "#ffffff", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" }}>
+                  <Cpu size={13} color="#9333ea" />
                   <span>Yerleşim &amp; Çıktı Motoru</span>
                 </label>
-                <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+                <div style={{ display: "flex", gap: "8px", marginBottom: "6px" }}>
                   <select
                     value={logoLayout}
                     onChange={(e) => setLogoLayout(e.target.value as LogoLayout)}
-                    style={{ flex: 1, padding: "7px 10px", fontSize: "12px", borderRadius: "6px", background: "#1a1b24", border: "1px solid var(--border)", color: "#fff" }}
+                    style={{ flex: 1, padding: "7px 8px", fontSize: "12px", borderRadius: "7px", background: "#f8fafc", border: "1px solid #cbd5e1", color: "#0f172a" }}
                   >
                     <option value="stacked">Stacked (Amblem Üstte)</option>
                     <option value="horizontal">Yatay (Amblem Solda)</option>
@@ -579,13 +648,13 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                   <select
                     value={logoEngine}
                     onChange={(e) => setLogoEngine(e.target.value as LogoEngine)}
-                    style={{ flex: 1, padding: "7px 10px", fontSize: "12px", borderRadius: "6px", background: "#1a1b24", border: "1px solid var(--border)", color: "#fff" }}
+                    style={{ flex: 1, padding: "7px 8px", fontSize: "12px", borderRadius: "7px", background: "#f8fafc", border: "1px solid #cbd5e1", color: "#0f172a" }}
                   >
-                    <option value="gemini_image">Gemini 3D Taktil Render</option>
                     <option value="svg_vector">Saf Vektör SVG Motoru</option>
+                    <option value="gemini_image">Gemini 3D Taktil Render</option>
                   </select>
                 </div>
-                <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                <div style={{ fontSize: "10.5px", color: "#64748b" }}>
                   {logoEngine === "svg_vector"
                     ? "✓ Sonsuz büyütülebilir saf matematiksel SVG vektör kodu + yüksek çözünürlüklü PNG."
                     : "✓ Gerçekçi stüdyo ışığı, gölgeler, derinlik ve malzeme dokulu modern 3D render."}
@@ -595,11 +664,11 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
 
             {/* 7 Logo Arketipi Seçici Çubuğu */}
             <div style={{ marginBottom: "16px" }}>
-              <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
-                <Wand2 size={14} style={{ color: "#a855f7" }} />
-                <span>Tasarım Arketipi / Tarzı (Seçili: {LOGO_STYLE_ARCHETYPES.find((s) => s.id === logoStyle)?.name})</span>
+              <div style={{ fontSize: "11.5px", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+                <Wand2 size={13} color="#7c3aed" />
+                <span>Tasarım Arketipi (Seçili: {LOGO_STYLE_ARCHETYPES.find((s) => s.id === logoStyle)?.name})</span>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(135px, 1fr))", gap: "8px" }}>
                 {LOGO_STYLE_ARCHETYPES.map((arch) => {
                   const isSelected = logoStyle === arch.id;
                   return (
@@ -608,21 +677,22 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                       type="button"
                       onClick={() => setLogoStyle(arch.id)}
                       style={{
-                        padding: "8px 10px",
-                        borderRadius: "8px",
-                        border: `1px solid ${isSelected ? "#9333ea" : "var(--border)"}`,
-                        background: isSelected ? "rgba(147, 51, 234, 0.18)" : "rgba(255, 255, 255, 0.03)",
-                        color: isSelected ? "#fff" : "var(--text-muted)",
+                        padding: "9px 10px",
+                        borderRadius: "9px",
+                        border: isSelected ? "1.5px solid #7c3aed" : "1px solid #e2e8f0",
+                        background: isSelected ? "#f5f3ff" : "#ffffff",
+                        color: isSelected ? "#5b21b6" : "#334155",
                         textAlign: "left",
                         cursor: "pointer",
-                        transition: "all 0.2s ease",
+                        transition: "all 0.18s ease",
+                        boxShadow: isSelected ? "0 2px 8px rgba(124, 58, 237, 0.12)" : "none",
                       }}
                     >
-                      <div style={{ fontSize: "12px", fontWeight: isSelected ? 700 : 500, color: isSelected ? "#c084fc" : "#fff", marginBottom: "2px" }}>
+                      <div style={{ fontSize: "12px", fontWeight: isSelected ? 700 : 600, color: isSelected ? "#6d28d9" : "#1e293b", marginBottom: "2px" }}>
                         {arch.name}
                       </div>
-                      <div style={{ fontSize: "10px", opacity: 0.7, lineHeight: "1.2" }}>
-                        {arch.tagline.slice(0, 38)}...
+                      <div style={{ fontSize: "10px", color: "#64748b", lineHeight: "1.2" }}>
+                        {arch.tagline.slice(0, 36)}...
                       </div>
                     </button>
                   );
@@ -636,44 +706,48 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                 type="text"
                 value={logoCustomPrompt}
                 onChange={(e) => setLogoCustomPrompt(e.target.value)}
-                placeholder="Özel Yaratıcı Not (Opsiyonel: örn: ahşap robotik eklem, mikro servo, minimalist simge)..."
+                placeholder="Özel Yaratıcı Not (Opsiyonel: örn: ahşap robotik eklem, mikro servo, minimalist hatlar)..."
                 style={{
                   flex: "1 1 280px",
                   padding: "9px 12px",
                   fontSize: "12px",
                   borderRadius: "8px",
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid var(--border)",
-                  color: "#fff",
+                  background: "#ffffff",
+                  border: "1px solid #cbd5e1",
+                  color: "#0f172a",
                 }}
               />
               <div style={{ display: "flex", gap: "8px" }}>
                 <button
                   type="button"
-                  className="button primary"
+                  className="button secondary"
                   onClick={() => handleGenerateLogoConcepts(1)}
                   disabled={generatingLogo}
                   style={{
-                    background: "linear-gradient(135deg, #9333ea, #4f46e5)",
-                    border: "none",
-                    boxShadow: "0 4px 12px rgba(147, 51, 234, 0.25)",
                     height: "38px",
                     padding: "0 16px",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    borderColor: "#d8b4fe",
+                    color: "#7e22ce",
                   }}
                 >
-                  {generatingLogo ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />}
+                  {generatingLogo ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} color="#9333ea" />}
                   <span>Tekil Konsept Üret</span>
                 </button>
                 <button
                   type="button"
-                  className="button secondary"
+                  className="button primary"
                   onClick={() => handleGenerateLogoConcepts(3)}
                   disabled={generatingLogo}
                   style={{
-                    border: "1px solid rgba(147, 51, 234, 0.4)",
-                    color: "#c084fc",
                     height: "38px",
                     padding: "0 16px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
+                    border: "none",
+                    boxShadow: "0 4px 12px rgba(124, 58, 237, 0.25)",
                   }}
                 >
                   {generatingLogo ? <LoaderCircle className="spin" size={15} /> : <Layers size={15} />}
@@ -687,27 +761,27 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
           <div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Crown size={18} style={{ color: "#f59e0b" }} />
-                <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>Üretilen Logo Konseptleri ({logoConcepts.length})</h3>
+                <Crown size={18} color="#d97706" />
+                <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "#1e293b" }}>Üretilen Logo Konseptleri ({logoConcepts.length})</h3>
               </div>
-              <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                Beğendiğiniz konsepti tek tıkla projenin resmi logosu olarak atayabilirsiniz
+              <span style={{ fontSize: "12px", color: "#64748b" }}>
+                Beğendiğiniz logoyu tek tıkla resmi marka logosu olarak atayabilirsiniz
               </span>
             </div>
 
             {logoConcepts.length === 0 ? (
               <div
                 style={{
-                  background: "rgba(255, 255, 255, 0.02)",
-                  border: "1px dashed var(--border)",
+                  background: "#f8fafc",
+                  border: "1px dashed #cbd5e1",
                   borderRadius: "14px",
                   padding: "40px 20px",
                   textAlign: "center",
-                  color: "var(--text-muted)",
+                  color: "#64748b",
                 }}
               >
-                <Palette size={32} style={{ margin: "0 auto 10px auto", opacity: 0.5 }} />
-                <h4 style={{ margin: "0 0 4px 0", fontSize: "14px" }}>Henüz logo konsepti üretilmedi</h4>
+                <Palette size={32} style={{ margin: "0 auto 10px auto", color: "#94a3b8" }} />
+                <h4 style={{ margin: "0 0 4px 0", fontSize: "14px", color: "#334155" }}>Henüz logo konsepti üretilmedi</h4>
                 <p style={{ margin: 0, fontSize: "12px", maxWidth: "420px", marginInline: "auto" }}>
                   Yukarıdaki tasarım masasından bir arketip ve stil seçerek "Tekil Konsept Üret" veya "3 Farklı Alternatif Üret" butonuna basın.
                 </p>
@@ -722,30 +796,31 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                     <div
                       key={concept.id}
                       style={{
-                        background: "var(--surface)",
-                        border: `1px solid ${isPrimary ? "#10b981" : "var(--border)"}`,
-                        borderRadius: "12px",
+                        background: "#ffffff",
+                        border: isPrimary ? "2px solid #10b981" : "1px solid #e2e8f0",
+                        borderRadius: "14px",
                         overflow: "hidden",
                         display: "flex",
                         flexDirection: "column",
                         position: "relative",
-                        boxShadow: isPrimary ? "0 0 16px rgba(16, 185, 129, 0.15)" : undefined,
+                        boxShadow: isPrimary ? "0 4px 16px rgba(16, 185, 129, 0.15)" : "0 2px 8px rgba(0,0,0,0.04)",
+                        transition: "all 0.2s ease",
                       }}
                     >
                       {/* Kart Başlık */}
                       <div
                         style={{
                           padding: "10px 14px",
-                          borderBottom: "1px solid var(--border)",
+                          borderBottom: "1px solid #f1f5f9",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "space-between",
-                          background: "rgba(255, 255, 255, 0.02)",
+                          background: "#f8fafc",
                         }}
                       >
                         <div>
-                          <div style={{ fontSize: "13px", fontWeight: 700 }}>{concept.title}</div>
-                          <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                          <div style={{ fontSize: "13px", fontWeight: 700, color: "#1e293b" }}>{concept.title}</div>
+                          <div style={{ fontSize: "11px", color: "#64748b" }}>
                             {new Date(concept.createdAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })} • {concept.layout}
                           </div>
                         </div>
@@ -755,10 +830,11 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                           style={{
                             fontSize: "10px",
                             fontWeight: 700,
-                            padding: "2px 6px",
+                            padding: "2px 7px",
                             borderRadius: "6px",
-                            background: isSvg ? "rgba(56, 189, 248, 0.15)" : "rgba(168, 85, 247, 0.15)",
-                            color: isSvg ? "#38bdf8" : "#c084fc",
+                            background: isSvg ? "#f0f9ff" : "#faf5ff",
+                            color: isSvg ? "#0284c7" : "#7e22ce",
+                            border: `1px solid ${isSvg ? "#bae6fd" : "#e9d5ff"}`,
                             display: "inline-flex",
                             alignItems: "center",
                             gap: "4px",
@@ -769,17 +845,18 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                         </span>
                       </div>
 
-                      {/* Görsel Alanı */}
+                      {/* Görsel Alanı (Açık veya Koyu Zemin) */}
                       <div
                         style={{
                           position: "relative",
                           width: "100%",
                           height: "220px",
-                          background: "#0c0d12",
+                          background: canvasBgDark ? "#0f172a" : "#fbfbfe",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
                           padding: "12px",
+                          transition: "background 0.2s ease",
                         }}
                       >
                         <Image
@@ -787,7 +864,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                           alt={concept.title}
                           fill
                           sizes="(max-width: 768px) 100vw, 320px"
-                          style={{ objectFit: "contain", padding: "12px" }}
+                          style={{ objectFit: "contain", padding: "16px" }}
                           unoptimized
                         />
 
@@ -800,14 +877,14 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                               left: "8px",
                               background: "#10b981",
                               color: "#fff",
-                              fontSize: "10px",
+                              fontSize: "10.5px",
                               fontWeight: 700,
                               padding: "2px 8px",
                               borderRadius: "12px",
                               display: "inline-flex",
                               alignItems: "center",
                               gap: "4px",
-                              boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
+                              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
                             }}
                           >
                             <Crown size={11} />
@@ -826,14 +903,15 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                             right: "8px",
                             width: "28px",
                             height: "28px",
-                            borderRadius: "6px",
-                            background: "rgba(0,0,0,0.65)",
-                            color: "#fff",
-                            border: "1px solid rgba(255,255,255,0.2)",
+                            borderRadius: "7px",
+                            background: "rgba(255,255,255,0.9)",
+                            color: "#334155",
+                            border: "1px solid #cbd5e1",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
                             cursor: "pointer",
+                            boxShadow: "0 2px 4px rgba(0,0,0,0.06)",
                           }}
                         >
                           <Maximize2 size={13} />
@@ -841,7 +919,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                       </div>
 
                       {/* Alt Aksiyon Butonları */}
-                      <div style={{ padding: "12px", marginTop: "auto", display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <div style={{ padding: "12px", marginTop: "auto", display: "flex", flexDirection: "column", gap: "6px", background: "#ffffff" }}>
                         <div style={{ display: "flex", gap: "6px" }}>
                           <button
                             type="button"
@@ -858,7 +936,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                             className="button ghost"
                             title={isSvg ? "SVG Vektör İndir" : "Yüksek Çözünürlüklü PNG İndir"}
                             onClick={() => downloadConceptFile(concept)}
-                            style={{ width: "32px", height: "32px", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+                            style={{ width: "32px", height: "32px", padding: 0, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #e2e8f0" }}
                           >
                             <Download size={14} />
                           </button>
@@ -867,7 +945,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                             className="button ghost"
                             title="Konsepti Sil"
                             onClick={() => deleteLogoConcept(concept.id)}
-                            style={{ width: "32px", height: "32px", padding: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#f87171" }}
+                            style={{ width: "32px", height: "32px", padding: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#ef4444", border: "1px solid #fee2e2" }}
                           >
                             <Trash2 size={14} />
                           </button>
@@ -890,9 +968,9 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
           {/* Toplu Üretim & Bilgi Çubuğu */}
           <div
             style={{
-              background: "rgba(255, 255, 255, 0.03)",
-              border: "1px solid var(--border)",
-              borderRadius: "12px",
+              background: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              borderRadius: "14px",
               padding: "16px 20px",
               marginBottom: "20px",
               display: "flex",
@@ -903,20 +981,20 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
             }}
           >
             <div style={{ flex: "1 1 300px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", fontWeight: 700, color: "#334155", marginBottom: "6px" }}>
                 <span>Sosyal Medya Görsel Hazırlık Durumu</span>
-                <span style={{ color: "#a855f7" }}>
+                <span style={{ color: "#7c3aed" }}>
                   {generatedSocialCount} / {allSpecs.length} Hazır (%
                   {Math.round((generatedSocialCount / allSpecs.length) * 100)})
                 </span>
               </div>
-              <div style={{ width: "100%", height: "8px", background: "rgba(255, 255, 255, 0.08)", borderRadius: "4px", overflow: "hidden" }}>
+              <div style={{ width: "100%", height: "8px", background: "#e2e8f0", borderRadius: "99px", overflow: "hidden" }}>
                 <div
                   style={{
                     width: `${(generatedSocialCount / allSpecs.length) * 100}%`,
                     height: "100%",
-                    background: "linear-gradient(90deg, #9333ea, #38bdf8)",
-                    borderRadius: "4px",
+                    background: "linear-gradient(90deg, #7c3aed, #0284c7)",
+                    borderRadius: "99px",
                     transition: "width 0.4s ease",
                   }}
                 />
@@ -930,14 +1008,16 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                 onClick={runBatchGeneration}
                 disabled={batchRunning || Boolean(generatingType)}
                 style={{
-                  background: "linear-gradient(135deg, #9333ea, #4f46e5)",
+                  background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
                   border: "none",
-                  boxShadow: "0 4px 12px rgba(147, 51, 234, 0.25)",
+                  boxShadow: "0 4px 12px rgba(124, 58, 237, 0.25)",
+                  fontSize: "12px",
+                  fontWeight: 700,
                 }}
               >
                 {batchRunning ? (
                   <>
-                    <LoaderCircle className="spin" size={16} />
+                    <LoaderCircle className="spin" size={15} />
                     <span>Kit Üretiliyor ({batchProgress.current}/{batchProgress.total})...</span>
                   </>
                 ) : (
@@ -951,7 +1031,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
           </div>
 
           {/* Kategori Filtre Butonları */}
-          <div style={{ display: "flex", gap: "8px", borderBottom: "1px solid var(--border)", paddingBottom: "12px", marginBottom: "20px", overflowX: "auto" }}>
+          <div style={{ display: "flex", gap: "8px", borderBottom: "1px solid #e2e8f0", paddingBottom: "12px", marginBottom: "20px", overflowX: "auto" }}>
             <button
               type="button"
               onClick={() => setActiveCategory("all")}
@@ -984,28 +1064,28 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
               const isGenerating = generatingType === spec.type || (batchRunning && batchProgress.title === spec.title);
               const isSafeZoneActive = showSafeZone[spec.type] ?? false;
               const isDirectionOpen = directionInputsOpen[spec.type] ?? false;
-              const isPrimaryLogo = Boolean(project?.brand?.logo && item && project.brand.logo === item.url);
 
               return (
                 <div
                   key={spec.type}
                   style={{
-                    background: "var(--surface)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "12px",
+                    background: "#ffffff",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "14px",
                     overflow: "hidden",
                     display: "flex",
                     flexDirection: "column",
                     position: "relative",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
                   }}
                 >
                   {/* Başlık */}
-                  <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255, 255, 255, 0.02)" }}>
+                  <div style={{ padding: "12px 14px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f8fafc" }}>
                     <div>
-                      <h4 style={{ margin: "0 0 2px 0", fontSize: "13px", fontWeight: 700 }}>{spec.title}</h4>
-                      <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{spec.platform}</div>
+                      <h4 style={{ margin: "0 0 2px 0", fontSize: "13px", fontWeight: 700, color: "#1e293b" }}>{spec.title}</h4>
+                      <div style={{ fontSize: "11px", color: "#64748b" }}>{spec.platform}</div>
                     </div>
-                    <span style={{ fontSize: "11px", fontWeight: 600, padding: "2px 6px", borderRadius: "6px", background: "rgba(255, 255, 255, 0.06)", color: "var(--text-muted)", fontFamily: "monospace" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 600, padding: "2px 7px", borderRadius: "6px", background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0", fontFamily: "monospace" }}>
                       {spec.dimensions}
                     </span>
                   </div>
@@ -1017,7 +1097,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                       width: "100%",
                       aspectRatio: spec.aspectRatio === "16:9" ? "16 / 9" : spec.aspectRatio === "3:1" ? "3 / 1" : spec.aspectRatio === "4:1" ? "4 / 1" : "1 / 1",
                       maxHeight: "260px",
-                      background: "#0f1015",
+                      background: "#f8fafc",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -1043,7 +1123,19 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                               type="button"
                               title={isSafeZoneActive ? "Güvenli Alanı Gizle" : "Güvenli Alanı Göster"}
                               onClick={() => setShowSafeZone((prev) => ({ ...prev, [spec.type]: !isSafeZoneActive }))}
-                              style={{ width: "28px", height: "28px", borderRadius: "6px", background: isSafeZoneActive ? "#9333ea" : "rgba(0,0,0,0.65)", color: "#fff", border: "1px solid rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                              style={{
+                                width: "28px",
+                                height: "28px",
+                                borderRadius: "7px",
+                                background: isSafeZoneActive ? "#7c3aed" : "rgba(255,255,255,0.9)",
+                                color: isSafeZoneActive ? "#fff" : "#334155",
+                                border: "1px solid #cbd5e1",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                cursor: "pointer",
+                                boxShadow: "0 2px 4px rgba(0,0,0,0.06)",
+                              }}
                             >
                               {isSafeZoneActive ? <EyeOff size={14} /> : <Eye size={14} />}
                             </button>
@@ -1052,51 +1144,63 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                             type="button"
                             title="Tam Ekran Aç"
                             onClick={() => setPreviewModalSpec(spec)}
-                            style={{ width: "28px", height: "28px", borderRadius: "6px", background: "rgba(0,0,0,0.65)", color: "#fff", border: "1px solid rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                            style={{
+                              width: "28px",
+                              height: "28px",
+                              borderRadius: "7px",
+                              background: "rgba(255,255,255,0.9)",
+                              color: "#334155",
+                              border: "1px solid #cbd5e1",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              cursor: "pointer",
+                              boxShadow: "0 2px 4px rgba(0,0,0,0.06)",
+                            }}
                           >
-                            <Maximize2 size={14} />
+                            <Maximize2 size={13} />
                           </button>
                         </div>
                       </>
                     ) : (
-                      <div style={{ textAlign: "center", padding: "20px", color: "var(--text-muted)" }}>
-                        <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "rgba(255, 255, 255, 0.04)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 8px auto" }}>
+                      <div style={{ textAlign: "center", padding: "20px", color: "#94a3b8" }}>
+                        <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 8px auto", color: "#64748b" }}>
                           <Sparkles size={18} />
                         </div>
-                        <div style={{ fontSize: "12px", fontWeight: 600 }}>Henüz Üretilmedi</div>
-                        <div style={{ fontSize: "11px", opacity: 0.7, marginTop: "2px" }}>{spec.dimensions}</div>
+                        <div style={{ fontSize: "12px", fontWeight: 600, color: "#475569" }}>Henüz Üretilmedi</div>
+                        <div style={{ fontSize: "11px", opacity: 0.8, marginTop: "2px" }}>{spec.dimensions}</div>
                       </div>
                     )}
 
                     {isGenerating && (
-                      <div style={{ position: "absolute", inset: 0, background: "rgba(15, 16, 21, 0.85)", backdropFilter: "blur(3px)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", zIndex: 20 }}>
-                        <LoaderCircle className="spin" size={26} style={{ color: "#a855f7" }} />
-                        <span style={{ fontSize: "12px", fontWeight: 600, color: "#fff" }}>AI Görsel Üretiliyor...</span>
+                      <div style={{ position: "absolute", inset: 0, background: "rgba(255, 255, 255, 0.88)", backdropFilter: "blur(3px)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", zIndex: 20 }}>
+                        <LoaderCircle className="spin" size={26} color="#7c3aed" />
+                        <span style={{ fontSize: "12px", fontWeight: 700, color: "#1e293b" }}>AI Görsel Üretiliyor...</span>
                       </div>
                     )}
                   </div>
 
                   {/* Safe Zone Notu */}
-                  <div style={{ padding: "8px 12px", background: "rgba(255, 255, 255, 0.02)", borderBottom: "1px solid var(--border)", fontSize: "11px", color: "var(--text-muted)", display: "flex", alignItems: "flex-start", gap: "6px", lineHeight: "1.4" }}>
-                    <Info size={13} style={{ flexShrink: 0, marginTop: "1px", color: "#38bdf8" }} />
+                  <div style={{ padding: "8px 12px", background: "#f8fafc", borderBottom: "1px solid #f1f5f9", fontSize: "11px", color: "#64748b", display: "flex", alignItems: "flex-start", gap: "6px", lineHeight: "1.4" }}>
+                    <Info size={13} style={{ flexShrink: 0, marginTop: "1px", color: "#0284c7" }} />
                     <span>{spec.safeZoneGuide}</span>
                   </div>
 
                   {/* Özel Not Açılır Alanı */}
                   {isDirectionOpen && (
-                    <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--border)", background: "rgba(0,0,0,0.2)" }}>
+                    <div style={{ padding: "10px 12px", borderBottom: "1px solid #f1f5f9", background: "#f8fafc" }}>
                       <input
                         type="text"
                         value={customDirections[spec.type] || ""}
                         onChange={(e) => setCustomDirections((prev) => ({ ...prev, [spec.type]: e.target.value }))}
                         placeholder="Özel tasarım yönlendirmesi..."
-                        style={{ width: "100%", fontSize: "12px", padding: "6px 10px", borderRadius: "6px", background: "rgba(255, 255, 255, 0.05)", border: "1px solid var(--border)", color: "#fff" }}
+                        style={{ width: "100%", fontSize: "12px", padding: "6px 10px", borderRadius: "6px", background: "#ffffff", border: "1px solid #cbd5e1", color: "#0f172a" }}
                       />
                     </div>
                   )}
 
                   {/* Butonlar */}
-                  <div style={{ padding: "12px", marginTop: "auto", display: "flex", gap: "6px" }}>
+                  <div style={{ padding: "12px", marginTop: "auto", display: "flex", gap: "6px", background: "#ffffff" }}>
                     <button
                       type="button"
                       className="button primary"
@@ -1113,7 +1217,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                         className="button ghost"
                         title="Orijinal PNG İndir"
                         onClick={() => downloadVisual(spec, item)}
-                        style={{ width: "34px", height: "34px", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+                        style={{ width: "34px", height: "34px", padding: 0, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #e2e8f0" }}
                       >
                         <Download size={15} />
                       </button>
@@ -1123,7 +1227,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                       className={`button ghost ${isDirectionOpen ? "active" : ""}`}
                       title="Özel tasarım notu"
                       onClick={() => setDirectionInputsOpen((prev) => ({ ...prev, [spec.type]: !isDirectionOpen }))}
-                      style={{ width: "34px", height: "34px", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+                      style={{ width: "34px", height: "34px", padding: 0, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #e2e8f0" }}
                     >
                       <SlidersHorizontal size={14} />
                     </button>
@@ -1151,17 +1255,17 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
       {/* ── MODAL: LOGO KONSEPTİ TAM EKRAN ── */}
       {previewConcept && (
         <div
-          style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0, 0, 0, 0.85)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
+          style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(15, 23, 42, 0.75)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
           onClick={() => setPreviewConcept(null)}
         >
           <div
-            style={{ background: "#12131a", border: "1px solid var(--border)", borderRadius: "16px", maxWidth: "800px", width: "100%", overflow: "hidden", display: "flex", flexDirection: "column" }}
+            style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "16px", maxWidth: "800px", width: "100%", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)" }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f8fafc" }}>
               <div>
-                <h3 style={{ margin: "0 0 2px 0", fontSize: "16px" }}>{previewConcept.title}</h3>
-                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                <h3 style={{ margin: "0 0 2px 0", fontSize: "16px", color: "#0f172a", fontWeight: 700 }}>{previewConcept.title}</h3>
+                <span style={{ fontSize: "12px", color: "#64748b" }}>
                   {previewConcept.engine === "svg_vector" ? "Saf Matematiksel SVG Vektör" : "Gemini 3.1 3D Taktil Render"}
                 </span>
               </div>
@@ -1169,11 +1273,11 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                 <X size={16} />
               </button>
             </div>
-            <div style={{ position: "relative", width: "100%", height: "480px", background: "#0a0b0e", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+            <div style={{ position: "relative", width: "100%", height: "480px", background: canvasBgDark ? "#0f172a" : "#fbfbfe", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
               <Image src={previewConcept.url} alt={previewConcept.title} fill style={{ objectFit: "contain", padding: "24px" }} unoptimized />
             </div>
-            <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255, 255, 255, 0.02)" }}>
-              <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+            <div style={{ padding: "14px 20px", borderTop: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f8fafc" }}>
+              <span style={{ fontSize: "12px", color: "#64748b" }}>
                 Stil: {previewConcept.style} • Tipografi: {previewConcept.typography.brandName}
               </span>
               <div style={{ display: "flex", gap: "8px" }}>
@@ -1186,7 +1290,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                   }}
                   style={{ fontSize: "12px" }}
                 >
-                  <Crown size={14} />
+                  <Crown size={14} color="#d97706" />
                   <span>Ana Logo Yap</span>
                 </button>
                 <button type="button" className="button primary" onClick={() => downloadConceptFile(previewConcept)} style={{ fontSize: "12px" }}>
@@ -1217,8 +1321,8 @@ function SafeZoneOverlay({
   if (type === "circle") {
     return (
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 5 }}>
-        <div style={{ width: "64%", height: "64%", borderRadius: "50%", border: "2px dashed #38bdf8", boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.55)", position: "relative" }}>
-          <span style={{ position: "absolute", top: "4px", left: "50%", transform: "translateX(-50%)", fontSize: "10px", fontWeight: 700, color: "#38bdf8", background: "rgba(0,0,0,0.8)", padding: "1px 5px", borderRadius: "4px", whiteSpace: "nowrap" }}>
+        <div style={{ width: "64%", height: "64%", borderRadius: "50%", border: "2px dashed #0284c7", boxShadow: "0 0 0 9999px rgba(15, 23, 42, 0.45)", position: "relative" }}>
+          <span style={{ position: "absolute", top: "6px", left: "50%", transform: "translateX(-50%)", fontSize: "10px", fontWeight: 700, color: "#0284c7", background: "rgba(255,255,255,0.92)", padding: "1px 6px", borderRadius: "4px", whiteSpace: "nowrap", border: "1px solid #bae6fd" }}>
             Dairesel Profil Alanı
           </span>
         </div>
@@ -1229,17 +1333,17 @@ function SafeZoneOverlay({
   if (type === "youtube_banner") {
     return (
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 5 }}>
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "35.3%", background: "rgba(0,0,0,0.65)" }}>
-          <span style={{ position: "absolute", bottom: "4px", left: "8px", fontSize: "9px", color: "#94a3b8" }}>
-            TV Ekranı Alanı (Masaüstü/Mobilde Görünmez)
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "35.3%", background: "rgba(15, 23, 42, 0.45)" }}>
+          <span style={{ position: "absolute", bottom: "4px", left: "8px", fontSize: "9px", color: "#f8fafc", fontWeight: 600 }}>
+            TV Ekranı Alanı (Mobilde Kırpılır)
           </span>
         </div>
-        <div style={{ position: "absolute", top: "35.3%", bottom: "35.3%", left: "19.8%", right: "19.8%", border: "2px dashed #10b981", background: "rgba(16, 185, 129, 0.08)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ fontSize: "10px", fontWeight: 700, color: "#10b981", background: "rgba(0,0,0,0.85)", padding: "2px 6px", borderRadius: "4px" }}>
+        <div style={{ position: "absolute", top: "35.3%", bottom: "35.3%", left: "19.8%", right: "19.8%", border: "2px dashed #059669", background: "rgba(5, 150, 105, 0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ fontSize: "10px", fontWeight: 700, color: "#047857", background: "rgba(255,255,255,0.95)", padding: "2px 8px", borderRadius: "4px", border: "1px solid #a7f3d0" }}>
             Mobil &amp; Masaüstü Güvenli Alanı (1546×423 px)
           </span>
         </div>
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "35.3%", background: "rgba(0,0,0,0.65)" }} />
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "35.3%", background: "rgba(15, 23, 42, 0.45)" }} />
       </div>
     );
   }
@@ -1247,8 +1351,8 @@ function SafeZoneOverlay({
   if (type === "twitter_header") {
     return (
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 5 }}>
-        <div style={{ position: "absolute", bottom: 0, left: "4%", width: "24%", height: "55%", border: "2px dashed #ef4444", background: "rgba(239, 68, 68, 0.25)", borderRadius: "8px 8px 0 0", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "4px" }}>
-          <span style={{ fontSize: "9px", fontWeight: 700, color: "#fca5a5", background: "rgba(0,0,0,0.7)", padding: "2px 4px", borderRadius: "4px" }}>
+        <div style={{ position: "absolute", bottom: 0, left: "4%", width: "24%", height: "55%", border: "2px dashed #dc2626", background: "rgba(220, 38, 38, 0.18)", borderRadius: "8px 8px 0 0", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "4px" }}>
+          <span style={{ fontSize: "9px", fontWeight: 700, color: "#b91c1c", background: "rgba(255,255,255,0.95)", padding: "2px 5px", borderRadius: "4px", border: "1px solid #fecdd3" }}>
             Avatar Kör Noktası
           </span>
         </div>
@@ -1278,12 +1382,12 @@ function PreviewModal({
   if (!item) return null;
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0, 0, 0, 0.85)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }} onClick={onClose}>
-      <div style={{ background: "#12131a", border: "1px solid var(--border)", borderRadius: "16px", maxWidth: "950px", width: "100%", maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column" }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(15, 23, 42, 0.75)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }} onClick={onClose}>
+      <div style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "16px", maxWidth: "950px", width: "100%", maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f8fafc" }}>
           <div>
-            <h3 style={{ margin: "0 0 2px 0", fontSize: "16px" }}>{spec.title}</h3>
-            <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+            <h3 style={{ margin: "0 0 2px 0", fontSize: "16px", color: "#0f172a" }}>{spec.title}</h3>
+            <span style={{ fontSize: "12px", color: "#64748b" }}>
               {spec.platform} • {spec.dimensions}
             </span>
           </div>
@@ -1291,13 +1395,13 @@ function PreviewModal({
             <X size={16} />
           </button>
         </div>
-        <div style={{ position: "relative", width: "100%", height: "520px", background: "#0a0b0e", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ position: "relative", width: "100%", height: "520px", background: "#fbfbfe", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Image src={item.url} alt={spec.title} fill style={{ objectFit: "contain" }} unoptimized />
           {showGuide && spec.safeZoneOverlayType && (
             <SafeZoneOverlay type={spec.safeZoneOverlayType} width={spec.width} height={spec.height} />
           )}
         </div>
-        <div style={{ padding: "16px 20px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255, 255, 255, 0.02)" }}>
+        <div style={{ padding: "16px 20px", borderTop: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f8fafc" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             {spec.safeZoneOverlayType && (
               <button type="button" className={`button compact ${showGuide ? "secondary" : "ghost"}`} onClick={() => setShowGuide(!showGuide)} style={{ fontSize: "12px" }}>
@@ -1305,7 +1409,7 @@ function PreviewModal({
                 <span>{showGuide ? "Kılavuzu Gizle" : "Kılavuzu Göster"}</span>
               </button>
             )}
-            <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{spec.safeZoneGuide}</span>
+            <span style={{ fontSize: "12px", color: "#64748b" }}>{spec.safeZoneGuide}</span>
           </div>
           <button type="button" className="button primary" onClick={onDownload} style={{ fontSize: "12px" }}>
             <Download size={14} />
