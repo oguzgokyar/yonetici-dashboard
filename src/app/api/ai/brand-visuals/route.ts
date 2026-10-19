@@ -59,6 +59,7 @@ function parseVisuals(jsonString?: string): BrandVisualsState {
       items: parsed.items || {},
       logoConcepts: Array.isArray(parsed.logoConcepts) ? parsed.logoConcepts : [],
       activeLogoConceptId: parsed.activeLogoConceptId || undefined,
+      preferences: parsed.preferences || undefined,
       updatedAt: parsed.updatedAt || "",
     };
   } catch {
