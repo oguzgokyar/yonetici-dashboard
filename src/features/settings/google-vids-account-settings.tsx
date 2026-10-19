@@ -224,7 +224,9 @@ export function GoogleVidsAccountSettings() {
       if (res.ok) {
         setActionMessage({
           type: "success",
-          text: nextActive ? "Hesap aktif edildi." : "Hesap pasife alındı.",
+          text: nextActive
+            ? `✓ "${account.email}" hesabı aktifleştirildi (üretim rotasyonuna dahil edildi).`
+            : `✓ "${account.email}" hesabı pasife alındı (havuzda saklanıyor, üretimde atlanacak).`,
         });
         await loadData();
       }
@@ -540,29 +542,31 @@ export function GoogleVidsAccountSettings() {
                   padding: "14px 16px",
                   borderRadius: "12px",
                   background: isActive ? "#ffffff" : "#f8fafc",
-                  border: `1px solid ${isActive ? "#e2e8f0" : "#cbd5e1"}`,
+                  border: isActive ? "1px solid #e2e8f0" : "1px dashed #cbd5e1",
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
                   flexWrap: "wrap",
                   gap: "12px",
-                  opacity: isActive ? 1 : 0.65,
+                  opacity: isActive ? 1 : 0.85,
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <span style={{ fontSize: "18px" }}>
+                  <span style={{ fontSize: "20px" }}>
                     {!isActive ? "⏸️" : isAvailable ? "🟢" : "🔴"}
                   </span>
                   <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <strong style={{ fontSize: "13.5px", color: "#0f172a" }}>{acc.email}</strong>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      <strong style={{ fontSize: "13.5px", color: isActive ? "#0f172a" : "#64748b" }}>
+                        {acc.email}
+                      </strong>
                       <span
                         style={{
                           fontSize: "11px",
                           fontWeight: 600,
                           padding: "2px 6px",
                           borderRadius: "6px",
-                          background: "#f1f5f9",
+                          background: isActive ? "#f1f5f9" : "#e2e8f0",
                           color: "#475569",
                         }}
                       >
@@ -576,12 +580,27 @@ export function GoogleVidsAccountSettings() {
                       >
                         [{acc.profile_directory || "Default"}]
                       </span>
+                      {!isActive && (
+                        <span
+                          style={{
+                            fontSize: "10.5px",
+                            fontWeight: 700,
+                            padding: "2px 7px",
+                            borderRadius: "99px",
+                            background: "#fef3c7",
+                            color: "#92400e",
+                            border: "1px solid #fde68a",
+                          }}
+                        >
+                          Üretimde Atlanıyor
+                        </span>
+                      )}
                     </div>
 
                     <div style={{ fontSize: "12px", color: "#64748b", marginTop: "3px" }}>
                       Durum:{" "}
-                      <strong style={{ color: !isActive ? "#64748b" : isAvailable ? "#16a34a" : "#dc2626" }}>
-                        {!isActive ? "Devre Dışı (Pasif)" : isAvailable ? "Kota Kullanılabilir" : "Kotada / Dinlenmede"}
+                      <strong style={{ color: !isActive ? "#b45309" : isAvailable ? "#16a34a" : "#dc2626" }}>
+                        {!isActive ? "Pasif (Havuzda Saklanıyor, Üretimde Atlanır)" : isAvailable ? "Kota Kullanılabilir" : "Kotada / Dinlenmede"}
                       </strong>
                       {" • "}
                       Toplam Üretilen: <strong>{acc.total_videos_rendered} Video</strong>
@@ -595,13 +614,13 @@ export function GoogleVidsAccountSettings() {
                   </div>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   {!isAvailable && isActive && (
                     <button
                       type="button"
                       onClick={() => void handleResetQuota(acc.id)}
                       className="button secondary compact"
-                      style={{ fontSize: "11px", height: "30px", color: "#0284c7" }}
+                      style={{ fontSize: "11px", height: "32px", color: "#0284c7" }}
                       title="Kota durumunu sıfırlar ve tekrar 'available' yapar"
                     >
                       <RotateCcw size={12} />
@@ -612,20 +631,38 @@ export function GoogleVidsAccountSettings() {
                   <button
                     type="button"
                     onClick={() => void handleToggleActive(acc)}
-                    className="button secondary compact"
-                    style={{ fontSize: "11px", height: "30px" }}
-                    title={isActive ? "Hesabı geçici olarak devre dışı bırak" : "Hesabı tekrar aktifleştir"}
+                    className="button compact"
+                    style={{
+                      fontSize: "11.5px",
+                      height: "32px",
+                      padding: "0 12px",
+                      fontWeight: 600,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      cursor: "pointer",
+                      borderRadius: "8px",
+                      background: isActive ? "#fffbeb" : "#16a34a",
+                      color: isActive ? "#b45309" : "#ffffff",
+                      border: `1px solid ${isActive ? "#fde68a" : "#16a34a"}`,
+                      transition: "all 0.15s ease",
+                    }}
+                    title={
+                      isActive
+                        ? "Hesabı havuzdan silmeden pasife al (üretim rotasyonunda atlanır)"
+                        : "Hesabı tekrar aktifleştir ve üretim rotasyonuna dahil et"
+                    }
                   >
-                    <Power size={12} color={isActive ? "#dc2626" : "#16a34a"} />
-                    <span>{isActive ? "Pasife Al" : "Aktif Et"}</span>
+                    <Power size={13} color={isActive ? "#d97706" : "#ffffff"} />
+                    <span>{isActive ? "Pasife Al (Kapat)" : "Aktif Et (Aç)"}</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => void handleDelete(acc.id, acc.email)}
                     className="button ghost compact"
-                    style={{ fontSize: "11px", height: "30px", color: "#dc2626", padding: "0 8px" }}
-                    title="Hesabı havuzdan sil"
+                    style={{ fontSize: "11px", height: "32px", color: "#dc2626", padding: "0 8px" }}
+                    title="Hesabı tamamen havuzdan sil"
                   >
                     <Trash2 size={13} />
                   </button>

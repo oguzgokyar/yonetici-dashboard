@@ -66,7 +66,6 @@ export async function POST() {
           authuser_index = excluded.authuser_index,
           profile_directory = excluded.profile_directory,
           display_name = excluded.display_name,
-          is_active = 1,
           updated_at = excluded.updated_at
       `).run(accountId, cleanEmail, acc.authuserIndex, profDir, dName, now, now);
       syncedCount++;

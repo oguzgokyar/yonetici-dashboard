@@ -74,26 +74,23 @@ export function ensureGoogleVidsAccountsSeed(): void {
 }
 
 /**
- * Retrieves all accounts and their live pool status.
+ * Retrieves accounts and their live pool status.
+ * By default returns ALL accounts (both active and passive) for pool management UI.
+ * Set onlyActive=true to restrict strictly to active accounts for video generation.
  */
-export function listGoogleVidsAccounts(): GoogleVidsAccountRecord[] {
+export function listGoogleVidsAccounts(onlyActive: boolean = false): GoogleVidsAccountRecord[] {
   ensureGoogleVidsAccountsSeed();
   const db = getDatabase();
-  return db.prepare(`
-    SELECT * FROM google_vids_accounts
-    WHERE is_active = 1
-    ORDER BY authuser_index ASC
-  `).all() as unknown as GoogleVidsAccountRecord[];
+  const query = onlyActive
+    ? "SELECT * FROM google_vids_accounts WHERE is_active = 1 ORDER BY authuser_index ASC"
+    : "SELECT * FROM google_vids_accounts ORDER BY authuser_index ASC";
+  return db.prepare(query).all() as unknown as GoogleVidsAccountRecord[];
 }
 
 /**
- * Acquires the best available account index from the pool for video generation.
- * Prefers 'available' status with lowest render count.
- * If all accounts are exhausted, returns the one whose cooldown expires earliest.
- */
-/**
  * Acquires the best available account from the pool for video generation.
  * Accepts either preferredAccountId or preferredAuthuser.
+ * Strictly skips passive (is_active = 0) accounts.
  */
 export function acquireAvailableVidsAccount(preferredIdentifier?: string | number): {
   id: string;
@@ -105,21 +102,21 @@ export function acquireAvailableVidsAccount(preferredIdentifier?: string | numbe
 } {
   ensureGoogleVidsAccountsSeed();
   const db = getDatabase();
-  const accounts = listGoogleVidsAccounts();
+  const activeAccounts = listGoogleVidsAccounts(true);
 
-  if (!accounts.length) {
+  if (!activeAccounts.length) {
     return { id: "default", authuser: 1, profileDirectory: "Default", email: "oguzgokyar@gmail.com", isFallback: false };
   }
 
-  // 1. If user explicitly asked for an account (by ID, email or authuser)
+  // 1. If user explicitly asked for an account (by ID, email or authuser) and it is active
   if (preferredIdentifier !== undefined && preferredIdentifier !== null) {
-    const requested = accounts.find(
+    const requested = activeAccounts.find(
       (a) =>
         a.id === String(preferredIdentifier) ||
         a.email === String(preferredIdentifier) ||
         a.authuser_index === Number(preferredIdentifier)
     );
-    if (requested && requested.quota_status === "available" && requested.is_active !== 0) {
+    if (requested && requested.quota_status === "available" && requested.is_active === 1) {
       return {
         id: requested.id,
         authuser: requested.authuser_index,
@@ -130,8 +127,8 @@ export function acquireAvailableVidsAccount(preferredIdentifier?: string | numbe
     }
   }
 
-  // 2. Select first available account in pool
-  const available = accounts.filter((a) => a.quota_status === "available" && a.is_active !== 0);
+  // 2. Select first available active account in pool
+  const available = activeAccounts.filter((a) => a.quota_status === "available" && a.is_active === 1);
   if (available.length > 0) {
     // Sort by least renders today / total
     available.sort((a, b) => a.total_videos_rendered - b.total_videos_rendered);
@@ -145,28 +142,28 @@ export function acquireAvailableVidsAccount(preferredIdentifier?: string | numbe
     };
   }
 
-  // 3. All accounts exhausted -> pick the one with earliest cooldown_until
-  accounts.sort((a, b) => {
+  // 3. All active accounts exhausted -> pick the one with earliest cooldown_until
+  activeAccounts.sort((a, b) => {
     const timeA = a.cooldown_until ? new Date(a.cooldown_until).getTime() : 0;
     const timeB = b.cooldown_until ? new Date(b.cooldown_until).getTime() : 0;
     return timeA - timeB;
   });
 
-  const soonest = accounts[0];
+  const soonest = activeAccounts[0];
   return {
     id: soonest.id,
     authuser: soonest.authuser_index,
     profileDirectory: soonest.profile_directory || "Default",
     email: soonest.email,
     isFallback: true,
-    quotaWarning: "Tüm Google hesaplarının günlük oluşturma kotası dolmuş görünüyor.",
+    quotaWarning: "Tüm aktif Google hesaplarının günlük oluşturma kotası dolmuş görünüyor.",
   };
 }
 
 /**
  * Marks an account as exhausted and puts it into cooldown (default 3 hours).
  */
-export function markVidsAccountQuotaExhausted(authuserIndex: number, cooldownHours = 3): {
+export function markVidsAccountQuotaExhausted(authuserIndex: number, cooldownHours = 3, profileDir = 'Default'): {
   nextAvailableAuthuser: number | null;
   message: string;
 } {
@@ -180,8 +177,8 @@ export function markVidsAccountQuotaExhausted(authuserIndex: number, cooldownHou
         quota_exhausted_at = ?,
         cooldown_until = ?,
         updated_at = ?
-    WHERE authuser_index = ?
-  `).run(now.toISOString(), cooldownUntil, now.toISOString(), authuserIndex);
+    WHERE authuser_index = ? AND profile_directory = ?
+  `).run(now.toISOString(), cooldownUntil, now.toISOString(), authuserIndex, profileDir);
 
   // Check if there is another available account
   const nextAccount = db.prepare(`
@@ -194,7 +191,7 @@ export function markVidsAccountQuotaExhausted(authuserIndex: number, cooldownHou
   if (nextAccount) {
     return {
       nextAvailableAuthuser: nextAccount.authuser_index,
-      message: `Hesap (authuser=${authuserIndex}) kotaya takıldı. Havuzdaki sıradaki hesaba (${nextAccount.email}) geçildi.`,
+      message: `Hesap (${profileDir} authuser=${authuserIndex}) kotaya takıldı. Havuzdaki sıradaki hesaba (${nextAccount.email}) geçildi.`,
     };
   }
 
@@ -207,7 +204,7 @@ export function markVidsAccountQuotaExhausted(authuserIndex: number, cooldownHou
 /**
  * Increments successful video render count for the account.
  */
-export function recordVidsAccountRenderSuccess(authuserIndex: number): void {
+export function recordVidsAccountRenderSuccess(authuserIndex: number, profileDir = 'Default'): void {
   const db = getDatabase();
   const now = new Date().toISOString();
   db.prepare(`
@@ -215,6 +212,6 @@ export function recordVidsAccountRenderSuccess(authuserIndex: number): void {
     SET total_videos_rendered = total_videos_rendered + 1,
         quota_status = 'available',
         updated_at = ?
-    WHERE authuser_index = ?
-  `).run(now, authuserIndex);
+    WHERE authuser_index = ? AND profile_directory = ?
+  `).run(now, authuserIndex, profileDir);
 }

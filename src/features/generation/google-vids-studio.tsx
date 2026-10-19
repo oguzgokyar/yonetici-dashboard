@@ -664,8 +664,8 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <strong>Sinematik Yönetmen & Hesap Havuzu</strong>
-              <span style={{ fontSize: "11px", fontWeight: 700, color: accountsPool.some(a => a.quota_status === "available") ? "#15803d" : "#b91c1c", background: "#f8fafc", padding: "2px 8px", borderRadius: "99px", border: "1px solid #e2e8f0" }}>
-                👥 {accountsPool.filter(a => a.quota_status === "available").length}/{accountsPool.length || 2} Hesap Aktif
+              <span style={{ fontSize: "11px", fontWeight: 700, color: accountsPool.some(a => a.quota_status === "available" && a.is_active !== 0) ? "#15803d" : "#b91c1c", background: "#f8fafc", padding: "2px 8px", borderRadius: "99px", border: "1px solid #e2e8f0" }}>
+                👥 {accountsPool.filter(a => a.quota_status === "available" && a.is_active !== 0).length}/{accountsPool.filter(a => a.is_active !== 0).length || accountsPool.length || 2} Hesap Hazır
               </span>
             </div>
             <small>
@@ -891,11 +891,11 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
                 onChange={(e) => setSelectedAccountId(e.target.value)}
               >
                 <option value="auto">
-                  🔄 Otomatik Havuz Rotasyonu ({accountsPool.filter(a => a.quota_status === "available" && a.is_active !== 0).length}/{accountsPool.length || 2} Uygun)
+                  🔄 Otomatik Havuz Rotasyonu ({accountsPool.filter(a => a.quota_status === "available" && a.is_active !== 0).length}/{accountsPool.filter(a => a.is_active !== 0).length || 2} Uygun)
                 </option>
                 {accountsPool.map((acc) => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.quota_status === "available" ? "🟢" : "🔴"} {acc.email} [{acc.profile_directory || "Default"}] {acc.quota_status !== "available" ? "(Kotada)" : ""}
+                  <option key={acc.id} value={acc.id} disabled={acc.is_active === 0}>
+                    {acc.is_active === 0 ? "⏸️" : acc.quota_status === "available" ? "🟢" : "🔴"} {acc.email} [{acc.profile_directory || "Default"}] {acc.is_active === 0 ? "(Pasif - Atlanır)" : acc.quota_status !== "available" ? "(Kotada)" : ""}
                   </option>
                 ))}
               </select>
