@@ -17,11 +17,8 @@ import {
   Check,
   CircleAlert,
   Play,
-  Share2,
   Palette,
   ShieldCheck,
-  ChevronDown,
-  Info,
   Type,
   Cpu,
   Compass,
@@ -32,6 +29,16 @@ import {
   Wand2,
   Sun,
   Moon,
+  LayoutTemplate,
+  Box,
+  Hexagon,
+  Award,
+  Bot,
+  Zap,
+  Workflow,
+  Sparkle,
+  ArrowRight,
+  Info,
 } from "lucide-react";
 import {
   BRAND_VISUAL_SPECS,
@@ -52,18 +59,146 @@ import {
 } from "@/lib/brand-visuals";
 import { useProjects } from "./projects-context";
 
+// ─────────────────────────────────────────────────────────────
+// 7 LOGO ARKETİPİ İÇİN MİNYATÜR GÖRSEL İLLÜSTRASYONLAR
+// ─────────────────────────────────────────────────────────────
+function ArchetypeVisualPreview({ archetype, active }: { archetype: LogoStyleArchetype; active: boolean }) {
+  const primary = active ? "#7c3aed" : "#475569";
+  const accent = active ? "#ec4899" : "#0284c7";
+  const bg = active ? "#f5f3ff" : "#f8fafc";
+
+  switch (archetype) {
+    case "geometric":
+      // Kesişen Altın Oran Daireler & Prizma
+      return (
+        <svg viewBox="0 0 80 60" width="100%" height="48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="32" cy="30" r="18" stroke={primary} strokeWidth="2.5" strokeDasharray="3 3" opacity="0.6" />
+          <circle cx="48" cy="30" r="18" stroke={accent} strokeWidth="2.5" opacity="0.7" />
+          <polygon points="40,16 54,40 26,40" stroke={primary} strokeWidth="3" fill={bg} />
+          <circle cx="40" cy="28" r="4" fill={accent} />
+        </svg>
+      );
+    case "monogram":
+      // A ve H Harflerinin İç İçe Geçen Lüks Füzyonu
+      return (
+        <svg viewBox="0 0 80 60" width="100%" height="48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M26,45 L40,14 L54,45" stroke={primary} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M30,34 L50,34" stroke={accent} strokeWidth="3.5" strokeLinecap="round" />
+          <path d="M48,18 L48,45" stroke={primary} strokeWidth="2.5" strokeLinecap="round" />
+          <circle cx="40" cy="14" r="3" fill={accent} />
+        </svg>
+      );
+    case "tactile_3d":
+      // 3D İzometrik Yumuşak Gölgeli Hacimli Blok
+      return (
+        <svg viewBox="0 0 80 60" width="100%" height="48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="40,12 60,23 40,34 20,23" fill={active ? "#c4b5fd" : "#cbd5e1"} />
+          <polygon points="20,23 40,34 40,48 20,37" fill={primary} />
+          <polygon points="40,34 60,23 60,37 40,48" fill={active ? "#5b21b6" : "#334155"} />
+          <circle cx="40" cy="23" r="3" fill="#ffffff" />
+        </svg>
+      );
+    case "metaphor":
+      // Dişli & Robotik Kol / Fidan Simgesel Birleşimi
+      return (
+        <svg viewBox="0 0 80 60" width="100%" height="48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="34" cy="30" r="12" stroke={primary} strokeWidth="2.5" />
+          <path d="M34,14 L34,18 M34,42 L34,46 M18,30 L22,30 M46,30 L50,30" stroke={primary} strokeWidth="2.5" strokeLinecap="round" />
+          <path d="M38,24 Q52,18 56,32 Q46,40 38,34" fill={accent} opacity="0.8" />
+          <circle cx="56" cy="32" r="3" fill={primary} />
+        </svg>
+      );
+    case "abstract_dynamic":
+      // Fütüristik İvme & Akışkan Kanat Hatları
+      return (
+        <svg viewBox="0 0 80 60" width="100%" height="48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M22,42 Q40,12 62,18 Q42,28 32,44 Z" fill={primary} />
+          <path d="M32,44 Q50,22 66,28 Q48,38 42,46 Z" fill={accent} opacity="0.85" />
+          <circle cx="22" cy="42" r="3" fill={accent} />
+        </svg>
+      );
+    case "stamp_badge":
+      // Çift Halkalı Kurumsal Onay Mührü
+      return (
+        <svg viewBox="0 0 80 60" width="100%" height="48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="40" cy="30" r="20" stroke={primary} strokeWidth="2" />
+          <circle cx="40" cy="30" r="16" stroke={primary} strokeWidth="1" strokeDasharray="2 2" />
+          <polygon points="40,20 42,26 48,27 43,31 45,37 40,33 35,37 37,31 32,27 38,26" fill={accent} />
+        </svg>
+      );
+    case "mascot":
+      // Dostane Geometrik Robot / Karakter Yüzü
+      return (
+        <svg viewBox="0 0 80 60" width="100%" height="48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="26" y="18" width="28" height="24" rx="6" stroke={primary} strokeWidth="2.5" fill={bg} />
+          <line x1="40" y1="12" x2="40" y2="18" stroke={primary} strokeWidth="2" />
+          <circle cx="40" cy="11" r="3" fill={accent} />
+          <circle cx="34" cy="28" r="3" fill={primary} />
+          <circle cx="46" cy="28" r="3" fill={primary} />
+          <path d="M35,35 Q40,39 45,35" stroke={accent} strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 4 YERLEŞİM (LAYOUT) İÇİN MİNYATÜR ŞEMATİK KUTU GÖRSELLERİ
+// ─────────────────────────────────────────────────────────────
+function LayoutSchematic({ layout, active }: { layout: LogoLayout; active: boolean }) {
+  const primary = active ? "#7c3aed" : "#64748b";
+  const textLine = active ? "#9333ea" : "#94a3b8";
+
+  switch (layout) {
+    case "stacked":
+      // Üstte amblem, altta ortalanmış marka adı
+      return (
+        <svg viewBox="0 0 70 50" width="100%" height="38" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="27" y="6" width="16" height="16" rx="4" fill={primary} />
+          <rect x="15" y="28" width="40" height="4.5" rx="2" fill={textLine} />
+          <rect x="22" y="36" width="26" height="3" rx="1.5" fill={textLine} opacity="0.6" />
+        </svg>
+      );
+    case "horizontal":
+      // Solda amblem, sağda marka adı ve slogan
+      return (
+        <svg viewBox="0 0 70 50" width="100%" height="38" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="8" y="15" width="20" height="20" rx="5" fill={primary} />
+          <rect x="33" y="18" width="31" height="5" rx="2" fill={textLine} />
+          <rect x="33" y="27" width="22" height="3.5" rx="1.5" fill={textLine} opacity="0.6" />
+        </svg>
+      );
+    case "icon_only":
+      // Sadece merkez amblem (yazısız)
+      return (
+        <svg viewBox="0 0 70 50" width="100%" height="38" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="22" y="12" width="26" height="26" rx="6" fill={primary} />
+          <circle cx="35" cy="25" r="5" fill="#ffffff" />
+        </svg>
+      );
+    case "badge":
+      // Dairesel mühür rozet yerleşimi
+      return (
+        <svg viewBox="0 0 70 50" width="100%" height="38" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="35" cy="25" r="18" stroke={primary} strokeWidth="2.5" />
+          <circle cx="35" cy="25" r="14" stroke={textLine} strokeWidth="1" strokeDasharray="2 2" />
+          <rect x="31" y="21" width="8" height="8" rx="2" fill={primary} />
+        </svg>
+      );
+  }
+}
+
 export function BrandVisualsTab({ projectId }: { projectId: string }) {
   const { getProject, updateProject } = useProjects();
   const project = getProject(projectId);
 
-  // Ana Görünüm Modu: "logo_studio" (Logo Tasarım Masası) veya "social_kit" (Sosyal Medya Varlıkları)
+  // Görünüm Modu: "logo_studio" veya "social_kit"
   const [viewMode, setViewMode] = useState<"logo_studio" | "social_kit">("logo_studio");
 
   const [visuals, setVisuals] = useState<BrandVisualsState>({ items: {}, logoConcepts: [], updatedAt: "" });
   const [loading, setLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
-  // ── LOGO STÜDYOSU FORM DURUMU ──
+  // ── LOGO STÜDYOSU SEÇİMLERİ ──
   const [logoStyle, setLogoStyle] = useState<LogoStyleArchetype>("geometric");
   const [logoEngine, setLogoEngine] = useState<LogoEngine>("svg_vector");
   const [logoLayout, setLogoLayout] = useState<LogoLayout>("stacked");
@@ -73,9 +208,9 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
   const [logoFontStyle, setLogoFontStyle] = useState<LogoTypographyStyle>("sans");
   const [logoCustomPrompt, setLogoCustomPrompt] = useState("");
   const [generatingLogo, setGeneratingLogo] = useState(false);
-  const [canvasBgDark, setCanvasBgDark] = useState(false); // Canlı Zemin Kontrastı (Açık/Koyu)
+  const [canvasBgDark, setCanvasBgDark] = useState(false);
 
-  // ── SOSYAL MEDYA KİTİ DURUMU ──
+  // ── SOSYAL MEDYA KİTİ SEÇİMLERİ ──
   const [generatingType, setGeneratingType] = useState<BrandVisualType | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; title: string }>({
@@ -90,7 +225,6 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
   const [previewModalSpec, setPreviewModalSpec] = useState<BrandVisualSpec | null>(null);
   const [previewConcept, setPreviewConcept] = useState<GeneratedLogoConcept | null>(null);
 
-  // İlk yüklemede proje marka bilgilerini doldur
   useEffect(() => {
     if (project) {
       setLogoBrandName(project.brand.brandName || project.name || "");
@@ -98,7 +232,6 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
     }
   }, [project]);
 
-  // Görselleri ve Logo Konseptlerini API'den çek
   useEffect(() => {
     let mounted = true;
     async function loadVisuals() {
@@ -121,7 +254,6 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
     };
   }, [projectId]);
 
-  // Sayı istatistikleri
   const allSpecs = useMemo(() => Object.values(BRAND_VISUAL_SPECS), []);
   const generatedSocialCount = useMemo(() => Object.keys(visuals.items).length, [visuals]);
   const logoConcepts = visuals.logoConcepts || [];
@@ -131,9 +263,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
     return allSpecs.filter((spec) => spec.category === activeCategory);
   }, [allSpecs, activeCategory]);
 
-  // ─────────────────────────────────────────────────────────────
-  // LOGO TASARIM STÜDYOSU: KONSEPT ÜRETİMİ (Tekil veya 3 Alternatif)
-  // ─────────────────────────────────────────────────────────────
+  // Logo Üretimi
   async function handleGenerateLogoConcepts(count: number = 1) {
     if (generatingLogo) return;
     setGeneratingLogo(true);
@@ -161,9 +291,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
       });
 
       const data = await res.json();
-      if (!res.ok || !data.ok) {
-        throw new Error(data.message || "Logo üretilemedi.");
-      }
+      if (!res.ok || !data.ok) throw new Error(data.message || "Logo üretilemedi.");
 
       setVisuals(data.visuals);
       setStatusMessage({
@@ -180,7 +308,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
     }
   }
 
-  // Logo Konseptini Ana Logo Olarak Ata
+  // Ana Logo Olarak Ata
   async function setConceptAsPrimaryLogo(concept: GeneratedLogoConcept) {
     setStatusMessage(null);
     try {
@@ -239,9 +367,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // SOSYAL MEDYA KİTİ: TEKİL & TOPLU ÜRETİM
-  // ─────────────────────────────────────────────────────────────
+  // Sosyal Medya Tekil Üretim
   async function generateVisual(type: BrandVisualType) {
     if (generatingType || batchRunning) return;
     setGeneratingType(type);
@@ -280,6 +406,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
     }
   }
 
+  // Sosyal Medya Toplu Üretim
   async function runBatchGeneration() {
     if (generatingType || batchRunning) return;
     setBatchRunning(true);
@@ -397,7 +524,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
             </span>
           </div>
           <p style={{ margin: 0, color: "#64748b", fontSize: "12.5px", lineHeight: "1.5" }}>
-            Marka stilinize ve renk sözleşmenize sadık profesyonel logo tasarım masası ve tüm sosyal medya platformları için güvenli alan uyumlu görseller.
+            Görsel örneklerle desteklenen interaktif logo stüdyosu ve tüm sosyal medya platformları için güvenli alan uyumlu görseller.
           </p>
         </div>
 
@@ -488,7 +615,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
       )}
 
       {/* ═════════════════════════════════════════════════════════════ */}
-      {/* 1. BÖLÜM: LOGO & KİMLİK TASARIM STÜDYOSU                      */}
+      {/* 1. BÖLÜM: GÖRSEL ÖRNEKLİ LOGO TASARIM STÜDYOSU                */}
       {/* ═════════════════════════════════════════════════════════════ */}
       {viewMode === "logo_studio" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
@@ -517,8 +644,10 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                   <Compass size={17} />
                 </span>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "#1e293b" }}>Logo Yaratım &amp; Tasarım Masası</h3>
-                  <small style={{ color: "#64748b", fontSize: "11px" }}>Tipografi, referans modu ve 7 farklı arketiple özgün amblem sentezi</small>
+                  <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "#1e293b" }}>Logo Tasarım &amp; Yaratım Masası</h3>
+                  <small style={{ color: "#64748b", fontSize: "11px" }}>
+                    Örnekleri görerek seçin: Arketip çizimleri, yerleşim şemaları ve tipografi kartları
+                  </small>
                 </div>
               </div>
 
@@ -529,7 +658,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                 style={{
                   fontSize: "11px",
                   fontWeight: 600,
-                  padding: "5px 10px",
+                  padding: "5px 11px",
                   borderRadius: "8px",
                   background: canvasBgDark ? "#1e293b" : "#ffffff",
                   color: canvasBgDark ? "#f8fafc" : "#475569",
@@ -545,130 +674,13 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
               </button>
             </div>
 
-            {/* Kontrol Alanları Grid */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "14px", marginBottom: "16px" }}>
-              {/* Tipografi: Marka Adı & Slogan */}
-              <div style={{ background: "#ffffff", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" }}>
-                  <Type size={13} color="#0284c7" />
-                  <span>Marka İsmi &amp; Slogan</span>
-                </label>
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  <input
-                    type="text"
-                    value={logoBrandName}
-                    onChange={(e) => setLogoBrandName(e.target.value)}
-                    placeholder="Marka Adı (Örn: Atölye Hanem)"
-                    style={{ width: "100%", padding: "7px 10px", fontSize: "12px", borderRadius: "7px", background: "#f8fafc", border: "1px solid #cbd5e1", color: "#0f172a" }}
-                  />
-                  <input
-                    type="text"
-                    value={logoTagline}
-                    onChange={(e) => setLogoTagline(e.target.value)}
-                    placeholder="Slogan / Açıklama (Örn: STEM & Maker Atölyesi)"
-                    style={{ width: "100%", padding: "7px 10px", fontSize: "12px", borderRadius: "7px", background: "#f8fafc", border: "1px solid #cbd5e1", color: "#0f172a" }}
-                  />
-                </div>
-              </div>
-
-              {/* Tipografi Karakteri & Font Ekolü */}
-              <div style={{ background: "#ffffff", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" }}>
-                  <SlidersHorizontal size={13} color="#d97706" />
-                  <span>Yazı Karakteri Ekolü</span>
-                </label>
-                <select
-                  value={logoFontStyle}
-                  onChange={(e) => setLogoFontStyle(e.target.value as LogoTypographyStyle)}
-                  style={{ width: "100%", padding: "7px 10px", fontSize: "12px", borderRadius: "7px", background: "#f8fafc", border: "1px solid #cbd5e1", color: "#0f172a", marginBottom: "6px" }}
-                >
-                  {LOGO_TYPOGRAPHY_STYLES.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.example})
-                    </option>
-                  ))}
-                </select>
-                <div style={{ fontSize: "11px", color: "#64748b" }}>
-                  {LOGO_TYPOGRAPHY_STYLES.find((t) => t.id === logoFontStyle)?.fontCategory}
-                </div>
-              </div>
-
-              {/* Referans Modu (Aynı Logoyu Önleme) */}
-              <div style={{ background: "#ffffff", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" }}>
-                  <ShieldCheck size={13} color="#059669" />
-                  <span>Referans Mantığı</span>
-                </label>
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", cursor: "pointer", color: logoRefMode === "none" ? "#1e293b" : "#64748b" }}>
-                    <input
-                      type="radio"
-                      name="refMode"
-                      checked={logoRefMode === "none"}
-                      onChange={() => setLogoRefMode("none")}
-                    />
-                    <span style={{ fontWeight: logoRefMode === "none" ? 700 : 400 }}>
-                      Sıfırdan Özgün Keşif (Tavsiye Edilen)
-                    </span>
-                  </label>
-                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", cursor: "pointer", color: logoRefMode === "evolve" ? "#1e293b" : "#64748b" }}>
-                    <input
-                      type="radio"
-                      name="refMode"
-                      checked={logoRefMode === "evolve"}
-                      onChange={() => setLogoRefMode("evolve")}
-                    />
-                    <span>Mevcut Logodan Evrimleştirme (Refresh)</span>
-                  </label>
-                </div>
-                <div style={{ fontSize: "10.5px", color: "#64748b", marginTop: "6px" }}>
-                  {logoRefMode === "none"
-                    ? "✓ Eski logoyu referans almaz; %100 taze ve bağımsız konseptler türetir."
-                    : "Mevcut logonun ana hatlarını koruyarak daha modern veya taktil varyantlara dönüştürür."}
-                </div>
-              </div>
-
-              {/* Yerleşim Mimarisi & Motor Tercihi */}
-              <div style={{ background: "#ffffff", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" }}>
-                  <Cpu size={13} color="#9333ea" />
-                  <span>Yerleşim &amp; Çıktı Motoru</span>
-                </label>
-                <div style={{ display: "flex", gap: "8px", marginBottom: "6px" }}>
-                  <select
-                    value={logoLayout}
-                    onChange={(e) => setLogoLayout(e.target.value as LogoLayout)}
-                    style={{ flex: 1, padding: "7px 8px", fontSize: "12px", borderRadius: "7px", background: "#f8fafc", border: "1px solid #cbd5e1", color: "#0f172a" }}
-                  >
-                    <option value="stacked">Stacked (Amblem Üstte)</option>
-                    <option value="horizontal">Yatay (Amblem Solda)</option>
-                    <option value="icon_only">Yalnızca İkon / Amblem</option>
-                    <option value="badge">Rozet / Dairesel Mühür</option>
-                  </select>
-                  <select
-                    value={logoEngine}
-                    onChange={(e) => setLogoEngine(e.target.value as LogoEngine)}
-                    style={{ flex: 1, padding: "7px 8px", fontSize: "12px", borderRadius: "7px", background: "#f8fafc", border: "1px solid #cbd5e1", color: "#0f172a" }}
-                  >
-                    <option value="svg_vector">Saf Vektör SVG Motoru</option>
-                    <option value="gemini_image">Gemini 3D Taktil Render</option>
-                  </select>
-                </div>
-                <div style={{ fontSize: "10.5px", color: "#64748b" }}>
-                  {logoEngine === "svg_vector"
-                    ? "✓ Sonsuz büyütülebilir saf matematiksel SVG vektör kodu + yüksek çözünürlüklü PNG."
-                    : "✓ Gerçekçi stüdyo ışığı, gölgeler, derinlik ve malzeme dokulu modern 3D render."}
-                </div>
-              </div>
-            </div>
-
-            {/* 7 Logo Arketipi Seçici Çubuğu */}
-            <div style={{ marginBottom: "16px" }}>
-              <div style={{ fontSize: "11.5px", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+            {/* 1. ALAN: 7 LOGO ARKETİPİ İÇİN GÖRSEL KARTLAR */}
+            <div style={{ marginBottom: "20px" }}>
+              <div style={{ fontSize: "11.5px", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
                 <Wand2 size={13} color="#7c3aed" />
-                <span>Tasarım Arketipi (Seçili: {LOGO_STYLE_ARCHETYPES.find((s) => s.id === logoStyle)?.name})</span>
+                <span>1. Adım: Tasarım Tarzını / Arketipini Seçin</span>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(135px, 1fr))", gap: "8px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "10px" }}>
                 {LOGO_STYLE_ARCHETYPES.map((arch) => {
                   const isSelected = logoStyle === arch.id;
                   return (
@@ -677,21 +689,51 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                       type="button"
                       onClick={() => setLogoStyle(arch.id)}
                       style={{
-                        padding: "9px 10px",
-                        borderRadius: "9px",
-                        border: isSelected ? "1.5px solid #7c3aed" : "1px solid #e2e8f0",
+                        padding: "10px 8px",
+                        borderRadius: "10px",
+                        border: isSelected ? "2px solid #7c3aed" : "1px solid #e2e8f0",
                         background: isSelected ? "#f5f3ff" : "#ffffff",
                         color: isSelected ? "#5b21b6" : "#334155",
-                        textAlign: "left",
+                        textAlign: "center",
                         cursor: "pointer",
                         transition: "all 0.18s ease",
-                        boxShadow: isSelected ? "0 2px 8px rgba(124, 58, 237, 0.12)" : "none",
+                        boxShadow: isSelected ? "0 4px 12px rgba(124, 58, 237, 0.15)" : "0 1px 3px rgba(0,0,0,0.03)",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        position: "relative",
                       }}
                     >
-                      <div style={{ fontSize: "12px", fontWeight: isSelected ? 700 : 600, color: isSelected ? "#6d28d9" : "#1e293b", marginBottom: "2px" }}>
+                      {/* Seçili İkon Rozeti */}
+                      {isSelected && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: "6px",
+                            right: "6px",
+                            width: "16px",
+                            height: "16px",
+                            borderRadius: "50%",
+                            background: "#7c3aed",
+                            color: "#fff",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <Check size={10} strokeWidth={3} />
+                        </div>
+                      )}
+
+                      {/* Minyatür Görsel Çizim */}
+                      <div style={{ width: "100%", height: "46px", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "6px" }}>
+                        <ArchetypeVisualPreview archetype={arch.id} active={isSelected} />
+                      </div>
+
+                      <div style={{ fontSize: "11.5px", fontWeight: isSelected ? 800 : 700, color: isSelected ? "#6d28d9" : "#1e293b", marginBottom: "2px" }}>
                         {arch.name}
                       </div>
-                      <div style={{ fontSize: "10px", color: "#64748b", lineHeight: "1.2" }}>
+                      <div style={{ fontSize: "9.5px", color: isSelected ? "#7c3aed" : "#64748b", lineHeight: "1.2" }}>
                         {arch.tagline.slice(0, 36)}...
                       </div>
                     </button>
@@ -700,39 +742,276 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
               </div>
             </div>
 
-            {/* İsteğe Bağlı Ek Tasarım Notu & Üretim Butonları */}
-            <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-              <input
-                type="text"
-                value={logoCustomPrompt}
-                onChange={(e) => setLogoCustomPrompt(e.target.value)}
-                placeholder="Özel Yaratıcı Not (Opsiyonel: örn: ahşap robotik eklem, mikro servo, minimalist hatlar)..."
-                style={{
-                  flex: "1 1 280px",
-                  padding: "9px 12px",
-                  fontSize: "12px",
-                  borderRadius: "8px",
-                  background: "#ffffff",
-                  border: "1px solid #cbd5e1",
-                  color: "#0f172a",
-                }}
-              />
-              <div style={{ display: "flex", gap: "8px" }}>
+            {/* 2. ALAN: YERLEŞİM (LAYOUT) ŞEMATİK KUTU GÖRSELLERİ */}
+            <div style={{ marginBottom: "20px" }}>
+              <div style={{ fontSize: "11.5px", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
+                <LayoutTemplate size={13} color="#0284c7" />
+                <span>2. Adım: Logo Yerleşim Mimarisi (Şematik Düzen)</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "10px" }}>
+                {[
+                  { id: "stacked", name: "Stacked (Kare)", desc: "Amblem üstte, yazı altta" },
+                  { id: "horizontal", name: "Yatay Header", desc: "Amblem solda, yazı sağda" },
+                  { id: "icon_only", name: "Yalnızca Amblem", desc: "Yazısız, saf sembol" },
+                  { id: "badge", name: "Dairesel Mühür", desc: "Rozet içinde dairesel hat" },
+                ].map((item) => {
+                  const isSelected = logoLayout === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setLogoLayout(item.id as LogoLayout)}
+                      style={{
+                        padding: "10px",
+                        borderRadius: "10px",
+                        border: isSelected ? "2px solid #0284c7" : "1px solid #e2e8f0",
+                        background: isSelected ? "#f0f9ff" : "#ffffff",
+                        color: isSelected ? "#0369a1" : "#334155",
+                        textAlign: "center",
+                        cursor: "pointer",
+                        transition: "all 0.18s ease",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        boxShadow: isSelected ? "0 4px 12px rgba(2, 132, 199, 0.12)" : "0 1px 3px rgba(0,0,0,0.03)",
+                      }}
+                    >
+                      <div style={{ width: "100%", height: "38px", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "6px" }}>
+                        <LayoutSchematic layout={item.id as LogoLayout} active={isSelected} />
+                      </div>
+                      <div style={{ fontSize: "11.5px", fontWeight: isSelected ? 800 : 700, color: isSelected ? "#0284c7" : "#1e293b", marginBottom: "2px" }}>
+                        {item.name}
+                      </div>
+                      <div style={{ fontSize: "9.5px", color: isSelected ? "#0284c7" : "#64748b" }}>
+                        {item.desc}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 3. ALAN: YAZI KARAKTERİ & TİPOGRAFİ EKOLÜ KARTLARI */}
+            <div style={{ marginBottom: "20px" }}>
+              <div style={{ fontSize: "11.5px", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
+                <Type size={13} color="#d97706" />
+                <span>3. Adım: Tipografi Ekolü (Yazı Karakteri Görünümü)</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "10px" }}>
+                {LOGO_TYPOGRAPHY_STYLES.map((t) => {
+                  const isSelected = logoFontStyle === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setLogoFontStyle(t.id)}
+                      style={{
+                        padding: "10px",
+                        borderRadius: "10px",
+                        border: isSelected ? "2px solid #d97706" : "1px solid #e2e8f0",
+                        background: isSelected ? "#fffbeb" : "#ffffff",
+                        color: isSelected ? "#b45309" : "#334155",
+                        textAlign: "center",
+                        cursor: "pointer",
+                        transition: "all 0.18s ease",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        boxShadow: isSelected ? "0 4px 12px rgba(217, 119, 6, 0.12)" : "0 1px 3px rgba(0,0,0,0.03)",
+                      }}
+                    >
+                      {/* Büyük Tipografi Glifi */}
+                      <div
+                        style={{
+                          fontSize: "26px",
+                          fontWeight: 800,
+                          lineHeight: "1.1",
+                          marginBottom: "4px",
+                          fontFamily: t.cssStyle,
+                          color: isSelected ? "#b45309" : "#1e293b",
+                        }}
+                      >
+                        {t.id === "monogram_only" ? "AH" : "Aa"}
+                      </div>
+                      <div style={{ fontSize: "11.5px", fontWeight: isSelected ? 800 : 700, color: isSelected ? "#b45309" : "#1e293b", marginBottom: "2px" }}>
+                        {t.name}
+                      </div>
+                      <div style={{ fontSize: "9.5px", color: isSelected ? "#b45309" : "#64748b" }}>
+                        {t.example}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 4. ALAN: REFERANS MANTIĞI & MOTOR SEÇİMİ GÖRSEL KARTLARI */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "12px", marginBottom: "18px" }}>
+              {/* Referans Modu */}
+              <div style={{ background: "#ffffff", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "11px", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <ShieldCheck size={13} color="#059669" />
+                  <span>Referans Mantığı</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setLogoRefMode("none")}
+                    style={{
+                      padding: "8px",
+                      borderRadius: "8px",
+                      border: logoRefMode === "none" ? "1.5px solid #059669" : "1px solid #e2e8f0",
+                      background: logoRefMode === "none" ? "#ecfdf5" : "#f8fafc",
+                      color: logoRefMode === "none" ? "#047857" : "#475569",
+                      textAlign: "left",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11.5px", fontWeight: 700, marginBottom: "2px" }}>
+                      <Sparkles size={12} color="#059669" />
+                      <span>Sıfırdan Keşif</span>
+                    </div>
+                    <div style={{ fontSize: "9.5px", color: "#64748b", lineHeight: "1.2" }}>
+                      Eski logoyu unutur, %100 taze konsept türetir.
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setLogoRefMode("evolve")}
+                    style={{
+                      padding: "8px",
+                      borderRadius: "8px",
+                      border: logoRefMode === "evolve" ? "1.5px solid #0284c7" : "1px solid #e2e8f0",
+                      background: logoRefMode === "evolve" ? "#f0f9ff" : "#f8fafc",
+                      color: logoRefMode === "evolve" ? "#0369a1" : "#475569",
+                      textAlign: "left",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11.5px", fontWeight: 700, marginBottom: "2px" }}>
+                      <RefreshCw size={12} color="#0284c7" />
+                      <span>Evrimleştir</span>
+                    </div>
+                    <div style={{ fontSize: "9.5px", color: "#64748b", lineHeight: "1.2" }}>
+                      Mevcut hatları korur, modernize eder.
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Çıktı Motoru */}
+              <div style={{ background: "#ffffff", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "11px", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <Cpu size={13} color="#9333ea" />
+                  <span>Çıktı Motoru</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setLogoEngine("svg_vector")}
+                    style={{
+                      padding: "8px",
+                      borderRadius: "8px",
+                      border: logoEngine === "svg_vector" ? "1.5px solid #0284c7" : "1px solid #e2e8f0",
+                      background: logoEngine === "svg_vector" ? "#f0f9ff" : "#f8fafc",
+                      color: logoEngine === "svg_vector" ? "#0369a1" : "#475569",
+                      textAlign: "left",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11.5px", fontWeight: 700, marginBottom: "2px" }}>
+                      <FileCode size={12} color="#0284c7" />
+                      <span>SVG Vektör</span>
+                    </div>
+                    <div style={{ fontSize: "9.5px", color: "#64748b", lineHeight: "1.2" }}>
+                      Sonsuz büyütme, sıfır pikselleşme, temiz kod.
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setLogoEngine("gemini_image")}
+                    style={{
+                      padding: "8px",
+                      borderRadius: "8px",
+                      border: logoEngine === "gemini_image" ? "1.5px solid #7c3aed" : "1px solid #e2e8f0",
+                      background: logoEngine === "gemini_image" ? "#faf5ff" : "#f8fafc",
+                      color: logoEngine === "gemini_image" ? "#6d28d9" : "#475569",
+                      textAlign: "left",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11.5px", fontWeight: 700, marginBottom: "2px" }}>
+                      <ImageIcon size={12} color="#7c3aed" />
+                      <span>Gemini 3D Taktil</span>
+                    </div>
+                    <div style={{ fontSize: "9.5px", color: "#64748b", lineHeight: "1.2" }}>
+                      Gerçekçi stüdyo ışığı, gölgeli derinlik.
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* 5. ALAN: YAZI İÇERİĞİ & ÖZEL NOT & ÜRETİM BUTONLARI */}
+            <div style={{ background: "#ffffff", padding: "16px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px", marginBottom: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: "#475569", marginBottom: "4px" }}>
+                    Marka Adı
+                  </label>
+                  <input
+                    type="text"
+                    value={logoBrandName}
+                    onChange={(e) => setLogoBrandName(e.target.value)}
+                    placeholder="Marka Adı"
+                    style={{ width: "100%", padding: "8px 10px", fontSize: "12px", borderRadius: "7px", background: "#f8fafc", border: "1px solid #cbd5e1", color: "#0f172a" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: "#475569", marginBottom: "4px" }}>
+                    Slogan / Açıklama
+                  </label>
+                  <input
+                    type="text"
+                    value={logoTagline}
+                    onChange={(e) => setLogoTagline(e.target.value)}
+                    placeholder="Slogan / Alt Başlık"
+                    style={{ width: "100%", padding: "8px 10px", fontSize: "12px", borderRadius: "7px", background: "#f8fafc", border: "1px solid #cbd5e1", color: "#0f172a" }}
+                  />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: "#475569", marginBottom: "4px" }}>
+                    Özel Tasarım Notu (Opsiyonel)
+                  </label>
+                  <input
+                    type="text"
+                    value={logoCustomPrompt}
+                    onChange={(e) => setLogoCustomPrompt(e.target.value)}
+                    placeholder="Örn: Dişli ve fidan figürü birleşsin, ahşap doku öne çıksın..."
+                    style={{ width: "100%", padding: "8px 10px", fontSize: "12px", borderRadius: "7px", background: "#f8fafc", border: "1px solid #cbd5e1", color: "#0f172a" }}
+                  />
+                </div>
+              </div>
+
+              {/* Üretim Butonları */}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
                 <button
                   type="button"
                   className="button secondary"
                   onClick={() => handleGenerateLogoConcepts(1)}
                   disabled={generatingLogo}
                   style={{
-                    height: "38px",
-                    padding: "0 16px",
-                    fontSize: "12px",
+                    height: "40px",
+                    padding: "0 18px",
+                    fontSize: "12.5px",
                     fontWeight: 600,
                     borderColor: "#d8b4fe",
                     color: "#7e22ce",
                   }}
                 >
-                  {generatingLogo ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} color="#9333ea" />}
+                  {generatingLogo ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} color="#9333ea" />}
                   <span>Tekil Konsept Üret</span>
                 </button>
                 <button
@@ -741,16 +1020,16 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                   onClick={() => handleGenerateLogoConcepts(3)}
                   disabled={generatingLogo}
                   style={{
-                    height: "38px",
-                    padding: "0 16px",
-                    fontSize: "12px",
+                    height: "40px",
+                    padding: "0 20px",
+                    fontSize: "12.5px",
                     fontWeight: 700,
                     background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
                     border: "none",
-                    boxShadow: "0 4px 12px rgba(124, 58, 237, 0.25)",
+                    boxShadow: "0 4px 14px rgba(124, 58, 237, 0.28)",
                   }}
                 >
-                  {generatingLogo ? <LoaderCircle className="spin" size={15} /> : <Layers size={15} />}
+                  {generatingLogo ? <LoaderCircle className="spin" size={16} /> : <Layers size={16} />}
                   <span>3 Farklı Alternatif Üret (A/B/C)</span>
                 </button>
               </div>
@@ -783,7 +1062,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                 <Palette size={32} style={{ margin: "0 auto 10px auto", color: "#94a3b8" }} />
                 <h4 style={{ margin: "0 0 4px 0", fontSize: "14px", color: "#334155" }}>Henüz logo konsepti üretilmedi</h4>
                 <p style={{ margin: 0, fontSize: "12px", maxWidth: "420px", marginInline: "auto" }}>
-                  Yukarıdaki tasarım masasından bir arketip ve stil seçerek "Tekil Konsept Üret" veya "3 Farklı Alternatif Üret" butonuna basın.
+                  Yukarıdaki görsel tasarım masasından bir stil ve arketip seçerek "Tekil Konsept Üret" veya "3 Farklı Alternatif Üret" butonuna basın.
                 </p>
               </div>
             ) : (
@@ -825,7 +1104,6 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                           </div>
                         </div>
 
-                        {/* Motor Rozeti */}
                         <span
                           style={{
                             fontSize: "10px",
@@ -845,7 +1123,7 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                         </span>
                       </div>
 
-                      {/* Görsel Alanı (Açık veya Koyu Zemin) */}
+                      {/* Görsel Alanı */}
                       <div
                         style={{
                           position: "relative",
@@ -868,7 +1146,6 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                           unoptimized
                         />
 
-                        {/* Aktif Logo İbaresi */}
                         {isPrimary && (
                           <div
                             style={{
@@ -892,7 +1169,6 @@ export function BrandVisualsTab({ projectId }: { projectId: string }) {
                           </div>
                         )}
 
-                        {/* Büyütme Butonu */}
                         <button
                           type="button"
                           title="Tam Ekran Aç"
