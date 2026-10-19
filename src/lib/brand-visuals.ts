@@ -19,16 +19,56 @@ export type BrandVisualType =
 
 export type VisualCategory = "logos" | "avatars" | "banners" | "highlights";
 
+export type LogoStyleArchetype =
+  | "geometric"
+  | "monogram"
+  | "tactile_3d"
+  | "metaphor"
+  | "abstract_dynamic"
+  | "stamp_badge"
+  | "mascot";
+
+export type LogoTypographyStyle =
+  | "sans"
+  | "tech"
+  | "serif"
+  | "display"
+  | "monogram_only";
+
+export type LogoLayout = "stacked" | "horizontal" | "icon_only" | "badge";
+
+export type LogoReferenceMode = "none" | "evolve" | "custom";
+
+export type LogoEngine = "gemini_image" | "svg_vector";
+
+export type GeneratedLogoConcept = {
+  id: string;
+  title: string;
+  style: LogoStyleArchetype;
+  engine: LogoEngine;
+  layout: LogoLayout;
+  typography: {
+    brandName: string;
+    tagline?: string;
+    fontStyle: LogoTypographyStyle;
+  };
+  url: string;
+  svgContent?: string;
+  createdAt: string;
+  promptUsed?: string;
+  isPrimary?: boolean;
+};
+
 export type BrandVisualSpec = {
   type: BrandVisualType;
   category: VisualCategory;
   title: string;
   platform: string;
-  dimensions: string; // e.g. "2560 × 1440 px"
+  dimensions: string;
   width: number;
   height: number;
   aspectRatio: "1:1" | "16:9" | "3:1" | "4:1" | "9:16";
-  generatorRatio: "1:1" | "16:9" | "9:16"; // Cliproxy / Gemini supported ratios
+  generatorRatio: "1:1" | "16:9" | "9:16";
   description: string;
   safeZoneGuide: string;
   safeZoneOverlayType?: "circle" | "youtube_banner" | "twitter_header" | "linkedin_banner";
@@ -50,8 +90,112 @@ export type SavedVisualItem = {
 
 export type BrandVisualsState = {
   items: Partial<Record<BrandVisualType, SavedVisualItem>>;
+  logoConcepts?: GeneratedLogoConcept[];
+  activeLogoConceptId?: string;
   updatedAt: string;
 };
+
+export const LOGO_STYLE_ARCHETYPES: {
+  id: LogoStyleArchetype;
+  name: string;
+  tagline: string;
+  description: string;
+  promptDirectives: string;
+}[] = [
+  {
+    id: "geometric",
+    name: "Geometrik & Minimalist",
+    tagline: "Kusursuz altın oran, keskin prizmalar ve temiz hatlar",
+    description: "Kare, daire ve çokgenlerin matematiksel uyumuyla oluşturulan, küçüldüğünde bile asla bozulmayan ultra-modern amblem.",
+    promptDirectives: "pure minimalist geometric emblem, golden ratio precision, intersecting clean geometric planes, elegant negative space, Swiss style corporate design, balanced symmetry, crisp razor-sharp vector execution",
+  },
+  {
+    id: "monogram",
+    name: "Akıllı Monogram (Harf Füzyonu)",
+    tagline: "Marka baş harflerinin iç içe geçen soyut mimarisi",
+    description: "Markanın baş harflerini modern, tipografik ve mimari bir sembole dönüştüren prestijli imza tasarımı.",
+    promptDirectives: "clever architectural monogram brandmark, intertwining letters woven into a singular iconic symbol, high-fashion corporate luxury emblem, clever negative space interlocking glyph",
+  },
+  {
+    id: "tactile_3d",
+    name: "3D Modern Taktil / Neumorphic",
+    tagline: "Yumuşak stüdyo ışığı, gölgeli derinlik ve dokulu form",
+    description: "Mat stüdyo zemin üzerinde duran, hafif kabartmalı, dokunma hissi uyandıran modern teknoloji amblemi.",
+    promptDirectives: "3D tactile embossed brand insignia, matte polymer texture with soft natural studio lighting, gentle ambient occlusion shadows, modern high-tech industrial design aesthetic, clean tactile depth, zero clutter",
+  },
+  {
+    id: "metaphor",
+    name: "Simgesel & Hikaye Anlatan Metafor",
+    tagline: "Markanın yaptığı işi ve ruhunu simgeleyen kavramsal birleşim",
+    description: "Sektörel araçları ve kavramları (örn: dişli, robot kol, fidan, kıvılcım) tek bir anlamlı görsel metaforda birleştiren sembol.",
+    promptDirectives: "conceptual storytelling brand icon, clever visual metaphor combining brand tools and industry identity into a unified sleek emblem, meaningful symbolic silhouette, refined and memorable",
+  },
+  {
+    id: "abstract_dynamic",
+    name: "Soyut & Dinamik İnovasyon",
+    tagline: "Akışkan, geleceğe bakan fütüristik hatlar",
+    description: "Büyümeyi, hızı ve inovasyonu temsil eden akışkan, fütüristik form dili.",
+    promptDirectives: "dynamic abstract forward-leaning emblem, kinetic energy, smooth modern aerodynamic curves, visionary innovation motif, vibrant contrasting brand accents",
+  },
+  {
+    id: "stamp_badge",
+    name: "Rozet & Kurumsal Mühür",
+    tagline: "Güven, onay ve köklü kurumsal miras hissi",
+    description: "Dairesel dış halka, tipografik çerçeve ve merkez amblemle kurumsal otorite ve kalite sertifikası hissi veren mühür.",
+    promptDirectives: "circular heritage stamp badge, prestigious corporate seal of excellence, clean concentric rings, refined circular typography border, authoritative emblem",
+  },
+  {
+    id: "mascot",
+    name: "Modern Maskot / Karakter Formu",
+    tagline: "Samimi, akılda kalıcı ve dostane marka yüzü",
+    description: "Markanın özellikle çocuk, aile veya genç kitleyle bağ kurmasını sağlayan sevimli, modern geometrik karakter amblemi.",
+    promptDirectives: "minimalist modern friendly mascot character emblem, geometric and approachable, high charm, iconic face or friendly robot motif, clean corporate character design",
+  },
+];
+
+export const LOGO_TYPOGRAPHY_STYLES: {
+  id: LogoTypographyStyle;
+  name: string;
+  example: string;
+  fontCategory: string;
+  cssStyle: string;
+}[] = [
+  {
+    id: "sans",
+    name: "Geometrik Modern Sans",
+    example: "Inter / Montserrat",
+    fontCategory: "Temiz, net ve çağdaş kurumsal duruş",
+    cssStyle: "'Inter', 'Montserrat', -apple-system, sans-serif",
+  },
+  {
+    id: "tech",
+    name: "Teknoloji & Fütüristik",
+    example: "Space Grotesk / Orbitron",
+    fontCategory: "Mühendislik, yapay zeka ve maker ruhu",
+    cssStyle: "'Space Grotesk', 'Orbitron', monospace, sans-serif",
+  },
+  {
+    id: "serif",
+    name: "Prestijli Serif",
+    example: "Playfair / Cinzel",
+    fontCategory: "Köklü, zarif ve yüksek kalite hissi",
+    cssStyle: "'Playfair Display', 'Cinzel', Georgia, serif",
+  },
+  {
+    id: "display",
+    name: "Kalın & Vurucu Display",
+    example: "Clash Display / Bebas Neue",
+    fontCategory: "Enerjik, güçlü ve uzaktan okunan başlıklar",
+    cssStyle: "'Clash Display', 'Bebas Neue', Impact, sans-serif",
+  },
+  {
+    id: "monogram_only",
+    name: "Sadece Monogram Baş Harf",
+    example: "Örn: AH / Logo İkonu",
+    fontCategory: "Yazısız, yalnızca sembolün gücüne odaklı",
+    cssStyle: "sans-serif",
+  },
+];
 
 export const BRAND_VISUAL_SPECS: Record<BrandVisualType, BrandVisualSpec> = {
   logo_emblem: {

@@ -7,12 +7,21 @@ import {
   BrandVisualSpec,
   BrandVisualType,
   BrandVisualsState,
+  GeneratedLogoConcept,
+  LOGO_STYLE_ARCHETYPES,
+  LOGO_TYPOGRAPHY_STYLES,
+  LogoEngine,
+  LogoLayout,
+  LogoReferenceMode,
+  LogoStyleArchetype,
+  LogoTypographyStyle,
   SavedVisualItem,
 } from "@/lib/brand-visuals";
 import { normalizeBrandConcept } from "@/lib/brand-concept";
 import { getDatabase } from "@/lib/server/database";
 import { decryptSecret } from "@/lib/server/secrets";
 import { loadMedia, MediaInput, renderCreative } from "@/lib/server/cliproxy-creative";
+import { completeText } from "@/lib/server/cliproxy-text";
 
 export const runtime = "nodejs";
 
@@ -42,19 +51,21 @@ function getProject(projectId: string): ProjectRow | undefined {
 }
 
 function parseVisuals(jsonString?: string): BrandVisualsState {
-  if (!jsonString) return { items: {}, updatedAt: "" };
+  if (!jsonString) return { items: {}, logoConcepts: [], updatedAt: "" };
   try {
     const parsed = JSON.parse(jsonString);
     return {
       items: parsed.items || {},
+      logoConcepts: Array.isArray(parsed.logoConcepts) ? parsed.logoConcepts : [],
+      activeLogoConceptId: parsed.activeLogoConceptId || undefined,
       updatedAt: parsed.updatedAt || "",
     };
   } catch {
-    return { items: {}, updatedAt: "" };
+    return { items: {}, logoConcepts: [], updatedAt: "" };
   }
 }
 
-// GET: Projenin mevcut marka görsellerini listeler
+// GET: Projenin mevcut marka görsellerini ve logo konseptlerini listeler
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const projectId = searchParams.get("projectId");
@@ -71,10 +82,297 @@ export async function GET(request: Request) {
   return Response.json({ ok: true, visuals });
 }
 
-// POST: Seçilen görsel türünü Agency Agents mimarisiyle sentezleyip üretir
+// POST: Görsel üretimi veya Logo Stüdyosu konsept üretimi
 export async function POST(request: Request) {
   try {
-    const input = (await request.json()) as {
+    const body = await request.json();
+
+    // ─────────────────────────────────────────────────────────────
+    // AKŞİYON 1: LOGO TASARIM STÜDYOSU KONSEPT ÜRETİMİ
+    // ─────────────────────────────────────────────────────────────
+    if (body.action === "generate_logo_concept") {
+      const input = body as {
+        projectId?: string;
+        style?: LogoStyleArchetype;
+        engine?: LogoEngine;
+        layout?: LogoLayout;
+        referenceMode?: LogoReferenceMode;
+        customReferenceUrl?: string;
+        typography?: {
+          brandName?: string;
+          tagline?: string;
+          fontStyle?: LogoTypographyStyle;
+        };
+        customDirection?: string;
+        count?: number;
+      };
+
+      if (!input.projectId) {
+        return Response.json({ ok: false, message: "Proje ID gerekli." }, { status: 400 });
+      }
+
+      const database = getDatabase();
+      const project = getProject(input.projectId);
+      if (!project) {
+        return Response.json({ ok: false, message: "Proje bulunamadı." }, { status: 404 });
+      }
+
+      const brand = JSON.parse(project.brand_json || "{}") as Record<string, string>;
+      const concept = normalizeBrandConcept(JSON.parse(project.brand_concept_json || "{}"));
+
+      const provider = database
+        .prepare(
+          "SELECT base_url, encrypted_api_key, text_model, image_model, vision_model, edit_model FROM ai_provider_configs WHERE provider='cliproxy' AND enabled=1"
+        )
+        .get() as ProviderRow | undefined;
+
+      if (!provider?.base_url || !provider.encrypted_api_key) {
+        return Response.json(
+          { ok: false, message: "CliProxyAPI sağlayıcısı aktif veya yapılandırılmış değil." },
+          { status: 409 }
+        );
+      }
+
+      const apiKey = decryptSecret(provider.encrypted_api_key);
+      const baseUrl = provider.base_url.replace(/\/+$/, "");
+
+      const styleId = input.style || "geometric";
+      const styleMeta = LOGO_STYLE_ARCHETYPES.find((s) => s.id === styleId) || LOGO_STYLE_ARCHETYPES[0];
+      const engine = input.engine || "gemini_image";
+      const layout = input.layout || "stacked";
+      const referenceMode = input.referenceMode || "none";
+      const brandName = input.typography?.brandName || brand.brandName || project.name || "Marka";
+      const tagline = input.typography?.tagline || brand.industry || "";
+      const fontStyle = input.typography?.fontStyle || "sans";
+      const typographyMeta = LOGO_TYPOGRAPHY_STYLES.find((t) => t.id === fontStyle) || LOGO_TYPOGRAPHY_STYLES[0];
+
+      const groundColor = concept.groundColor || "#FDFBF7";
+      const primaryColor = concept.primaryColor || brand.primaryColor || "#FF6B35";
+      const secondaryColor = concept.secondaryColor || brand.secondaryColor || "#0F4C81";
+      const accentColor = concept.accentColor || "#FFD166";
+      const industry = brand.industry || "Teknoloji & Eğitim";
+
+      const assetsDir = path.join(process.cwd(), ".data", "assets");
+      if (!fs.existsSync(assetsDir)) fs.mkdirSync(assetsDir, { recursive: true });
+
+      const generatedConcepts: GeneratedLogoConcept[] = [];
+      const count = Math.min(Math.max(input.count || 1, 1), 3);
+
+      for (let i = 0; i < count; i++) {
+        const randomSeed = Math.floor(Math.random() * 900000) + 100000;
+        const conceptId = crypto.randomUUID();
+        const nowIso = new Date().toISOString();
+
+        if (engine === "svg_vector") {
+          // ── SAF VEKTÖR SVG MOTORU (Claude / Gemini 3.8 + Sharp) ──
+          const systemPrompt = `You are a world-class principal brand identity designer and SVG vector master.
+Your job is to generate a pristine, standalone, scalable XML SVG logo according to the exact brand contract.
+Output ONLY the raw <svg>...</svg> element. Do NOT wrap in markdown fences or conversational text.`;
+
+          const userPrompt = `Create a master logo SVG for the brand "${brandName}".
+- Industry: ${industry}
+- Slogan/Tagline: "${tagline}"
+- Design Archetype: ${styleMeta.name} (${styleMeta.promptDirectives})
+- Typography Style: ${typographyMeta.name} (${typographyMeta.fontCategory})
+- Layout Architecture: ${
+            layout === "horizontal"
+              ? "Horizontal lockup: Symbol on the left, typography on the right (viewBox 0 0 1200 400)"
+              : layout === "icon_only"
+              ? "Standalone iconic symbol/emblem without brand name text (viewBox 0 0 800 800)"
+              : layout === "badge"
+              ? "Circular crest/badge seal with concentric rings and curved/straight text (viewBox 0 0 800 800)"
+              : "Stacked composition: Striking emblem on top, brand name and tagline centered below (viewBox 0 0 800 800)"
+          }
+- Color Palette:
+  * Background fill: ${groundColor}
+  * Primary brand action color: ${primaryColor}
+  * Secondary structural/text color: ${secondaryColor}
+  * Accent highlight: ${accentColor}
+- Creative Variation Seed #${randomSeed}: Focus on unique geometry, memorable silhouette, and perfect balance.
+${input.customDirection?.trim() ? `User Direction: ${input.customDirection.trim()}` : ""}
+- Requirements:
+  * Must be 100% valid XML SVG with xmlns="http://www.w3.org/2000/svg"
+  * Scalable vector paths, polygons, circles, and clean <text> elements
+  * High contrast, professional corporate finish, clean negative space.`;
+
+          const textModel = provider.text_model || "gemini-3.8-flash-high";
+          const { content: svgRaw } = await completeText(systemPrompt, userPrompt, {
+            model: textModel,
+            temperature: 0.7,
+            maxTokens: 2500,
+          });
+
+          const svgCleanMatch = svgRaw.match(/<svg[\s\S]*<\/svg>/i);
+          if (!svgCleanMatch) {
+            throw new Error("Vektör SVG modeli geçerli bir SVG kodu oluşturamadı.");
+          }
+          const svgContent = svgCleanMatch[0];
+
+          // Sharp ile PNG ve WebP raster çıktıları üret
+          const processedBuffer = await sharp(Buffer.from(svgContent))
+            .resize(1080, 1080, { fit: "contain", background: groundColor })
+            .png({ quality: 95 })
+            .toBuffer();
+
+          const thumbBuffer = await sharp(processedBuffer)
+            .resize(360, 360, { fit: "contain", background: groundColor })
+            .webp({ quality: 82 })
+            .toBuffer();
+
+          fs.writeFileSync(path.join(assetsDir, `${conceptId}.svg`), svgContent, "utf8");
+          fs.writeFileSync(path.join(assetsDir, `${conceptId}.png`), processedBuffer);
+          fs.writeFileSync(path.join(assetsDir, `${conceptId}_thumb.webp`), thumbBuffer);
+          fs.writeFileSync(
+            path.join(assetsDir, `${conceptId}.json`),
+            JSON.stringify({ mimeType: "image/svg+xml", extension: "svg" })
+          );
+
+          generatedConcepts.push({
+            id: conceptId,
+            title: `${styleMeta.name} Vektör Logo ${count > 1 ? `#${i + 1}` : ""}`.trim(),
+            style: styleId,
+            engine: "svg_vector",
+            layout,
+            typography: {
+              brandName,
+              tagline: tagline || undefined,
+              fontStyle,
+            },
+            url: `/api/assets/${conceptId}`,
+            svgContent,
+            createdAt: nowIso,
+            promptUsed: input.customDirection || undefined,
+          });
+        } else {
+          // ── GEMINI 3.1 FLASH IMAGE DIFÜZYON MOTORU ──
+          const references: MediaInput[] = [];
+          if (referenceMode === "evolve" && brand.logo) {
+            const logoMedia = await loadMedia(brand.logo);
+            if (logoMedia) references.push(logoMedia);
+          } else if (referenceMode === "custom" && input.customReferenceUrl) {
+            const customMedia = await loadMedia(input.customReferenceUrl);
+            if (customMedia) references.push(customMedia);
+          }
+          // Note: When referenceMode is "none", references remains completely empty!
+
+          const layoutInstruction =
+            layout === "horizontal"
+              ? "horizontal lockup: clean iconic emblem on the left paired with clear typography of the brand name on the right. 16:9 ratio."
+              : layout === "icon_only"
+              ? "standalone high-impact brand emblem symbol without any text words, perfectly centered with wide breathing room. 1:1 square ratio."
+              : layout === "badge"
+              ? "round circular stamp seal crest, concentric rings, embossed premium insignia. 1:1 square ratio."
+              : "stacked corporate logo: striking emblem positioned above the centered brand name typography. 1:1 square ratio.";
+
+          const promptLayers = [
+            `[BRAND GUARDIAN LOGO DESIGN CONTRACT]`,
+            `Brand Name: "${brandName}"`,
+            tagline && `Tagline/Subtitle: "${tagline}"`,
+            `Industry: ${industry}`,
+            `Color Palette: 60% Ground ${groundColor}, 30% Structure ${secondaryColor}, 10% Primary Action ${primaryColor}, Accent Highlight ${accentColor}.`,
+            ``,
+            `[DESIGN ARCHETYPE & STYLE DIRECTIVE]`,
+            `Style Archetype: ${styleMeta.name}`,
+            `Archetype Specification: ${styleMeta.promptDirectives}`,
+            `Typography Character: ${typographyMeta.name} - ${typographyMeta.fontCategory}`,
+            `Composition Layout: ${layoutInstruction}`,
+            `Creative Variation Angle #${randomSeed}: Unique perspective, fresh iconic contours, pristine balance.`,
+            input.customDirection?.trim() && `User Creative Direction: ${input.customDirection.trim()}`,
+            ``,
+            `[TECHNICAL EXECUTION STANDARDS]`,
+            `Background: Clean solid ${groundColor} studio backdrop with soft ambient occlusion.`,
+            `Lighting: Diffused softbox studio lighting, gentle rim light, matte non-reflective texture.`,
+            `Quality: Razor-sharp logo graphic design, commercial identity master quality. NO watermarks, NO photo clutter, NO blurry artifacts.`,
+          ]
+            .filter(Boolean)
+            .join("\n");
+
+          const renderModel = provider.image_model || "gemini-3.1-flash-image";
+          const renderedImage = await renderCreative({
+            baseUrl,
+            apiKey,
+            model: renderModel,
+            prompt: promptLayers,
+            ratio: layout === "horizontal" ? "16:9" : "1:1",
+            references: references.length > 0 ? references : undefined,
+          });
+
+          if (!renderedImage?.bytes) {
+            throw new Error("Görsel difüzyon modeli geçerli bir logo çıktısı üretemedi.");
+          }
+
+          const targetWidth = layout === "horizontal" ? 1600 : 1080;
+          const targetHeight = layout === "horizontal" ? 900 : 1080;
+
+          const processedBuffer = await sharp(renderedImage.bytes)
+            .resize({
+              width: targetWidth,
+              height: targetHeight,
+              fit: "contain",
+              background: groundColor,
+            })
+            .png({ quality: 95 })
+            .toBuffer();
+
+          const thumbBuffer = await sharp(processedBuffer)
+            .resize({
+              width: Math.min(targetWidth, 480),
+              height: Math.min(targetHeight, Math.round((targetHeight / targetWidth) * 480)),
+              fit: "contain",
+              background: groundColor,
+            })
+            .webp({ quality: 82 })
+            .toBuffer();
+
+          fs.writeFileSync(path.join(assetsDir, `${conceptId}.png`), processedBuffer);
+          fs.writeFileSync(path.join(assetsDir, `${conceptId}_thumb.webp`), thumbBuffer);
+          fs.writeFileSync(
+            path.join(assetsDir, `${conceptId}.json`),
+            JSON.stringify({ mimeType: "image/png", extension: "png" })
+          );
+
+          generatedConcepts.push({
+            id: conceptId,
+            title: `${styleMeta.name} Logo ${count > 1 ? `#${i + 1}` : ""}`.trim(),
+            style: styleId,
+            engine: "gemini_image",
+            layout,
+            typography: {
+              brandName,
+              tagline: tagline || undefined,
+              fontStyle,
+            },
+            url: `/api/assets/${conceptId}`,
+            createdAt: nowIso,
+            promptUsed: input.customDirection || undefined,
+          });
+        }
+      }
+
+      // Projenin brand_visuals_json alanını güncelle
+      const currentVisuals = parseVisuals(project.brand_visuals_json);
+      currentVisuals.logoConcepts = [
+        ...generatedConcepts,
+        ...(currentVisuals.logoConcepts || []),
+      ];
+      currentVisuals.updatedAt = new Date().toISOString();
+
+      database
+        .prepare("UPDATE projects SET brand_visuals_json = ? WHERE id = ?")
+        .run(JSON.stringify(currentVisuals), input.projectId);
+
+      return Response.json({
+        ok: true,
+        concepts: generatedConcepts,
+        visuals: currentVisuals,
+        message: `${generatedConcepts.length} adet yeni logo konsepti üretildi.`,
+      });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // AKŞİYON 2: SOSYAL MEDYA STANDART GÖRSELİ ÜRETİMİ
+    // ─────────────────────────────────────────────────────────────
+    const input = body as {
       projectId?: string;
       type?: BrandVisualType;
       customDirection?: string;
@@ -106,7 +404,6 @@ export async function POST(request: Request) {
       JSON.parse(project.brand_concept_json || "{}")
     );
 
-    // AI Provider ayarlarını çek
     const provider = database
       .prepare(
         "SELECT base_url, encrypted_api_key, text_model, image_model, vision_model, edit_model FROM ai_provider_configs WHERE provider='cliproxy' AND enabled=1"
@@ -124,21 +421,18 @@ export async function POST(request: Request) {
     const baseUrl = provider.base_url.replace(/\/+$/, "");
     const renderModel = provider.image_model || "gemini-3.1-flash-image";
 
-    // Referans görselleri hazırla (Varsa mevcut logo ve Key Visual stil panosu)
+    // ÖNEMLİ KURAL: Eğer üretilen şey bir LOGO ise, eski logoyu referans olarak besleme!
+    // Sadece bannerlar, avatarlar ve öne çıkanlar gibi logoyu KULLANAN alanlarda referans ver.
     const references: MediaInput[] = [];
-    if (brand.logo) {
+    if (spec.category !== "logos" && brand.logo) {
       const logoMedia = await loadMedia(brand.logo);
       if (logoMedia) references.push(logoMedia);
     }
-    if (concept.sampleVisualUrl) {
+    if (concept.sampleVisualUrl && spec.category === "banners") {
       const styleMedia = await loadMedia(concept.sampleVisualUrl);
       if (styleMedia) references.push(styleMedia);
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // AGENCY AGENTS DİREKTİFLERİ & KATMANLI PROMPT SENTEZİ
-    // (Brand Guardian + Paid Social Strategist + Image Prompt Engineer)
-    // ─────────────────────────────────────────────────────────────
     const brandName = brand.brandName || project.name || "Marka";
     const industry = brand.industry || "Teknoloji & Eğitim";
     const audience = brand.audience || "Kullanıcılar";
@@ -146,6 +440,7 @@ export async function POST(request: Request) {
     const primaryColor = concept.primaryColor || brand.primaryColor || "#FF6B35";
     const secondaryColor = concept.secondaryColor || brand.secondaryColor || "#0F4C81";
     const accentColor = concept.accentColor || "#FFD166";
+    const randomVariationSeed = Math.floor(Math.random() * 900000) + 100000;
 
     const promptLayers = [
       `[BRAND GUARDIAN IDENTITY SPECIFICATION]`,
@@ -165,6 +460,7 @@ export async function POST(request: Request) {
       ``,
       `[IMAGE PROMPT ENGINEER MULTI-LAYER COMPOSITION]`,
       `Subject Layer: ${spec.agentDirectives.subjectPrompt} tailored specifically for ${brandName} in ${industry}.`,
+      `Creative Concept Variation #${randomVariationSeed}: Fresh original composition with dynamic visual interest.`,
       input.customDirection?.trim() && `User Creative Direction: ${input.customDirection.trim()}`,
       `Environment & Ground Layer: Clean, sophisticated solid background in hex ${groundColor}, studio backdrop with soft organic shadow gradation. Zero busy background clutter.`,
       `Lighting Specification: Softbox diffused studio lighting, gentle rim light defining edges, matte tactile texture, professional lighting.`,
@@ -174,7 +470,6 @@ export async function POST(request: Request) {
       .filter(Boolean)
       .join("\n");
 
-    // Cliproxy / Gemini Flash Image ile görseli oluştur
     const renderedImage = await renderCreative({
       baseUrl,
       apiKey,
@@ -188,7 +483,6 @@ export async function POST(request: Request) {
       throw new Error("Görsel üretim modeli geçerli bir çıktı üretemedi.");
     }
 
-    // Sharp ile platformun tam piksel ölçülerine göre işleme
     const processedBuffer = await sharp(renderedImage.bytes)
       .resize({
         width: spec.width,
@@ -199,7 +493,6 @@ export async function POST(request: Request) {
       .png({ quality: 95 })
       .toBuffer();
 
-    // Küçük WebP önizleme (hızlı UI yüklemesi için)
     const thumbBuffer = await sharp(processedBuffer)
       .resize({
         width: Math.min(spec.width, 480),
@@ -210,11 +503,8 @@ export async function POST(request: Request) {
       .webp({ quality: 82 })
       .toBuffer();
 
-    // Dosyaları .data/assets klasörüne kaydet
     const assetsDir = path.join(process.cwd(), ".data", "assets");
-    if (!fs.existsSync(assetsDir)) {
-      fs.mkdirSync(assetsDir, { recursive: true });
-    }
+    if (!fs.existsSync(assetsDir)) fs.mkdirSync(assetsDir, { recursive: true });
 
     const assetId = crypto.randomUUID();
     const mainFilePath = path.join(assetsDir, `${assetId}.png`);
@@ -240,7 +530,6 @@ export async function POST(request: Request) {
       promptUsed: input.customDirection || undefined,
     };
 
-    // Veritabanını güncelle
     const currentVisuals = parseVisuals(project.brand_visuals_json);
     currentVisuals.items[input.type] = newVisualItem;
     currentVisuals.updatedAt = nowIso;
@@ -267,13 +556,14 @@ export async function POST(request: Request) {
   }
 }
 
-// PUT: Görseli "Ana Logo Olarak Ata" veya listeden silme işlemi
+// PUT: "Ana Logo Olarak Ata", "Logo Konsepti Sil" veya "Görsel Sil"
 export async function PUT(request: Request) {
   try {
     const input = (await request.json()) as {
       projectId?: string;
-      action?: "set_primary_logo" | "delete_item";
+      action?: "set_primary_logo" | "delete_item" | "delete_logo_concept";
       type?: BrandVisualType;
+      conceptId?: string;
       url?: string;
     };
 
@@ -290,6 +580,8 @@ export async function PUT(request: Request) {
       return Response.json({ ok: false, message: "Proje bulunamadı." }, { status: 404 });
     }
 
+    const visuals = parseVisuals(project.brand_visuals_json);
+
     // 1. Ana Marka Logosu Olarak Ata
     if (input.action === "set_primary_logo") {
       if (!input.url) {
@@ -303,20 +595,68 @@ export async function PUT(request: Request) {
         .prepare("UPDATE projects SET brand_json = ? WHERE id = ?")
         .run(JSON.stringify(brand), input.projectId);
 
+      // Aktif logo konseptini işaretle
+      if (input.conceptId) {
+        visuals.activeLogoConceptId = input.conceptId;
+        if (visuals.logoConcepts) {
+          visuals.logoConcepts = visuals.logoConcepts.map((c) => ({
+            ...c,
+            isPrimary: c.id === input.conceptId,
+          }));
+        }
+      }
+
+      // Ayrıca standart logo_emblem alanına da senkronize et
+      visuals.items.logo_emblem = {
+        type: "logo_emblem",
+        url: input.url,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        dimensions: "1080 × 1080 px",
+      };
+      visuals.updatedAt = new Date().toISOString();
+
+      database
+        .prepare("UPDATE projects SET brand_visuals_json = ? WHERE id = ?")
+        .run(JSON.stringify(visuals), input.projectId);
+
       return Response.json({
         ok: true,
         logoUrl: input.url,
+        visuals,
         message: "Görsel başarıyla projenin ana marka logosu olarak ayarlandı.",
       });
     }
 
-    // 2. Görseli Listeden Kaldır
+    // 2. Logo Konseptini Sil
+    if (input.action === "delete_logo_concept") {
+      if (!input.conceptId) {
+        return Response.json({ ok: false, message: "Silinecek konsept ID gerekli." }, { status: 400 });
+      }
+
+      visuals.logoConcepts = (visuals.logoConcepts || []).filter((c) => c.id !== input.conceptId);
+      if (visuals.activeLogoConceptId === input.conceptId) {
+        visuals.activeLogoConceptId = undefined;
+      }
+      visuals.updatedAt = new Date().toISOString();
+
+      database
+        .prepare("UPDATE projects SET brand_visuals_json = ? WHERE id = ?")
+        .run(JSON.stringify(visuals), input.projectId);
+
+      return Response.json({
+        ok: true,
+        visuals,
+        message: "Logo konsepti kaldırıldı.",
+      });
+    }
+
+    // 3. Standart Görseli Listeden Kaldır
     if (input.action === "delete_item") {
       if (!input.type) {
         return Response.json({ ok: false, message: "Silinecek tip gerekli." }, { status: 400 });
       }
 
-      const visuals = parseVisuals(project.brand_visuals_json);
       delete visuals.items[input.type];
       visuals.updatedAt = new Date().toISOString();
 
