@@ -179,6 +179,11 @@ export async function processGoogleVidsJob(job: {
       proc.stderr.on("data", (c) => { errBuf += c.toString(); });
       proc.on("error", (err) => reject(err));
       proc.on("close", (code) => {
+        // Render bittiğinde arka planda askıda kalan sekmeleri temizle ve RAM'i iade et
+        try {
+          fetch("http://10.0.1.1:8080/api/internal/system/cleanup", { method: "POST", signal: AbortSignal.timeout(3000) }).catch(() => {});
+        } catch {}
+
         if (code === 0 && fs.existsSync(finalMp4Path) && fs.statSync(finalMp4Path).size > 1000) {
           try { validateGoogleVidsNativeArtifact(finalMp4Path, JSON.parse(fs.readFileSync(finalMp4Path+'.native.json','utf8')), job.id, req); }
           catch (error) { reject(error); return; }
@@ -199,7 +204,7 @@ export async function processGoogleVidsJob(job: {
   }
 
   if (automationSucceeded) {
-    recordVidsAccountRenderSuccess(authuserIndex);
+    recordVidsAccountRenderSuccess(authuserIndex, profileDir);
     const videoUrl = `/api/videos/${job.id}`;
     let googleVidsUrl: string | undefined;
     try {
@@ -341,7 +346,7 @@ Return the completion output.`;
             // Check if run completed with quota exhaustion message
             const runOut = runStatus.output || "";
             if (runOut.includes("sınırına ulaştınız") || runOut.includes("quota")) {
-              markVidsAccountQuotaExhausted(authuserIndex);
+              markVidsAccountQuotaExhausted(authuserIndex, 3, profileDir);
               throw new Error("Google Vids günlük/saatlik video oluşturma sınırına ulaşıldı. Google hesabı kotasını sıfırlayana kadar lütfen bekleyin.");
             }
             // Run completion is not artifact completion; await verified callback.
