@@ -256,7 +256,7 @@ export function recordPackageCompletionTransaction(params: {
 
   const updateJob = db.prepare(`
     UPDATE generation_jobs
-    SET status='complete', response_json=?, progress_json=?, completed_at=?
+    SET status='complete', response_json=?, progress_json=?, error=NULL, completed_at=?
     WHERE id=?
   `);
 
