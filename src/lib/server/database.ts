@@ -35,6 +35,17 @@ function runMigrations(database: DatabaseSync) {
       database.exec("ALTER TABLE project_strategy_ideas ADD COLUMN idea_type TEXT NOT NULL DEFAULT ''");
     } catch {}
   }
+  const hashtagSetColumns = database.prepare("PRAGMA table_info(project_hashtag_sets)").all() as unknown as { name: string }[];
+  if (hashtagSetColumns.length && !hashtagSetColumns.some((column) => column.name === "category")) {
+    try {
+      database.exec("ALTER TABLE project_hashtag_sets ADD COLUMN category TEXT NOT NULL DEFAULT 'topic'");
+    } catch {}
+  }
+  if (hashtagSetColumns.length && !hashtagSetColumns.some((column) => column.name === "rotation_count")) {
+    try {
+      database.exec("ALTER TABLE project_hashtag_sets ADD COLUMN rotation_count INTEGER NOT NULL DEFAULT 0");
+    } catch {}
+  }
   database.exec(`
     CREATE TABLE IF NOT EXISTS content_ideas (
       id TEXT PRIMARY KEY,
@@ -85,6 +96,8 @@ function runMigrations(database: DatabaseSync) {
       platform TEXT NOT NULL,
       name TEXT NOT NULL,
       hashtags_json TEXT NOT NULL DEFAULT '[]',
+      category TEXT NOT NULL DEFAULT 'topic',
+      rotation_count INTEGER NOT NULL DEFAULT 0,
       enabled INTEGER NOT NULL DEFAULT 1,
       is_default INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,

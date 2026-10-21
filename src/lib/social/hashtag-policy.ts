@@ -1,4 +1,6 @@
 export type SocialPlatform = "instagram" | "youtube" | "tiktok" | "facebook" | "twitter";
+export type HashtagCategory = "brand" | "topic" | "trend";
+export type HashtagSetPlatform = SocialPlatform | "all";
 
 const VISIBLE_LIMITS: Record<SocialPlatform, number> = {
   instagram: 15,
@@ -52,14 +54,112 @@ function invalidForPlatform(platform: SocialPlatform, hashtag: string) {
   );
 }
 
+export function sampleHashtags(values: string[], count: number, seed?: number): string[] {
+  if (!Array.isArray(values) || values.length === 0) return [];
+  if (!count || count <= 0 || count >= values.length) return [...values];
+  const copy = [...values];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = typeof seed === "number"
+      ? Math.floor(Math.abs(Math.sin(seed + i)) * (i + 1))
+      : Math.floor(Math.random() * (i + 1));
+    const temp = copy[i];
+    copy[i] = copy[j];
+    copy[j] = temp;
+  }
+  return copy.slice(0, count);
+}
+
+export const DEFAULT_HASHTAG_TEMPLATES = [
+  {
+    name: "Sabit Marka",
+    platform: "all" as const,
+    category: "brand" as const,
+    rotationCount: 0,
+    isDefault: true,
+    hashtags: ["#AtolyeHanem", "#AtölyeHanem", "#Makerspace", "#StemAtolyesi"],
+  },
+  {
+    name: "Robotik & Kodlama",
+    platform: "instagram" as const,
+    category: "topic" as const,
+    rotationCount: 5,
+    isDefault: false,
+    hashtags: [
+      "#RobotikKodlama",
+      "#Arduino",
+      "#RobotTasarımı",
+      "#StemEgitimi",
+      "#KodlamaEgitimi",
+      "#ElektronikAtolyesi",
+      "#YapayZekaCocuk",
+      "#MakerHareketi",
+      "#GeleceginMeslekleri",
+    ],
+  },
+  {
+    name: "Çocuk Gelişimi & Aile",
+    platform: "instagram" as const,
+    category: "topic" as const,
+    rotationCount: 4,
+    isDefault: false,
+    hashtags: [
+      "#CocukGelisimi",
+      "#EbeveynRehberi",
+      "#UretenCocuklar",
+      "#EkranDetoksu",
+      "#PedagogOnayli",
+      "#MontessoriAtolye",
+      "#HaftaSonuEtkinligi",
+      "#BilincliEbeveyn",
+    ],
+  },
+  {
+    name: "Viral Keşfet & Trend",
+    platform: "tiktok" as const,
+    category: "trend" as const,
+    rotationCount: 3,
+    isDefault: false,
+    hashtags: [
+      "#KendinYap",
+      "#KendinUret",
+      "#StemKids",
+      "#ViralReels",
+      "#BunuBiliyorMuydun",
+      "#TeknolojiTrendleri",
+      "#Robotik",
+    ],
+  },
+  {
+    name: "YouTube Shorts SEO",
+    platform: "youtube" as const,
+    category: "topic" as const,
+    rotationCount: 3,
+    isDefault: true,
+    hashtags: [
+      "#Shorts",
+      "#RobotikKodlama",
+      "#AtolyeHanem",
+      "#Arduino",
+      "#StemEgitimi",
+    ],
+  },
+];
+
 export function mergePlatformHashtags(input: {
   platform: SocialPlatform;
   aiHashtags: string[] | string;
-  setHashtags: string[] | string;
+  setHashtags?: string[] | string;
+  brandHashtags?: string[] | string;
+  topicHashtags?: string[] | string;
+  trendHashtags?: string[] | string;
   includeSets: boolean;
 }) {
   const ai = normalizeHashtagList(input.aiHashtags);
-  const saved = input.includeSets ? normalizeHashtagList(input.setHashtags) : [];
+  const brand = input.includeSets && input.brandHashtags ? normalizeHashtagList(input.brandHashtags) : [];
+  const topic = input.includeSets && input.topicHashtags ? normalizeHashtagList(input.topicHashtags) : [];
+  const trend = input.includeSets && input.trendHashtags ? normalizeHashtagList(input.trendHashtags) : [];
+  const legacySaved = input.includeSets && input.setHashtags ? normalizeHashtagList(input.setHashtags) : [];
+
   const merged: string[] = [];
   const seen = new Set<string>();
   let removedDuplicates = 0;
@@ -85,8 +185,21 @@ export function mergePlatformHashtags(input: {
     }
   };
 
-  append(ai, "ai");
-  append(saved, "set");
+  const hasCategorizedSets = brand.length > 0 || topic.length > 0 || trend.length > 0;
+  if (hasCategorizedSets) {
+    // 1. Sabit Marka etiketleri (en yüksek öncelik, asla kırpılmaz)
+    append(brand, "set");
+    // 2. AI Konu etiketleri
+    append(ai, "ai");
+    // 3. Niş / Konu etiketleri
+    append(topic, "set");
+    // 4. Trend / Geniş kitle etiketleri
+    append(trend, "set");
+  } else {
+    // Klasik birleşme: AI önce, set sonra
+    append(ai, "ai");
+    append(legacySaved, "set");
+  }
 
   const visible = merged.slice(0, platformVisibleHashtagLimit(input.platform));
   const tags = input.platform === "youtube"

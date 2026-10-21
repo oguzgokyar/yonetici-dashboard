@@ -4,6 +4,7 @@ import {
   mergePlatformHashtags,
   normalizeHashtagList,
   platformVisibleHashtagLimit,
+  sampleHashtags,
   type SocialPlatform,
 } from "./hashtag-policy.ts";
 
@@ -77,4 +78,35 @@ test("moves excess YouTube keywords into backend tags", () => {
 
   assert.deepEqual(result.visible, ["#Shorts", "#RobotikKodlama", "#AtolyeHanem"]);
   assert.deepEqual(result.tags, ["Shorts", "RobotikKodlama", "AtolyeHanem", "Arduino", "Maker"]);
+});
+
+test("samples random or deterministic subset of hashtags", () => {
+  const tags = ["#T1", "#T2", "#T3", "#T4", "#T5"];
+  const sampled = sampleHashtags(tags, 3, 42);
+  assert.equal(sampled.length, 3);
+  for (const tag of sampled) {
+    assert.ok(tags.includes(tag));
+  }
+  // When count >= length, returns full copy
+  assert.deepEqual(sampleHashtags(tags, 10), tags);
+  // When count <= 0, returns full copy
+  assert.deepEqual(sampleHashtags(tags, 0), tags);
+});
+
+test("categorized sets prioritize brand tags before AI and topic tags", () => {
+  const result = mergePlatformHashtags({
+    platform: "instagram",
+    brandHashtags: ["#AtolyeHanem"],
+    aiHashtags: ["#RobotikKodlama", "#Arduino"],
+    topicHashtags: ["#StemEgitimi"],
+    trendHashtags: ["#ViralReels"],
+    includeSets: true,
+  });
+
+  assert.equal(result.visible[0], "#AtolyeHanem");
+  assert.ok(result.visible.includes("#RobotikKodlama"));
+  assert.ok(result.visible.includes("#StemEgitimi"));
+  assert.ok(result.visible.includes("#ViralReels"));
+  assert.equal(result.setAdded, 3);
+  assert.equal(result.aiAdded, 2);
 });

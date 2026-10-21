@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Send,
   Share2,
+  Shuffle,
   Sparkles,
   Trash2,
   X,
@@ -137,9 +138,11 @@ type ChannelCustomData = {
 
 type HashtagSet = {
   id: string;
-  platform: "instagram" | "youtube" | "tiktok" | "facebook" | "twitter";
+  platform: "all" | "instagram" | "youtube" | "tiktok" | "facebook" | "twitter";
   name: string;
   hashtags: string[];
+  category?: "brand" | "topic" | "trend";
+  rotationCount?: number;
   enabled: boolean;
   isDefault: boolean;
 };
@@ -212,10 +215,16 @@ export function PublishingStudio({
   const [hashtagSets, setHashtagSets] = useState<HashtagSet[]>([]);
   const [includeHashtagSets, setIncludeHashtagSets] = useState(true);
   const [selectedHashtagSetIds, setSelectedHashtagSetIds] = useState<Record<string, string[]>>({});
-  const [newSetPlatform, setNewSetPlatform] = useState<HashtagSet["platform"]>("instagram");
+  const [newSetPlatform, setNewSetPlatform] = useState<HashtagSet["platform"]>("all");
+  const [newSetCategory, setNewSetCategory] = useState<NonNullable<HashtagSet["category"]>>("topic");
+  const [newSetRotation, setNewSetRotation] = useState<number>(0);
   const [newSetName, setNewSetName] = useState("");
   const [newSetTags, setNewSetTags] = useState("");
   const [savingHashtagSet, setSavingHashtagSet] = useState(false);
+  const [editingHashtagSet, setEditingHashtagSet] = useState<HashtagSet | null>(null);
+  const [editTagsInput, setEditTagsInput] = useState<string>("");
+  const [savingEditSet, setSavingEditSet] = useState(false);
+  const [seedingTemplates, setSeedingTemplates] = useState(false);
   const [tiktokUploadMethod, setTiktokUploadMethod] = useState<"browser" | "postiz">("browser");
   const [isAiGenerated, setIsAiGenerated] = useState<boolean>(true);
   const [relatedVideoUrl, setRelatedVideoUrl] = useState<string>("");
@@ -291,7 +300,15 @@ export function PublishingStudio({
         setHashtagSets(sets);
         const selected: Record<string, string[]> = {};
         for (const set of sets) {
-          if (set.enabled) selected[set.platform] = [...(selected[set.platform] || []), set.id];
+          if (set.enabled) {
+            if (set.platform === "all") {
+              for (const p of ["instagram", "youtube", "tiktok", "facebook", "twitter"]) {
+                selected[p] = [...(selected[p] || []), set.id];
+              }
+            } else {
+              selected[set.platform] = [...(selected[set.platform] || []), set.id];
+            }
+          }
         }
         setSelectedHashtagSetIds(selected);
       }
@@ -795,6 +812,36 @@ export function PublishingStudio({
     return "instagram";
   }
 
+  function isHashtagSetSelected(set: HashtagSet): boolean {
+    if (set.platform === "all") {
+      const platforms = ["instagram", "youtube", "tiktok", "facebook", "twitter"];
+      return platforms.some((p) => (selectedHashtagSetIds[p] || []).includes(set.id));
+    }
+    return (selectedHashtagSetIds[set.platform] || []).includes(set.id);
+  }
+
+  function toggleHashtagSet(set: HashtagSet) {
+    const currentlySelected = isHashtagSetSelected(set);
+    if (set.platform === "all") {
+      const platforms = ["instagram", "youtube", "tiktok", "facebook", "twitter"];
+      setSelectedHashtagSetIds((prev) => {
+        const next = { ...prev };
+        for (const p of platforms) {
+          const list = prev[p] || [];
+          next[p] = currentlySelected ? list.filter((id) => id !== set.id) : (list.includes(set.id) ? list : [...list, set.id]);
+        }
+        return next;
+      });
+    } else {
+      setSelectedHashtagSetIds((prev) => ({
+        ...prev,
+        [set.platform]: currentlySelected
+          ? (prev[set.platform] || []).filter((id) => id !== set.id)
+          : [...(prev[set.platform] || []), set.id],
+      }));
+    }
+  }
+
   async function createHashtagSet() {
     if (!newSetName.trim() || !newSetTags.trim()) {
       setError("Etiket kümesi adı ve etiketleri zorunludur.");
@@ -805,16 +852,102 @@ export function PublishingStudio({
     try {
       const response = await fetch(`/api/projects/${projectId}/hashtag-sets`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ platform: newSetPlatform, name: newSetName, hashtags: newSetTags, enabled: true }),
+        body: JSON.stringify({
+          platform: newSetPlatform,
+          name: newSetName,
+          hashtags: newSetTags,
+          category: newSetCategory,
+          rotationCount: newSetRotation,
+          enabled: true,
+        }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || "Etiket kümesi oluşturulamadı.");
       setHashtagSets((prev) => [...prev, result.set]);
-      setSelectedHashtagSetIds((prev) => ({ ...prev, [newSetPlatform]: [...(prev[newSetPlatform] || []), result.set.id] }));
-      setNewSetName(""); setNewSetTags("");
+      if (newSetPlatform === "all") {
+        const platforms = ["instagram", "youtube", "tiktok", "facebook", "twitter"];
+        setSelectedHashtagSetIds((prev) => {
+          const next = { ...prev };
+          for (const p of platforms) next[p] = [...(next[p] || []), result.set.id];
+          return next;
+        });
+      } else {
+        setSelectedHashtagSetIds((prev) => ({ ...prev, [newSetPlatform]: [...(prev[newSetPlatform] || []), result.set.id] }));
+      }
+      setNewSetName(""); setNewSetTags(""); setNewSetRotation(0);
       setSuccess("Etiket kümesi kaydedildi.");
+      setTimeout(() => setSuccess(null), 3000);
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
     finally { setSavingHashtagSet(false); }
+  }
+
+  async function seedHashtagTemplates() {
+    setSeedingTemplates(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/hashtag-sets`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "seed_templates" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Şablonlar yüklenemedi.");
+      const sets: HashtagSet[] = data.sets || [];
+      setHashtagSets(sets);
+      const selected: Record<string, string[]> = {};
+      for (const set of sets) {
+        if (set.enabled) {
+          if (set.platform === "all") {
+            for (const p of ["instagram", "youtube", "tiktok", "facebook", "twitter"]) {
+              selected[p] = [...(selected[p] || []), set.id];
+            }
+          } else {
+            selected[set.platform] = [...(selected[set.platform] || []), set.id];
+          }
+        }
+      }
+      setSelectedHashtagSetIds(selected);
+      setSuccess(`${data.createdCount || 0} hazır etiket kümesi yüklendi.`);
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSeedingTemplates(false);
+    }
+  }
+
+  async function saveEditedHashtagSet() {
+    if (!editingHashtagSet) return;
+    if (!editingHashtagSet.name.trim() || !editingHashtagSet.hashtags.length) {
+      setError("Küme adı ve en az bir etiket zorunludur.");
+      return;
+    }
+    setSavingEditSet(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/hashtag-sets/${editingHashtagSet.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editingHashtagSet.name,
+          platform: editingHashtagSet.platform,
+          category: editingHashtagSet.category || "topic",
+          rotationCount: editingHashtagSet.rotationCount || 0,
+          hashtags: editingHashtagSet.hashtags,
+          enabled: editingHashtagSet.enabled,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Küme güncellenemedi.");
+      setHashtagSets((prev) => prev.map((s) => (s.id === data.set.id ? data.set : s)));
+      setEditingHashtagSet(null);
+      setEditTagsInput("");
+      setSuccess("Etiket kümesi güncellendi.");
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingEditSet(false);
+    }
   }
 
   async function deleteHashtagSet(set: HashtagSet) {
@@ -2030,38 +2163,305 @@ export function PublishingStudio({
                 <div className="hashtag-set-panel">
                   <div className="hashtag-set-header">
                     <div>
-                      <strong># Hazır Etiket Kümeleri</strong>
-                      <span>Platforma özel kayıtlı etiketleri AI sonucuna ekler.</span>
+                      <strong># Akıllı Etiket Kümeleri</strong>
+                      <span>Katmanlı (Marka / Konu / Trend) &amp; shadowban önleyici rotasyonel etiketleme.</span>
                     </div>
-                    <label className="hashtag-set-toggle">
-                      <input type="checkbox" checked={includeHashtagSets} onChange={(e) => setIncludeHashtagSets(e.target.checked)} />
-                      {includeHashtagSets ? "Açık" : "Kapalı"}
-                    </label>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <button
+                        type="button"
+                        onClick={() => void seedHashtagTemplates()}
+                        disabled={seedingTemplates}
+                        className="button secondary compact"
+                        style={{ height: "24px", fontSize: "9.5px", padding: "0 6px" }}
+                        title="Atölye Hanem hazır etiket paketlerini yükle"
+                      >
+                        {seedingTemplates ? <LoaderCircle size={10} className="spin" /> : <Sparkles size={10} />}
+                        Şablonları Yükle
+                      </button>
+                      <label className="hashtag-set-toggle">
+                        <input type="checkbox" checked={includeHashtagSets} onChange={(e) => setIncludeHashtagSets(e.target.checked)} />
+                        {includeHashtagSets ? "Açık" : "Kapalı"}
+                      </label>
+                    </div>
                   </div>
-                  {hashtagSets.length > 0 && (
+
+                  {hashtagSets.length === 0 ? (
+                    <div style={{ padding: "10px", background: "#ffffff", borderRadius: "8px", border: "1px dashed #cbd5e1", textAlign: "center", display: "flex", flexDirection: "column", gap: "5px", alignItems: "center" }}>
+                      <span style={{ fontSize: "10.5px", color: "#64748b" }}>Henüz kayıtlı etiket kümeniz bulunmuyor.</span>
+                      <button
+                        type="button"
+                        onClick={() => void seedHashtagTemplates()}
+                        disabled={seedingTemplates}
+                        className="button primary compact"
+                        style={{ height: "26px", fontSize: "10px" }}
+                      >
+                        {seedingTemplates ? <LoaderCircle size={10} className="spin" /> : <Sparkles size={10} />}
+                        Atölye Hanem Örnek Kümelerini Yükle
+                      </button>
+                    </div>
+                  ) : (
                     <div className="hashtag-set-chips">
                       {hashtagSets.map((set) => {
-                        const selected = (selectedHashtagSetIds[set.platform] || []).includes(set.id);
-                        return <button key={set.id} type="button" className={`hashtag-set-chip ${selected ? "active" : ""}`}
-                          onClick={() => setSelectedHashtagSetIds((prev) => ({ ...prev, [set.platform]: selected ? (prev[set.platform] || []).filter((id) => id !== set.id) : [...(prev[set.platform] || []), set.id] }))}>
-                          <span>{set.platform} · {set.name}</span><small>{set.hashtags.length}</small>
-                          <X size={11} onClick={(event) => { event.stopPropagation(); void deleteHashtagSet(set); }} />
-                        </button>;
+                        const selected = isHashtagSetSelected(set);
+                        return (
+                          <div
+                            key={set.id}
+                            className={`hashtag-set-chip ${selected ? "active" : ""}`}
+                            onClick={() => toggleHashtagSet(set)}
+                            title={set.hashtags.join(" ")}
+                          >
+                            {set.category === "brand" ? (
+                              <span className="hashtag-badge-brand">⭐ Marka</span>
+                            ) : set.category === "trend" ? (
+                              <span className="hashtag-badge-trend">🔥 Trend</span>
+                            ) : (
+                              <span className="hashtag-badge-topic">🎯 Niş</span>
+                            )}
+                            <span className="hashtag-badge-plat">
+                              {set.platform === "all" ? "🌐 Tümü" : set.platform.toUpperCase()}
+                            </span>
+                            <span>{set.name}</span>
+                            {set.rotationCount && set.rotationCount > 0 ? (
+                              <small title={`${set.hashtags.length} etiket arasından rastgele ${set.rotationCount} tanesi seçilir`}>
+                                🎲 {set.rotationCount}/{set.hashtags.length}
+                              </small>
+                            ) : (
+                              <small>{set.hashtags.length}</small>
+                            )}
+                            <button
+                              type="button"
+                              className="hashtag-chip-action"
+                              title="Düzenle"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setEditingHashtagSet(set);
+                              }}
+                            >
+                              <Pencil size={10} />
+                            </button>
+                            <button
+                              type="button"
+                              className="hashtag-chip-action del"
+                              title="Sil"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void deleteHashtagSet(set);
+                              }}
+                            >
+                              <X size={10} />
+                            </button>
+                          </div>
+                        );
                       })}
                     </div>
                   )}
+
                   <div className="hashtag-set-create">
-                    <select value={newSetPlatform} onChange={(e) => setNewSetPlatform(e.target.value as HashtagSet["platform"])} className="custom-select">
-                      <option value="instagram">Instagram</option><option value="youtube">YouTube</option>
-                      <option value="tiktok">TikTok</option><option value="facebook">Facebook</option><option value="twitter">X</option>
+                    <select
+                      value={newSetPlatform}
+                      onChange={(e) => setNewSetPlatform(e.target.value as HashtagSet["platform"])}
+                      className="custom-select"
+                      title="Hedef Platform"
+                    >
+                      <option value="all">🌐 Tümü (Ortak)</option>
+                      <option value="instagram">Instagram</option>
+                      <option value="youtube">YouTube</option>
+                      <option value="tiktok">TikTok</option>
+                      <option value="facebook">Facebook</option>
+                      <option value="twitter">X (Twitter)</option>
                     </select>
-                    <input value={newSetName} onChange={(e) => setNewSetName(e.target.value)} placeholder="Küme adı" className="custom-input" />
-                    <input value={newSetTags} onChange={(e) => setNewSetTags(e.target.value)} placeholder="#AtolyeHanem #RobotikKodlama" className="custom-input" />
-                    <button type="button" onClick={() => void createHashtagSet()} disabled={savingHashtagSet} className="button secondary compact">
-                      {savingHashtagSet ? <LoaderCircle size={12} className="spin" /> : <span>+</span>} Kaydet
+                    <select
+                      value={newSetCategory}
+                      onChange={(e) => setNewSetCategory(e.target.value as NonNullable<HashtagSet["category"]>)}
+                      className="custom-select"
+                      title="Kategori Rolü"
+                    >
+                      <option value="brand">⭐ Marka</option>
+                      <option value="topic">🎯 Konu / Niş</option>
+                      <option value="trend">🔥 Trend / Keşfet</option>
+                    </select>
+                    <input
+                      value={newSetName}
+                      onChange={(e) => setNewSetName(e.target.value)}
+                      placeholder="Küme adı"
+                      className="custom-input"
+                    />
+                    <input
+                      value={newSetTags}
+                      onChange={(e) => setNewSetTags(e.target.value)}
+                      placeholder="#AtolyeHanem #RobotikKodlama"
+                      className="custom-input"
+                    />
+                    <select
+                      value={newSetRotation}
+                      onChange={(e) => setNewSetRotation(Number(e.target.value))}
+                      className="custom-select"
+                      title="Rotasyon (Rastgele N Seçim)"
+                    >
+                      <option value="0">Tümü</option>
+                      <option value="3">🎲 3 Seç</option>
+                      <option value="4">🎲 4 Seç</option>
+                      <option value="5">🎲 5 Seç</option>
+                      <option value="6">🎲 6 Seç</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => void createHashtagSet()}
+                      disabled={savingHashtagSet}
+                      className="button secondary compact"
+                      style={{ height: "32px", fontSize: "11px" }}
+                    >
+                      {savingHashtagSet ? <LoaderCircle size={12} className="spin" /> : <span>+</span>} Ekle
                     </button>
                   </div>
                 </div>
+
+                {/* Hashtag Set Edit Modal */}
+                {editingHashtagSet && (
+                  <div className="hashtag-edit-overlay" onClick={() => setEditingHashtagSet(null)}>
+                    <div className="hashtag-edit-card" onClick={(e) => e.stopPropagation()}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "8px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <Pencil size={14} style={{ color: "#6366f1" }} />
+                          <strong style={{ fontSize: "13px", color: "#1e293b" }}>Etiket Kümesini Düzenle</strong>
+                        </div>
+                        <button type="button" onClick={() => setEditingHashtagSet(null)} className="hashtag-chip-action">
+                          <X size={14} />
+                        </button>
+                      </div>
+
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                        <div>
+                          <label style={{ fontSize: "10px", fontWeight: 700, color: "#64748b", display: "block", marginBottom: "3px" }}>Küme Adı</label>
+                          <input
+                            type="text"
+                            className="custom-input"
+                            value={editingHashtagSet.name}
+                            onChange={(e) => setEditingHashtagSet({ ...editingHashtagSet, name: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: "10px", fontWeight: 700, color: "#64748b", display: "block", marginBottom: "3px" }}>Hedef Platform</label>
+                          <select
+                            className="custom-select"
+                            value={editingHashtagSet.platform}
+                            onChange={(e) => setEditingHashtagSet({ ...editingHashtagSet, platform: e.target.value as HashtagSet["platform"] })}
+                          >
+                            <option value="all">🌐 Tüm Platformlar (Ortak)</option>
+                            <option value="instagram">Instagram</option>
+                            <option value="youtube">YouTube</option>
+                            <option value="tiktok">TikTok</option>
+                            <option value="facebook">Facebook</option>
+                            <option value="twitter">X (Twitter)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                        <div>
+                          <label style={{ fontSize: "10px", fontWeight: 700, color: "#64748b", display: "block", marginBottom: "3px" }}>Kategori / Rol</label>
+                          <select
+                            className="custom-select"
+                            value={editingHashtagSet.category || "topic"}
+                            onChange={(e) => setEditingHashtagSet({ ...editingHashtagSet, category: e.target.value as HashtagSet["category"] })}
+                          >
+                            <option value="brand">⭐ Sabit Marka (Öncelikli)</option>
+                            <option value="topic">🎯 Konu &amp; Niş</option>
+                            <option value="trend">🔥 Trend &amp; Keşfet</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ fontSize: "10px", fontWeight: 700, color: "#64748b", display: "block", marginBottom: "3px" }}>🎲 Rotasyon (Shadowban Kalkanı)</label>
+                          <select
+                            className="custom-select"
+                            value={editingHashtagSet.rotationCount || 0}
+                            onChange={(e) => setEditingHashtagSet({ ...editingHashtagSet, rotationCount: Number(e.target.value) })}
+                          >
+                            <option value="0">Tümünü Kullan (Rotasyonsuz)</option>
+                            <option value="2">Rastgele 2 Etiket Seç</option>
+                            <option value="3">Rastgele 3 Etiket Seç</option>
+                            <option value="4">Rastgele 4 Etiket Seç</option>
+                            <option value="5">Rastgele 5 Etiket Seç</option>
+                            <option value="6">Rastgele 6 Etiket Seç</option>
+                            <option value="8">Rastgele 8 Etiket Seç</option>
+                            <option value="10">Rastgele 10 Etiket Seç</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: "10px", fontWeight: 700, color: "#64748b", display: "block", marginBottom: "4px" }}>
+                          Etiketler ({editingHashtagSet.hashtags.length})
+                        </label>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", maxHeight: "120px", overflowY: "auto", padding: "8px", background: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                          {editingHashtagSet.hashtags.map((tag, idx) => (
+                            <span key={idx} style={{ display: "inline-flex", alignItems: "center", gap: "4px", background: "#ffffff", border: "1px solid #cbd5e1", padding: "2px 7px", borderRadius: "999px", fontSize: "11px", color: "#334155" }}>
+                              {tag}
+                              <X
+                                size={11}
+                                style={{ cursor: "pointer", color: "#94a3b8" }}
+                                onClick={() => {
+                                  const next = editingHashtagSet.hashtags.filter((_, i) => i !== idx);
+                                  setEditingHashtagSet({ ...editingHashtagSet, hashtags: next });
+                                }}
+                              />
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <input
+                          type="text"
+                          className="custom-input"
+                          placeholder="#YeniEtiket ekle..."
+                          value={editTagsInput}
+                          onChange={(e) => setEditTagsInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              if (editTagsInput.trim()) {
+                                const added = editTagsInput.split(/[\s,]+/).map((t) => t.trim()).filter(Boolean).map((t) => t.startsWith("#") ? t : `#${t}`);
+                                setEditingHashtagSet({
+                                  ...editingHashtagSet,
+                                  hashtags: [...new Set([...editingHashtagSet.hashtags, ...added])],
+                                });
+                                setEditTagsInput("");
+                              }
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="button secondary compact"
+                          style={{ height: "34px", padding: "0 12px", fontSize: "11px" }}
+                          onClick={() => {
+                            if (editTagsInput.trim()) {
+                              const added = editTagsInput.split(/[\s,]+/).map((t) => t.trim()).filter(Boolean).map((t) => t.startsWith("#") ? t : `#${t}`);
+                              setEditingHashtagSet({
+                                ...editingHashtagSet,
+                                hashtags: [...new Set([...editingHashtagSet.hashtags, ...added])],
+                              });
+                              setEditTagsInput("");
+                            }
+                          }}
+                        >
+                          + Ekle
+                        </button>
+                      </div>
+
+                      <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "6px" }}>
+                        <button type="button" className="button secondary compact" onClick={() => setEditingHashtagSet(null)}>
+                          Vazgeç
+                        </button>
+                        <button type="button" className="button primary compact" disabled={savingEditSet} onClick={() => void saveEditedHashtagSet()}>
+                          {savingEditSet ? <LoaderCircle size={12} className="spin" /> : <CheckCircle2 size={12} />}
+                          Değişiklikleri Kaydet
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {copyFeedback && (
                   <div style={{ fontSize: "11px", color: "var(--primary)", background: "#f5f3ff", padding: "6px 10px", borderRadius: "8px" }}>

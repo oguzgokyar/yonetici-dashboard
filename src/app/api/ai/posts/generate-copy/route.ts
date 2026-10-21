@@ -1,7 +1,12 @@
 import { completeText, parseJsonResponse } from "@/lib/server/cliproxy-text";
 import { getDatabase } from "@/lib/server/database";
 import { brandConceptInstruction, type BrandConcept } from "@/lib/brand-concept";
-import { mergePlatformHashtags, normalizeHashtagList, type SocialPlatform } from "@/lib/social/hashtag-policy";
+import {
+  mergePlatformHashtags,
+  normalizeHashtagList,
+  sampleHashtags,
+  type SocialPlatform,
+} from "@/lib/social/hashtag-policy";
 import {
   PLATFORM_COPY_RULES,
   getPlatformFormatRule,
@@ -38,14 +43,32 @@ const styleDescriptions: Record<CopyStyle, string> = {
   story: "Hikâye Anlatımı / Samimi (Deneyim, hata yapıp öğrenme ve topluluk odaklı samimi dil)",
 };
 
-function getEnabledSetHashtags(projectId: string, platform: SocialPlatform, selectedSetIds?: string[]) {
+function getEnabledCategorizedSetHashtags(projectId: string, platform: SocialPlatform, selectedSetIds?: string[]) {
   const database = getDatabase();
-  const rows = database.prepare(`SELECT id, hashtags_json FROM project_hashtag_sets WHERE project_id=? AND platform=? AND enabled=1`)
-    .all(projectId, platform) as Array<{ id: string; hashtags_json: string }>;
+  const rows = database.prepare(`
+    SELECT id, category, rotation_count, hashtags_json FROM project_hashtag_sets
+    WHERE project_id=? AND (platform=? OR platform='all') AND enabled=1
+  `).all(projectId, platform) as Array<{ id: string; category: string; rotation_count: number; hashtags_json: string }>;
   const selected = selectedSetIds === undefined ? null : new Set(selectedSetIds);
-  return rows
-    .filter((row) => !selected || selected.has(row.id))
-    .flatMap((row) => JSON.parse(row.hashtags_json || "[]") as string[]);
+
+  const brandHashtags: string[] = [];
+  const topicHashtags: string[] = [];
+  const trendHashtags: string[] = [];
+
+  for (const row of rows) {
+    if (selected && !selected.has(row.id)) continue;
+    const allTags = normalizeHashtagList(JSON.parse(row.hashtags_json || "[]") as string[]);
+    const sampled = row.rotation_count > 0 ? sampleHashtags(allTags, row.rotation_count) : allTags;
+    if (row.category === "brand") {
+      brandHashtags.push(...sampled);
+    } else if (row.category === "trend") {
+      trendHashtags.push(...sampled);
+    } else {
+      topicHashtags.push(...sampled);
+    }
+  }
+
+  return { brandHashtags, topicHashtags, trendHashtags };
 }
 
 async function generateMultiPlatformCopy(input: {
@@ -173,10 +196,17 @@ export async function POST(request: Request) {
       }
 
       const aiHashtags = normalizeHashtagList(generated.hashtags || []);
-      const setHashtags = input.includeHashtagSets
-        ? getEnabledSetHashtags(input.projectId!, platform, input.selectedHashtagSetIds?.[platform])
-        : [];
-      const merged = mergePlatformHashtags({ platform, aiHashtags, setHashtags, includeSets: Boolean(input.includeHashtagSets) });
+      const { brandHashtags, topicHashtags, trendHashtags } = input.includeHashtagSets
+        ? getEnabledCategorizedSetHashtags(input.projectId!, platform, input.selectedHashtagSetIds?.[platform])
+        : { brandHashtags: [], topicHashtags: [], trendHashtags: [] };
+      const merged = mergePlatformHashtags({
+        platform,
+        aiHashtags,
+        brandHashtags,
+        topicHashtags,
+        trendHashtags,
+        includeSets: Boolean(input.includeHashtagSets),
+      });
       const aiTags = normalizeHashtagList(generated.tags || []).map((tag) => tag.replace(/^#/, ""));
       const tags = platform === "youtube" ? [...new Set([...merged.tags, ...aiTags])].slice(0, 15) : [];
 
