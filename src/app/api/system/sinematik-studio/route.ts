@@ -5,8 +5,8 @@ export const dynamic = "force-dynamic";
 
 const BRIDGE_URLS = [
   "http://10.0.1.1:8080/api/internal/sinematik-studio",
+  "http://10.0.7.1:8080/api/internal/sinematik-studio",
   "http://127.0.0.1:8080/api/internal/sinematik-studio",
-  "http://10.0.1.8:8080/api/internal/sinematik-studio",
 ];
 
 async function callBridge(action?: string) {
@@ -18,11 +18,16 @@ async function callBridge(action?: string) {
         method: action ? "POST" : "GET",
         headers: { "Content-Type": "application/json" },
         body: action ? JSON.stringify({ action }) : undefined,
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(6000),
       });
 
+      const data = await res.json().catch(() => null);
       if (res.ok) {
-        return await res.json();
+        return data || { ok: true };
+      } else if (data) {
+        return data;
+      } else {
+        lastError = new Error(`HTTP ${res.status}`);
       }
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));

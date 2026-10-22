@@ -365,18 +365,24 @@ MARKANIN RENK & STİL REHBERİ (İlham ve Denge Rehberi):
 ${concept.visualStyle ? `- Görsel Stil Kuralı: ${concept.visualStyle}\n` : ""}${concept.layoutGuidelines ? `- Yerleşim ve Kenar Boşluğu: ${concept.layoutGuidelines}\n` : ""}`;
   }
 
-  // Brief metnini dinamik olarak marka seçimi ve çakışma önleyici kural ile zenginleştir
+  // Brief metnini dinamik olarak marka seçimi ve evrensel görsel disiplin kuralları ile zenginleştir (Sabit kalıp dayatmadan özgünlüğü korur)
   const effectiveBrief = [
     payload.prompt,
     brandBriefInjection,
     brandGuardianBlock,
-    `[GRAFİK DÜZEN & ÇAKIŞMA ÖNLEME KURALI]:\n- Katman Çakışması Kesinlikle Yasaktır (No overlapping layers/bounding boxes): Metin kutuları hiçbir illüstrasyonun, grafiğin veya diğer metinlerin üzerine binemez.\n- Her öğe etrafında yeterli negatif alan (boşluk payı) bırakılmalıdır.\n- Tasarımda özgün, dengeli ve temiz bir görsel hiyerarşi oluştur.`
+    `[ÖZGÜN KOMPOZİSYON & GÖRSEL DİSİPLİN İLKELERİ (Sabit Kalıp Yok, Özgür ve Temiz Mizanpaj)]:
+- Serbest ve Özgün Tasarım: Sabit tek tip kalıplar (sol metin / sağ görsel gibi katı şablonlar) KESİNLİKLE KULLANILMAZ. Tasarımın içeriğine ve ruhuna göre serbest, yaratıcı ve özgün mizanpajlar oluşturulur (merkez odaklı, asimetrik, kartlı, katmanlı, ferah vb.).
+- UI & Sayaç Güvenli Alanı: Kenarlarda karusel gezinme okları (<, >) ve sağ altta sayfa indikatörü (örn: 5/6) için en az 100px tampon güvenlik payı bırakılır. Kablolar, devreler, logolar veya metinler bu arayüz elemanlarının altına giremez.
+- Katman Bağımsızlığı & Netlik: İki boyutlu teknik blueprint/şema çizimleri ile üç boyutlu fiziksel nesneler birbirinin içine karmaşık kolaj şeklinde yedirilmez. Her nesne kendi net alanında, temiz ve belirgin durmalıdır.
+- Tipografik Orantı & Okunabilirlik: Başlık devasa iken liste maddeleri veya açıklamalar okunmayacak kadar minyatür olamaz. Gövde metinleri mobilde tek bakışta rahatça okunabilecek puntoda ve ferah satır aralığında olmalıdır.
+- Katman Çakışması Kesinlikle Yasaktır (No element collision): Metin kutuları veya objeler hiçbir zaman diğer metinlerin veya karmaşık illüstrasyonların üzerine binemez.`
   ].filter(Boolean).join("\n\n").replace(/"/g, '\\"');
 
   const isSinglePage = payload.slideCount === 1;
 
   return `[HERMES_CANVA_MACHINE_TASK v${HERMES_CANVA_PIPELINE_VERSION}]
 Bu bir Yönetici Dashboard Canva görsel/video üretim makine görevidir.
+Bu görevde 'canva-carousel-director' ve 'canva-mcp' becerilerini kullan.
 
 KOORDİNASYON: Bu işin tüm tarayıcı komutlarını HEAVY_JOB_ID=canva:${payload.jobId} ortam değişkeniyle çalıştır.
 Bu aynı iş kimliğiyle mevcut dashboard claim'ine katılır; yeni/farklı iş kimliği kullanma.
@@ -403,16 +409,27 @@ ADIM ADIM YAPMAN GEREKENLER:
 2. mcp__canva__create_design çağır: brief="${effectiveBrief}", format="${meta.canvaFormat}", sayfa sayısı=${payload.slideCount}.
 3. Asenkronsa mcp__canva__get_create_design_async_job ile tamamlanmasını bekle.
 4. get_design ile design_id ve edit_url al; get_design_pages ile sayfa sayısını ve boyutları doğrula.
-${isSinglePage ? "// TEKİL STORY / POST HIZLI MOD: Çoklu sayfa döngülerini atla, doğrudan tek adımda yüksek çözünürlük export al.\n" : ""}5. İlerleme bildir: POST ${progressEndpoint} — { "phase":"exporting", "percent":70, "completed":${Math.floor(payload.slideCount / 2)}, "total":${payload.slideCount}, "detail":"Sayfalar dışa aktarılıyor..." }
-6. Her sayfa için get_design_thumbnail veya get_design_pages ile signed thumbnail URL'lerini al.
-7. terminal aracıyla her URL'yi /tmp/canva_slides_<jobId>/ dizinine PNG olarak indir (curl veya python3 urllib).
-8. İlerleme bildir: POST ${progressEndpoint} — { "phase":"uploading", "percent":90, "completed":${payload.slideCount}, "total":${payload.slideCount}, "detail":"Paket arşive kaydediliyor..." }
-9. Tüm PNG'leri ve manifest'i multipart/form-data olarak POST ${completeEndpoint} adresine gönder:
+5. İlerleme bildir: POST ${progressEndpoint} — { "phase":"reviewing", "percent":45, "completed":0, "total":${payload.slideCount}, "detail":"Tasarım yerleşimi ve görsel disiplin gözden geçiriliyor..." }
+6. GÖZDEN GEÇİRME VE DÜZENLEME (LAYOUT REVIEW & REFINEMENT):
+   - get_design_content çağırarak oluşturulan sayfalardaki metin bloklarını ve hiyerarşiyi incele.
+   - Gözden Geçirme Kontrolleri:
+     a) Okunabilirlik: Başlık aşırı devasa olup liste veya gövde metinleri çok küçük kalmış mı?
+     b) Arayüz Marjinleri: Sağ-sol ok butonları ve sağ alttaki sayfa sayacı hizasında ezilen görsel/kablo/yazı var mı?
+     c) Katman Çakışması: İllüstrasyon veya arka plan dekoru öndeki metinlerle çarpışıyor mu?
+   - Gerekirse cerrahi düzeltme yap:
+     - start_editing_transaction(design_id) aç.
+     - perform_editing_operations ile çakışan veya aşırı küçük kalan metinlerin boyutunu ferahlat veya karmaşık dekoratif katmanı sadeleştir.
+     - commit_editing_transaction ile kaydet.
+7. İlerleme bildir: POST ${progressEndpoint} — { "phase":"exporting", "percent":70, "completed":${Math.floor(payload.slideCount / 2)}, "total":${payload.slideCount}, "detail":"Sayfalar dışa aktarılıyor..." }
+8. Her sayfa için get_design_thumbnail veya get_design_pages ile signed thumbnail URL'lerini al.
+9. terminal aracıyla her URL'yi /tmp/canva_slides_<jobId>/ dizinine PNG olarak indir (curl veya python3 urllib).
+10. İlerleme bildir: POST ${progressEndpoint} — { "phase":"uploading", "percent":90, "completed":${payload.slideCount}, "total":${payload.slideCount}, "detail":"Paket arşive kaydediliyor..." }
+11. Tüm PNG'leri ve manifest'i multipart/form-data olarak POST ${completeEndpoint} adresine gönder:
    - Header: Authorization: Bearer ${payload.callbackToken}
    - manifest alanı (JSON string):
      { "designId":"<id>", "editUrl":"<url>", "contentType":"${payload.contentType}", "width":${meta.width}, "height":${meta.height}, "pageCount":${payload.slideCount}, "exports":[{"position":1,"name":"slide-01"},{"position":2,"name":"slide-02"},...] }
    - Dosya alanları: "slide-01", "slide-02", ... (${payload.slideCount} adet PNG)
-10. Başarıysa: Kısa özet döndür (design_id + edit_url).
+12. Başarıysa: Kısa özet döndür (design_id + edit_url).
 
 HATA DURUMUNDA:
 POST ${failEndpoint}

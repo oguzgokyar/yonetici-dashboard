@@ -50,7 +50,15 @@ export async function GET(request: Request) {
   const projectId = new URL(request.url).searchParams.get("projectId")?.trim();
   if (!projectId) return Response.json({ ok: false, message: "Proje gerekli." }, { status: 400 });
   const rows = getDatabase().prepare("SELECT id, type, model, request_json, response_json, created_at, completed_at FROM generation_jobs WHERE project_id=? AND type IN ('video', 'google-vids') AND status='complete' ORDER BY created_at DESC LIMIT 50").all(projectId) as unknown as (VideoJobRow & { type?: string; model?: string })[];
-  const videos = rows.map((row) => {
+  const validRows = rows.filter((row) => {
+    try {
+      const req = JSON.parse(row.request_json || "{}");
+      // Sinematik Stüdyo sahne kesitleri ve ara klipler bölüm videosuna dönüşmeden arşivde listelenmez
+      if (req.isSceneClip || req.scope === "scene_clip" || req.isDraftScene) return false;
+    } catch { /* ignore */ }
+    return true;
+  });
+  const videos = validRows.map((row) => {
     let idea: { id?: string; title?: string; concept?: string } | undefined;
     let sourceTopic: string | undefined;
     let sourceAssetId: string | undefined;

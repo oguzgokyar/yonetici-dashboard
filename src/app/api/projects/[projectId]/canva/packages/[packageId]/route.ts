@@ -104,3 +104,18 @@ export async function DELETE(_request: Request, context: Context) {
 
   return Response.json({ ok: true });
 }
+
+export async function PATCH(request: Request, context: Context) {
+  if (!isCanvaStudioEnabled()) {
+    return Response.json({ ok: false, message: "Canva Studio devre dışı." }, { status: 404 });
+  }
+  const { projectId, packageId } = await context.params;
+  const database = getDatabase();
+  const body = (await request.json().catch(() => ({}))) as { videoStatus?: string };
+  if (body.videoStatus) {
+    database
+      .prepare("UPDATE media_packages SET video_status=?, updated_at=? WHERE id=? AND project_id=?")
+      .run(body.videoStatus, new Date().toISOString(), packageId, projectId);
+  }
+  return Response.json({ ok: true });
+}

@@ -24,8 +24,8 @@ async function fetchCanvaExportUrls(
 ): Promise<string[]> {
   const bridgeEndpoints = [
     { host: "10.0.1.1", port: 8080 },
+    { host: "10.0.7.1", port: 8080 },
     { host: "127.0.0.1", port: 8080 },
-    { host: "10.0.1.8", port: 8080 },
   ];
 
   // Try up to 3 accounts from the pool with automatic failover

@@ -22,8 +22,8 @@ export async function checkTikTokBrowserSession(): Promise<{ ok: boolean; logged
     // 1. Host :8080 köprüsü üzerinden açık olan CDP oturumunu kontrol et
     const bridgeUrls = [
       "http://10.0.1.1:8080/api/internal/tiktok/session",
+      "http://10.0.7.1:8080/api/internal/tiktok/session",
       "http://127.0.0.1:8080/api/internal/tiktok/session",
-      "http://10.0.1.8:8080/api/internal/tiktok/session",
     ];
 
     for (const bUrl of bridgeUrls) {
@@ -73,8 +73,8 @@ export async function uploadVideoViaTikTokBrowser(options: {
     // 1. Host :8080 köprüsü üzerinden yükleme yapmayı dene (Konteyner içi izolasyon köprüsü)
     const bridgeUrls = [
       "http://10.0.1.1:8080/api/internal/tiktok/upload",
+      "http://10.0.7.1:8080/api/internal/tiktok/upload",
       "http://127.0.0.1:8080/api/internal/tiktok/upload",
-      "http://10.0.1.8:8080/api/internal/tiktok/upload",
     ];
 
     for (const bUrl of bridgeUrls) {

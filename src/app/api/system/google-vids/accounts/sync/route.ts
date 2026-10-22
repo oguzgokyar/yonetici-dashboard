@@ -15,8 +15,8 @@ export async function POST() {
     // (runs where Chromium and Local State live)
     const bridgeUrls = [
       "http://10.0.1.1:8080/api/internal/google-vids/browser-accounts",
+      "http://10.0.7.1:8080/api/internal/google-vids/browser-accounts",
       "http://127.0.0.1:8080/api/internal/google-vids/browser-accounts",
-      "http://10.0.1.8:8080/api/internal/google-vids/browser-accounts",
     ];
 
     let discoveredAccounts: DiscoveredAccount[] | null = null;

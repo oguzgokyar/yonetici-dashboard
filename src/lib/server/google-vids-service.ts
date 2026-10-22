@@ -260,8 +260,8 @@ export async function processGoogleVidsJob(job: {
     // 1. Try Direct Host Runner Bridge on :8080 (0.05s instant launch, no LLM overhead)
     const HOST_BRIDGE_URLS = [
       "http://10.0.1.1:8080/api/internal/google-vids/run",
+      "http://10.0.7.1:8080/api/internal/google-vids/run",
       "http://127.0.0.1:8080/api/internal/google-vids/run",
-      "http://10.0.1.8:8080/api/internal/google-vids/run",
     ];
 
   let bridgeStarted = false;

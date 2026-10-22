@@ -28,6 +28,7 @@ import {
   Palette,
   CalendarPlus,
   Clapperboard,
+  RotateCcw,
 } from "lucide-react";
 import { TelegramSendButton } from "@/components/ui/telegram-send-button";
 import { CANVA_CONTENT_TYPES, type CanvaContentType } from "@/lib/server/hermes-canva-task";
@@ -118,6 +119,9 @@ export function CanvaGenerationStudio({
 
   const [message, setMessage] = useState("");
   const [producing, setProducing] = useState(false);
+  const [isRefiningPrompt, setIsRefiningPrompt] = useState(false);
+  const [originalPrompt, setOriginalPrompt] = useState<string | null>(null);
+  const [showPrefillRefineTip, setShowPrefillRefineTip] = useState(false);
   const [jobs, setJobs] = useState<CanvaJob[]>([]);
   const [packages, setPackages] = useState<CanvaPackage[]>([]);
   const [loadingPackages, setLoadingPackages] = useState(true);
@@ -203,6 +207,9 @@ export function CanvaGenerationStudio({
         if (parsedPrefill.contentType) setContentType(parsedPrefill.contentType);
         if (parsedPrefill.slideCount) setSlideCount(parsedPrefill.slideCount);
         if (parsedPrefill.style) setStyle(parsedPrefill.style);
+        if (parsedPrefill.isPrefilledFromIdea) {
+          setShowPrefillRefineTip(true);
+        }
         setMessage("✓ Strateji sayfasından aktarılan kreatif fikir prompt alanına yerleştirildi.");
         return;
       }
@@ -341,6 +348,54 @@ export function CanvaGenerationStudio({
     setSelectedFields((curr) =>
       curr.includes(key) ? curr.filter((k) => k !== key) : [...curr, key]
     );
+  }
+
+  async function handleRefinePrompt() {
+    if (!prompt.trim() || isRefiningPrompt) return;
+    setIsRefiningPrompt(true);
+    setMessage("");
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/canva/refine-prompt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: prompt.trim(),
+          contentType,
+          slideCount:
+            CANVA_CONTENT_TYPES[contentType]?.packageType === "carousel" ? slideCount : 1,
+          style,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        refinedPrompt?: string;
+        originalPrompt?: string;
+        slideCount?: number;
+        message?: string;
+      };
+      if (!res.ok || !data.ok || !data.refinedPrompt) {
+        throw new Error(data.message || "Prompt optimize edilemedi.");
+      }
+      setOriginalPrompt(prompt);
+      setPrompt(data.refinedPrompt);
+      if (data.slideCount && CANVA_CONTENT_TYPES[contentType]?.packageType === "carousel") {
+        setSlideCount(data.slideCount);
+      }
+      setShowPrefillRefineTip(false);
+      setMessage("✓ Prompt Canva slayt formatına optimize edildi.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Prompt optimize edilirken bir sorun oluştu.");
+    } finally {
+      setIsRefiningPrompt(false);
+    }
+  }
+
+  function handleUndoRefine() {
+    if (originalPrompt) {
+      setPrompt(originalPrompt);
+      setOriginalPrompt(null);
+      setMessage("Orijinal prompt metnine geri dönüldü.");
+    }
   }
 
   async function handleCreateJob() {
@@ -810,21 +865,72 @@ export function CanvaGenerationStudio({
             <label htmlFor="canva-prompt">
               <span>Kreatif Brief / Prompt</span>
             </label>
-            {prompt.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              {prompt.trim().length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleRefinePrompt}
+                  disabled={isRefiningPrompt}
+                  className="prompt-refine-btn"
+                  title="Promptu Canva slayt formatına optimize et"
+                >
+                  {isRefiningPrompt ? (
+                    <>
+                      <LoaderCircle size={13} className="spin" />
+                      <span>İyileştiriliyor...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={13} />
+                      <span>AI ile İyileştir</span>
+                    </>
+                  )}
+                </button>
+              )}
+              {prompt.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrompt("");
+                    setOriginalPrompt(null);
+                    setShowPrefillRefineTip(false);
+                    setMessage("");
+                  }}
+                  className="prompt-clear-btn"
+                  title="Prompt metnini temizle"
+                >
+                  <X size={13} />
+                  <span>Temizle</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {showPrefillRefineTip && (
+            <div className="prompt-refine-tip-banner">
+              <Sparkles size={14} className="tip-icon" />
+              <span>
+                Bu fikir strateji kütüphanesinden aktarıldı. Canva slaytlarına kusursuz oturması için optimize edebilirsiniz.
+              </span>
               <button
                 type="button"
-                onClick={() => {
-                  setPrompt("");
-                  setMessage("");
-                }}
-                className="prompt-clear-btn"
-                title="Prompt metnini temizle"
+                onClick={handleRefinePrompt}
+                disabled={isRefiningPrompt}
+                className="tip-action-btn"
               >
-                <X size={13} />
-                <span>Temizle</span>
+                {isRefiningPrompt ? "İyileştiriliyor..." : "Optimize Et"}
               </button>
-            )}
-          </div>
+              <button
+                type="button"
+                onClick={() => setShowPrefillRefineTip(false)}
+                className="tip-close-btn"
+                title="Kapat"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
+
           <textarea
             id="canva-prompt"
             className="prompt-area"
@@ -836,7 +942,22 @@ export function CanvaGenerationStudio({
             placeholder="Örn: Yapay zekayı iş süreçlerine entegre etmenin 5 somut adımı. Giriş kancası güçlü, her sayfada tek bir ana aksiyon olan, koyu mor ve beyaz tonlarında profesyonel carousel..."
           />
           <div className="prompt-footer">
-            <span>{prompt.length}/2000</span>
+            <div>
+              {originalPrompt && (
+                <button
+                  type="button"
+                  onClick={handleUndoRefine}
+                  className="prompt-undo-btn"
+                  title="İyileştirme öncesindeki orijinal metne dön"
+                >
+                  <RotateCcw size={12} />
+                  <span>Orijinal Metne Dön</span>
+                </button>
+              )}
+            </div>
+            <span className={prompt.length > 2000 ? "text-red-500 font-semibold" : ""}>
+              {prompt.length}/2000
+            </span>
           </div>
         </div>
 

@@ -242,11 +242,18 @@ export function ProductionQueueDrawer({
 
                         <div className="prod-card-meta">
                           {isDirectRunning ? (
-                            <span className="prod-order-tag" style={{ background: "rgba(16, 185, 129, 0.15)", color: "#10b981", border: "1px solid rgba(16, 185, 129, 0.3)" }}>
-                              ⚡ Üretiliyor
+                            <span
+                              className="prod-order-tag"
+                              style={{
+                                background: item.isDirectMcp ? "rgba(168, 85, 247, 0.15)" : "rgba(16, 185, 129, 0.15)",
+                                color: item.isDirectMcp ? "#c084fc" : "#10b981",
+                                border: item.isDirectMcp ? "1px solid rgba(168, 85, 247, 0.3)" : "1px solid rgba(16, 185, 129, 0.3)",
+                              }}
+                            >
+                              {item.isDirectMcp ? "⚡ Doğrudan MCP" : "⚡ Üretiliyor"}
                             </span>
                           ) : (
-                            <span className="prod-order-tag">#{idx + 1}</span>
+                            <span className="prod-order-tag">#{idx + 1} FIFO</span>
                           )}
                           <button
                             type="button"

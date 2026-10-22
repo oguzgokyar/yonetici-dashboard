@@ -53,8 +53,8 @@ async function fetchCanvaVideoExportUrl(
   // 1. Try host bridge first for ultra-fast (3-5s) direct Canva Cloud MP4 export via pure HTTP/1.1
   const bridgeEndpoints = [
     { host: "10.0.1.1", port: 8080 },
+    { host: "10.0.7.1", port: 8080 },
     { host: "127.0.0.1", port: 8080 },
-    { host: "10.0.1.8", port: 8080 },
   ];
 
   for (const ep of bridgeEndpoints) {

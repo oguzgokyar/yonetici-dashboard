@@ -7,8 +7,8 @@ export async function POST() {
   try {
     const bridgeUrls = [
       "http://10.0.1.1:8080/api/internal/system/cleanup",
+      "http://10.0.7.1:8080/api/internal/system/cleanup",
       "http://127.0.0.1:8080/api/internal/system/cleanup",
-      "http://10.0.1.8:8080/api/internal/system/cleanup",
     ];
 
     let lastError: Error | null = null;

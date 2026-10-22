@@ -7,6 +7,7 @@ export const runtime = "nodejs";
 export interface ProductionQueueItem {
   id: string;
   projectId: string;
+  projectName?: string;
   type: "canva" | "image" | "video" | "video-layer" | "google-vids" | "other";
   typeLabel: string;
   status: "queued" | "dispatching" | "running" | "rendering" | "exporting" | "uploading" | "complete" | "failed";
@@ -21,6 +22,7 @@ export interface ProductionQueueItem {
   previewUrl?: string | null;
   canvaEditUrl?: string | null;
   itemCount?: number;
+  isDirectMcp?: boolean;
 }
 
 type RequestData = { contentType?: string; prompt?: string; renderer?: string; sourceStockVideoId?: string };
@@ -51,20 +53,22 @@ type DbJobRow = {
   completed_at: string | null;
 };
 
-function resolveTypeLabel(type: string, requestData: RequestData): string {
+function resolveTypeLabel(type: string, requestData: RequestData, model?: string): string {
   if (type === "canva") {
-    if ((requestData as any)?.mode === "canva_video_export") return "Canva Karosel Video";
+    if (model === "canva-mcp-refine") return "🪄 Canva Düzen Onarımı";
+    if (model === "canva-mcp-sync") return "🔄 Canva Eşitleme";
+    if ((requestData as any)?.mode === "canva_video_export") return "🎬 Canva Video (FIFO)";
     const cType = requestData?.contentType || "";
     if (cType.includes("carousel")) return "Canva Karosel";
     if (cType.includes("story")) return "Canva Story";
     if (cType.includes("video") || cType.includes("reels")) return "Canva Video";
     return "Canva Tasarım";
   }
-  if (type === "google-vids") return "Google Vids AI";
+  if (type === "google-vids") return "🎬 Google Vids (FIFO)";
   if (type === "image") return "AI Görsel";
   if (type === "video") {
     if (requestData?.renderer === "ffmpeg-frame-engine" || requestData?.sourceStockVideoId) {
-      return "Stok Video Render";
+      return "🎬 Stok Video Render (FIFO)";
     }
     return "Motion Video";
   }
@@ -124,21 +128,35 @@ export async function GET(
     LIMIT 10
   `).all(projectId) as unknown as DbJobRow[];
 
+  // Helper map for project names
+  const projectRows = db.prepare("SELECT id, name FROM projects").all() as { id: string; name: string }[];
+  const projectMap = new Map(projectRows.map((p) => [p.id, p.name]));
+
   // Helper map for media_packages if canva jobs exist
-  const canvaJobIds = [...inFlightRows, ...completedRows]
-    .filter((r) => r.type === "canva")
-    .map((r) => r.id);
+  const canvaJobIds: string[] = [];
+  const directPkgIds: string[] = [];
+  for (const r of [...inFlightRows, ...completedRows]) {
+    if (r.type === "canva") {
+      canvaJobIds.push(r.id);
+      try {
+        const parsed = JSON.parse(r.request_json || "{}");
+        if (parsed.packageId) directPkgIds.push(parsed.packageId);
+      } catch {}
+    }
+  }
 
   const packageMap = new Map<string, PackageData>();
-  if (canvaJobIds.length > 0) {
-    const placeholders = canvaJobIds.map(() => "?").join(",");
+  if (canvaJobIds.length > 0 || directPkgIds.length > 0) {
+    const allIds = Array.from(new Set([...canvaJobIds, ...directPkgIds]));
+    const placeholders = allIds.map(() => "?").join(",");
     const pkgs = db.prepare(`
       SELECT id, generation_job_id, title, cover_asset_id, item_count, canva_edit_url, video_url
       FROM media_packages
-      WHERE generation_job_id IN (${placeholders})
-    `).all(...canvaJobIds) as unknown as PackageData[];
+      WHERE generation_job_id IN (${placeholders}) OR id IN (${placeholders})
+    `).all(...allIds, ...allIds) as unknown as PackageData[];
     for (const p of pkgs) {
       if (p.generation_job_id) packageMap.set(p.generation_job_id, p);
+      if (p.id) packageMap.set(p.id, p);
     }
   }
 
@@ -150,21 +168,47 @@ export async function GET(
     try { res = JSON.parse(row.response_json || "{}"); } catch {}
     try { prog = JSON.parse(row.progress_json || "{}"); } catch {}
 
-    const pkg = packageMap.get(row.id);
+    const pkg = packageMap.get(row.id) || ((req as any)?.packageId ? packageMap.get((req as any).packageId) : undefined);
     const progressPercent = typeof prog.percent === "number"
       ? prog.percent
       : (row.status === "complete" ? 100 : (row.status === "queued" ? 5 : 45));
+
+    const isDirectMcp = Boolean(row.model?.includes("mcp") || row.model === "canva-mcp-refine" || row.model === "canva-mcp-sync");
+
+    let displayPrompt = row.prompt || req.prompt || "İçerik üretimi";
+    // Strip redundant project prefix if present, e.g. "[Atölye Hanem] "
+    displayPrompt = displayPrompt.replace(/^\[[^\]]+\]\s*/, "");
+
+    // If it's a refine job and displays generic "Carousel", enrich with the real topic
+    if (row.model === "canva-mcp-refine" && displayPrompt.startsWith("Carousel")) {
+      try {
+        const origJobId = pkg?.generation_job_id;
+        if (origJobId) {
+          const origRow = db.prepare("SELECT prompt FROM generation_jobs WHERE id=?").get(origJobId) as { prompt?: string } | undefined;
+          if (origRow?.prompt) {
+            const clean = origRow.prompt.trim();
+            const match = clean.match(/^(?:BAŞLIK|Başlık|Konu|TITLE|Title)\s*:\s*([^\n\r]+)/i);
+            const headline = match?.[1]?.trim() || clean.split(/[\r\n]+/)[0]?.trim();
+            if (headline && headline.length > 5) {
+              const dashIdx = displayPrompt.indexOf("—");
+              const suffix = dashIdx !== -1 ? displayPrompt.slice(dashIdx) : "— 🪄 AI Düzen Onarımı";
+              displayPrompt = `${headline.slice(0, 65)} ${suffix}`;
+            }
+          }
+        }
+      } catch {}
+    }
 
     return {
       id: row.id,
       projectId: row.project_id,
       type: row.type,
-      typeLabel: resolveTypeLabel(row.type, req),
+      typeLabel: resolveTypeLabel(row.type, req, row.model),
       status: row.status,
-      prompt: row.prompt || req.prompt || "İçerik üretimi",
+      prompt: displayPrompt,
       model: row.model || "Hermes Agent",
       progressPercent,
-      progressDetail: prog.detail || (row.status === "queued" ? "Sırada bekliyor..." : (row.status === "complete" ? "Tamamlandı" : "Üretiliyor...")),
+      progressDetail: prog.detail || (row.status === "queued" ? "Sırada bekliyor..." : (row.status === "complete" ? "Tamamlandı" : (isDirectMcp ? "Canva MCP ile doğrudan işleniyor..." : "Üretiliyor..."))),
       phase: prog.phase || row.status,
       createdAt: row.created_at,
       completedAt: row.completed_at,
@@ -172,6 +216,7 @@ export async function GET(
       previewUrl: extractPreviewUrl(row.type, res, pkg, row.id),
       canvaEditUrl: pkg?.canva_edit_url || null,
       itemCount: pkg?.item_count || (res.assets?.length ?? 1),
+      isDirectMcp,
     };
   }
 
