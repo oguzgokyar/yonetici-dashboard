@@ -24,12 +24,24 @@ export async function POST(request: Request, context: Context) {
       [key: string]: unknown;
     };
 
+    const existingRow = database
+      .prepare("SELECT progress_json, response_json FROM generation_jobs WHERE id = ?")
+      .get(jobId) as { progress_json?: string; response_json?: string } | undefined;
+    let existingProgress: Record<string, unknown> = {};
+    if (existingRow?.progress_json) {
+      try {
+        existingProgress = JSON.parse(existingRow.progress_json);
+      } catch {}
+    }
+
+    const resolvedGvUrl = body.googleVidsUrl || (existingProgress.googleVidsUrl as string | undefined);
     const now = new Date().toISOString();
     const progressPayload = {
-      phase: body.phase || "running",
-      percent: typeof body.percent === "number" ? body.percent : 15,
-      detail: body.detail || "Google Vids sahnesi işleniyor...",
-      googleVidsUrl: body.googleVidsUrl || undefined,
+      ...existingProgress,
+      phase: body.phase || existingProgress.phase || "running",
+      percent: typeof body.percent === "number" ? body.percent : (existingProgress.percent ?? 15),
+      detail: body.detail || existingProgress.detail || "Google Vids sahnesi işleniyor...",
+      googleVidsUrl: resolvedGvUrl || undefined,
       updatedAt: now,
     };
 
@@ -37,10 +49,14 @@ export async function POST(request: Request, context: Context) {
       .prepare(`
         UPDATE generation_jobs
         SET progress_json = ?,
+            response_json = CASE
+              WHEN ? IS NOT NULL THEN json_set(COALESCE(response_json, '{}'), '$.googleVidsUrl', ?)
+              ELSE response_json
+            END,
             status = CASE WHEN status IN ('queued', 'dispatching') THEN 'running' ELSE status END
         WHERE id = ? AND status IN ('queued', 'dispatching', 'running', 'rendering')
       `)
-      .run(JSON.stringify(progressPayload), jobId);
+      .run(JSON.stringify(progressPayload), resolvedGvUrl || null, resolvedGvUrl || null, jobId);
 
     return Response.json({ ok: true, message: "İlerleme güncellendi." });
   } catch (err: unknown) {

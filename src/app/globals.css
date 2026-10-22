@@ -3878,3 +3878,4 @@ button { cursor:pointer; }
   color: var(--muted);
 }
 
+.identity-copy>p { max-height: 100px; overflow: auto; }
