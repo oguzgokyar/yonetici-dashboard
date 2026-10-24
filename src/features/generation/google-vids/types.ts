@@ -157,6 +157,15 @@ export type NarrativeModeOption =
   | "diy_asmr"
   | "silent_captions";
 
+export type ReferenceChipItem = {
+  tag: string; // e.g. "@kalpli_bardak"
+  slug: string; // e.g. "kalpli_bardak"
+  filename: string; // e.g. "kalpli_bardak.png"
+  name: string; // e.g. "Kalpli Bardak"
+  kind: "person" | "location" | "object";
+  url?: string;
+};
+
 export type ScriptScenePlan = {
   sceneIndex: number;
   shotType: "establishing" | "action_development" | "resolution_climax";
@@ -171,6 +180,7 @@ export type ScriptScenePlan = {
   onScreenTextTr?: string;
   audioCueEn?: string;
   sfxCueEn?: string;
+  referenceChips?: ReferenceChipItem[];
 };
 
 export type MusicMoodSpec = {

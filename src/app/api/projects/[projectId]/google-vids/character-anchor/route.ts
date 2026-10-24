@@ -8,6 +8,7 @@ import { renderCreative } from "@/lib/server/cliproxy-creative";
 import {
   CINEMATIC_VISUAL_MOODS,
   type CinematicVisualMood,
+  toChipSlug,
 } from "@/lib/server/cinematic-prompt-director";
 
 export const runtime = "nodejs";
@@ -122,6 +123,9 @@ export async function POST(request: Request, context: Context) {
         .webp({ quality: 80 })
         .toFile(thumbPath);
 
+      const slug = toChipSlug(body.characterName || "karakter");
+      const filename = `${slug}.png`;
+
       const metadata = {
         id: assetId,
         projectId,
@@ -131,6 +135,9 @@ export async function POST(request: Request, context: Context) {
         ratio,
         isCharacterAnchor: true,
         characterName: body.characterName,
+        slug,
+        filename,
+        tag: `@${slug}`,
         createdAt: new Date().toISOString(),
       };
 
@@ -144,6 +151,9 @@ export async function POST(request: Request, context: Context) {
         JSON.stringify({
           assets: [{ id: assetId, url: assetUrl, mimeType: "image/png" }],
           characterAnchorUrl: assetUrl,
+          slug,
+          filename,
+          tag: `@${slug}`,
         }),
         new Date().toISOString(),
         jobId
@@ -153,6 +163,9 @@ export async function POST(request: Request, context: Context) {
         ok: true,
         assetId,
         imageUrl: assetUrl,
+        slug,
+        filename,
+        tag: `@${slug}`,
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Görsel render edilemedi.";

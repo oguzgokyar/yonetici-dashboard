@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import {
   Bell, ChevronDown, Clapperboard, Compass, Film, FolderKanban, Image, LayoutDashboard, PanelsTopLeft,
   Menu, Palette, PanelLeftClose, PanelLeftOpen, Pin, Plus, Search, Send, Settings, Share2, Sparkles, X,
-  Layers, Bot, PhoneCall,
+  Layers, Bot, PhoneCall, Video,
 } from "lucide-react";
  import { useProjects } from "@/features/projects/projects-context";
  import { ProductionQueueDrawer } from "./production-queue-drawer";
@@ -100,6 +100,24 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
         <Link href="/projects" className={`nav-item ${pathname === "/projects" ? "active" : ""}`} title="Projeler">
           <FolderKanban size={19} /><span>Projeler</span>
         </Link>
+        <a 
+          href="http://43.131.47.253:8080/library/" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="nav-item" 
+          title="Büyüme & Strateji Arşivi"
+        >
+          <Sparkles size={19} /><span>Büyüme Arşivi ↗</span>
+        </a>
+        <a 
+          href="http://43.131.47.253:8080/meeting/" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="nav-item" 
+          title="Toplantı Asistanı & Arşiv Portalı"
+        >
+          <Video size={19} /><span>Toplantı Asistanı ↗</span>
+        </a>
 
         {projectId && <>
           <p className="nav-label">PROJE</p>

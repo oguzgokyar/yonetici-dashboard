@@ -8,6 +8,7 @@ import { renderCreative } from "@/lib/server/cliproxy-creative";
 import {
   CINEMATIC_VISUAL_MOODS,
   type CinematicVisualMood,
+  toChipSlug,
 } from "@/lib/server/cinematic-prompt-director";
 
 export const runtime = "nodejs";
@@ -48,6 +49,9 @@ export async function POST(request: Request, context: Context) {
       await sharp(fileBuffer).toFormat("png").toFile(originalPath);
       await sharp(fileBuffer).resize({ width: 360, height: 360, fit: "cover" }).webp({ quality: 80 }).toFile(thumbPath);
 
+      const slug = toChipSlug(name);
+      const filename = `${slug}.png`;
+
       const metadata = {
         id: assetId,
         projectId,
@@ -55,6 +59,9 @@ export async function POST(request: Request, context: Context) {
         extension: "png",
         anchorType,
         name,
+        slug,
+        filename,
+        tag: `@${slug}`,
         isUploadedAnchor: true,
         createdAt: new Date().toISOString(),
       };
@@ -65,6 +72,9 @@ export async function POST(request: Request, context: Context) {
         assetId,
         imageUrl: `/api/assets/${assetId}`,
         anchorType,
+        slug,
+        filename,
+        tag: `@${slug}`,
       });
     }
 
@@ -158,6 +168,9 @@ export async function POST(request: Request, context: Context) {
         .webp({ quality: 80 })
         .toFile(thumbPath);
 
+      const slug = toChipSlug(body.name || "referans");
+      const filename = `${slug}.png`;
+
       const metadata = {
         id: assetId,
         projectId,
@@ -167,6 +180,9 @@ export async function POST(request: Request, context: Context) {
         ratio,
         anchorType: body.anchorType,
         name: body.name,
+        slug,
+        filename,
+        tag: `@${slug}`,
         createdAt: new Date().toISOString(),
       };
 
@@ -181,6 +197,9 @@ export async function POST(request: Request, context: Context) {
           assets: [{ id: assetId, url: assetUrl, mimeType: "image/png" }],
           anchorUrl: assetUrl,
           anchorType: body.anchorType,
+          slug,
+          filename,
+          tag: `@${slug}`,
         }),
         new Date().toISOString(),
         jobId
@@ -191,6 +210,9 @@ export async function POST(request: Request, context: Context) {
         assetId,
         imageUrl: assetUrl,
         anchorType: body.anchorType,
+        slug,
+        filename,
+        tag: `@${slug}`,
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Görsel render edilemedi.";

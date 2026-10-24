@@ -344,3 +344,58 @@ test("Visual anchors support multi-angle turnaround model sheets, unmanned works
   assert.ok(deckSource.includes("Farklı bir varyasyon üret (Yenile)") || deckSource.includes("Farklı Varyasyon Üret"), "deck must have variation refresh buttons");
   assert.ok(deckSource.includes("setLightboxAnchor(null)"), "deck must allow closing lightbox");
 });
+
+test("Reference chips tagging (@slug), clean ASCII filenames, and direct insertion (no empty 5s scene '+' click)", async () => {
+  const director = loadModule(directorSourceUrl, {
+    "@/lib/server/cliproxy-text": {
+      completeText: async () => ({ content: "{}" }),
+      parseJsonResponse: (txt) => JSON.parse(txt),
+    },
+  });
+
+  // 1. toChipSlug converts Turkish characters to clean ASCII slugs
+  assert.equal(director.toChipSlug("Kalpli Bardak"), "kalpli_bardak");
+  assert.equal(director.toChipSlug("Çay Bardağı"), "cay_bardagi");
+  assert.equal(director.toChipSlug("Zanaatkâr / Usta"), "zanaatkar_usta");
+  assert.equal(director.toChipSlug("Ahşap Atölye Tezgâhı"), "ahsap_atolye_tezgahi");
+
+  // 2. resolveVisualAnchorChips resolves visual anchors to clean ReferenceChipItem list
+  const chips = director.resolveVisualAnchorChips({
+    person: { name: "Zanaatkâr Usta", descriptionTr: "Usta", visualPromptEn: "Artisan", imageUrl: "/api/assets/1" },
+    object: { name: "Kalpli Bardak", descriptionTr: "Bardak", visualPromptEn: "Heart cup", imageUrl: "/api/assets/2" },
+    location: { name: "Kahve Masası", descriptionTr: "Masa", visualPromptEn: "Table", imageUrl: "/api/assets/3" },
+  });
+
+  assert.equal(chips.length, 3);
+  assert.equal(chips[0].tag, "@zanaatkar_usta");
+  assert.equal(chips[0].filename, "zanaatkar_usta.png");
+  assert.equal(chips[1].tag, "@kalpli_bardak");
+  assert.equal(chips[1].filename, "kalpli_bardak.png");
+  assert.equal(chips[2].tag, "@kahve_masasi");
+  assert.equal(chips[2].filename, "kahve_masasi.png");
+
+  // 3. bindReferenceChipsToPrompt injects missing @slug tags into prompt
+  const rawPrompt = "A close-up shot of hands pouring hot latte into cup on wooden table.";
+  const bound = director.bindReferenceChipsToPrompt(rawPrompt, chips);
+  assert.ok(bound.includes("@zanaatkar_usta"), "prompt must contain @zanaatkar_usta tag");
+  assert.ok(bound.includes("@kalpli_bardak"), "prompt must contain @kalpli_bardak tag");
+  assert.ok(bound.includes("@kahve_masasi"), "prompt must contain @kahve_masasi tag");
+
+  // 4. Fallback planCinematicStoryboard populates referenceChips on all scenes and binds to promptEn
+  const fallbackSb = await director.planCinematicStoryboard({
+    topic: "Kalpli Bardak ile Latte Art",
+    targetDuration: "15s",
+    visualMood: "diy_craft_macro",
+  });
+  assert.ok(fallbackSb.scenes.length >= 3);
+  for (const sc of fallbackSb.scenes) {
+    assert.ok(sc.referenceChips && sc.referenceChips.length > 0, "every scene must carry referenceChips");
+    assert.ok(sc.promptEn.includes("@"), "promptEn must contain @ tags");
+  }
+
+  // 5. Automation script must NOT click '+' (Yeni sahne) to prevent 5s empty scene gaps
+  const autoScript = fs.readFileSync("/opt/data/scripts/google_vids_automation.py", "utf8");
+  assert.ok(!autoScript.includes("btns = Array.from(document.querySelectorAll('[aria-label*=\"Yeni sahne\"]'));"), "automation script must not click '+' to avoid 5s blank scene padding");
+  assert.ok(autoScript.includes("to_clean_chip_slug"), "automation script must sanitize chip filenames to clean slugs");
+  assert.ok(autoScript.includes("cleared_chips = await eval_js(ws"), "automation script must clear previous scene chips before attaching");
+});

@@ -11,7 +11,13 @@ import {
   markVidsAccountQuotaExhausted,
   recordVidsAccountRenderSuccess,
 } from "./google-vids-account-pool";
-import type { ScriptScenePlan } from "./cinematic-prompt-director";
+import {
+  type ScriptScenePlan,
+  resolveVisualAnchorChips,
+  toChipSlug,
+  bindReferenceChipsToPrompt,
+  type ReferenceChipItem,
+} from "./cinematic-prompt-director";
 
 export interface GoogleVidsJobRequest {
   title: string;
@@ -93,13 +99,77 @@ export async function processGoogleVidsJob(job: {
   fs.mkdirSync(outputDir, { recursive: true });
   const finalMp4Path = path.join(outputDir, `${job.id}.mp4`);
 
+  const callbackBaseUrl = (process.env.CANVA_CALLBACK_BASE_URL || "http://10.0.1.1:3100").trim().replace(/\/+$/, "");
+
+  // Resolve visual anchor chips (Kişi, Obje, Mekan) with clean slugs & filenames
+  const rawAnchorChips = resolveVisualAnchorChips(
+    req.visualAnchors ? {
+      person: req.visualAnchors.person ? {
+        name: req.visualAnchors.person.name || "Usta",
+        descriptionTr: req.visualAnchors.person.descriptionTr || "",
+        visualPromptEn: req.visualAnchors.person.visualPromptEn || "",
+        imageUrl: req.visualAnchors.person.imageUrl,
+      } : undefined,
+      location: req.visualAnchors.location ? {
+        name: req.visualAnchors.location.name || "Atolye",
+        descriptionTr: req.visualAnchors.location.descriptionTr || "",
+        visualPromptEn: req.visualAnchors.location.visualPromptEn || "",
+        imageUrl: req.visualAnchors.location.imageUrl,
+      } : undefined,
+      object: req.visualAnchors.object ? {
+        name: req.visualAnchors.object.name || "Alet",
+        descriptionTr: req.visualAnchors.object.descriptionTr || "",
+        visualPromptEn: req.visualAnchors.object.visualPromptEn || "",
+        imageUrl: req.visualAnchors.object.imageUrl,
+      } : undefined,
+    } : undefined,
+    req.characterAnchor ? {
+      name: req.characterAnchor.name || "Karakter",
+      archetypeTr: req.characterAnchor.archetypeTr || "",
+      masterVisualPromptEn: req.characterAnchor.masterVisualPromptEn || "",
+      fixedTraitsEn: req.characterAnchor.fixedTraitsEn || "",
+      referenceImageUrl: req.characterAnchor.referenceImageUrl,
+    } : undefined
+  );
+
+  const referenceChips: ReferenceChipItem[] = rawAnchorChips.map((chip) => {
+    let fullUrl = chip.url || "";
+    if (fullUrl && !fullUrl.startsWith("http")) {
+      fullUrl = `${callbackBaseUrl}${fullUrl}`;
+    }
+    return {
+      ...chip,
+      url: fullUrl,
+    };
+  });
+
+  // Ensure every scene carries referenceChips and promptEn contains @slug
+  const scenesWithChips: ScriptScenePlan[] = scenes.map((sc) => {
+    const scChips = sc.referenceChips && sc.referenceChips.length ? sc.referenceChips : referenceChips;
+    return {
+      ...sc,
+      referenceChips: scChips,
+      promptEn: bindReferenceChipsToPrompt(sc.promptEn, scChips),
+    };
+  });
+
   // Sahneleri geçici JSON dosyasına yaz (Host ortamında erişilebilir /tmp dizini)
   const scenesTempFile = path.join("/tmp", `vids_scenes_${job.id}.json`);
-  fs.writeFileSync(scenesTempFile, JSON.stringify(scenes, null, 2), "utf-8");
+  fs.writeFileSync(scenesTempFile, JSON.stringify(scenesWithChips, null, 2), "utf-8");
 
   // Referans görsel yolu (varsa)
   let referenceImageLocalPath = "";
-  if (req.characterAnchor?.referenceImageUrl) {
+  if (referenceChips.length > 0 && referenceChips[0].url) {
+    const refUrl = referenceChips[0].url;
+    const assetMatch = refUrl.match(/\/api\/assets\/([a-f0-9-]+)/i);
+    if (assetMatch) {
+      const assetId = assetMatch[1];
+      const possiblePath = path.join(process.cwd(), ".data", "assets", `${assetId}.png`);
+      if (fs.existsSync(possiblePath)) {
+        referenceImageLocalPath = possiblePath;
+      }
+    }
+  } else if (req.characterAnchor?.referenceImageUrl) {
     const refUrl = req.characterAnchor.referenceImageUrl;
     const assetMatch = refUrl.match(/\/api\/assets\/([a-f0-9-]+)/i);
     if (assetMatch) {
@@ -114,8 +184,6 @@ export async function processGoogleVidsJob(job: {
   const canvaConfig = getCanvaConfig();
   const baseUrl = canvaConfig.baseUrl.replace(/\/+$/, "");
   const apiKey = canvaConfig.apiKey;
-
-  const callbackBaseUrl = (process.env.CANVA_CALLBACK_BASE_URL || "http://10.0.1.1:3100").trim().replace(/\/+$/, "");
   const callbackUrl = `${callbackBaseUrl}/api/internal/google-vids/jobs/${job.id}/complete`;
   const callbackToken = createJobCallbackToken(canvaConfig.callbackToken, job.id);
 
@@ -293,7 +361,8 @@ export async function processGoogleVidsJob(job: {
           narrative_mode: narrativeMode,
           authuser: authuserIndex,
           profile_dir: profileDir,
-          scenes,
+          scenes: scenesWithChips,
+          reference_chips: referenceChips,
           reference_image_url: referenceImagePublicUrl,
           reference_image_urls: referenceImagePublicUrls,
           callback_url: callbackUrl,

@@ -90,6 +90,33 @@ export const CINEMATIC_VISUAL_MOODS: Record<CinematicVisualMood, CinematicVisual
 
 export type TargetDurationRange = "3s" | "10s" | "15s" | "30s" | "60s";
 
+export interface ReferenceChipItem {
+  tag: string; // e.g. "@kalpli_bardak"
+  slug: string; // e.g. "kalpli_bardak"
+  filename: string; // e.g. "kalpli_bardak.png"
+  name: string; // e.g. "Kalpli Bardak"
+  kind: "person" | "location" | "object";
+  url?: string;
+}
+
+export function toChipSlug(name: string): string {
+  return (
+    name
+      .toLowerCase()
+      .replace(/ğ/g, "g")
+      .replace(/ü/g, "u")
+      .replace(/ş/g, "s")
+      .replace(/ı/g, "i")
+      .replace(/ö/g, "o")
+      .replace(/ç/g, "c")
+      .replace(/â/g, "a")
+      .replace(/î/g, "i")
+      .replace(/û/g, "u")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "ref_asset"
+  );
+}
+
 export interface CharacterAnchorSpec {
   name: string; // Karakter adı (örn: "Nasreddin Hoca")
   archetypeTr: string; // Türkçe arketip tanımı
@@ -112,6 +139,7 @@ export interface ScriptScenePlan {
   onScreenTextTr?: string; // Ekranda görünecek büyük kanca, adım veya altyazı metni
   audioCueEn?: string; // Veo/Vids Audio katmanı (örn: "Audio: rustling leaves, distant creek stream")
   sfxCueEn?: string; // Veo/Vids SFX katmanı (örn: "SFX: (water splash at 2s)")
+  referenceChips?: ReferenceChipItem[]; // Google Vids ve Veo için iliştirilen referans çipleri (@tag listesi)
 }
 
 export type NarrativeMode =
@@ -139,6 +167,93 @@ export interface VisualAnchorsSpec {
   person?: AnchorItemSpec;
   location?: AnchorItemSpec;
   object?: AnchorItemSpec;
+}
+
+export function resolveVisualAnchorChips(
+  visualAnchors?: VisualAnchorsSpec,
+  characterAnchor?: CharacterAnchorSpec
+): ReferenceChipItem[] {
+  const result: ReferenceChipItem[] = [];
+
+  const addChip = (name: string, kind: "person" | "location" | "object", url?: string) => {
+    if (!name || result.length >= 3) return;
+    const slug = toChipSlug(name);
+    const tag = `@${slug}`;
+    if (!result.some((r) => r.tag === tag || r.slug === slug)) {
+      result.push({
+        tag,
+        slug,
+        filename: `${slug}.png`,
+        name,
+        kind,
+        url,
+      });
+    }
+  };
+
+  const person =
+    visualAnchors?.person ||
+    (characterAnchor
+      ? {
+          name: characterAnchor.name,
+          descriptionTr: characterAnchor.archetypeTr,
+          visualPromptEn:
+            characterAnchor.masterVisualPromptEn || characterAnchor.fixedTraitsEn,
+          imageUrl: characterAnchor.referenceImageUrl,
+        }
+      : undefined);
+  if (person?.name) {
+    addChip(person.name, "person", person.imageUrl);
+  }
+
+  const obj = visualAnchors?.object;
+  if (obj?.name) {
+    addChip(obj.name, "object", obj.imageUrl);
+  }
+
+  const loc = visualAnchors?.location;
+  if (loc?.name) {
+    addChip(loc.name, "location", loc.imageUrl);
+  }
+
+  return result.slice(0, 3);
+}
+
+export function bindReferenceChipsToPrompt(
+  promptEn: string,
+  chips: ReferenceChipItem[]
+): string {
+  if (!chips.length) return promptEn;
+  let res = promptEn;
+
+  for (const chip of chips) {
+    const { tag, name, slug, kind } = chip;
+    if (res.includes(tag)) continue;
+
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const nameRegex = new RegExp(`(?<!@)\\b${escapedName}\\b`, "gi");
+    if (nameRegex.test(res)) {
+      res = res.replace(nameRegex, tag);
+      continue;
+    }
+
+    const slugPattern = slug.replace(/_/g, "[\\s_]");
+    const slugRegex = new RegExp(`(?<!@)\\b${slugPattern}\\b`, "gi");
+    if (slugRegex.test(res)) {
+      res = res.replace(slugRegex, tag);
+      continue;
+    }
+
+    if (kind === "person") {
+      res = res.trim() + ` Featuring ${tag} in character performance.`;
+    } else if (kind === "object") {
+      res = res.trim() + ` Central focus on ${tag} as the main featured prop.`;
+    } else if (kind === "location") {
+      res = `Set at ${tag}, ` + res.trim();
+    }
+  }
+
+  return res;
 }
 
 export interface StoryboardResponse {
@@ -269,6 +384,10 @@ MANDATORY LAWS FROM THE VISUAL-SKILLS REPOSITORY:
       * 'object': Central device, tool, or mechanical prototype anchor (name, descriptionTr, visualPromptEn).
         - 'visualPromptEn': MUST specify a 3-angle technical prototype reference sheet (45° isometric assembly view, orthographic front layout, and macro close-up of moving joints/axles/wires) to lock complete 3D mechanical permanence.
     - Also maintain 'characterAnchor' for legacy compatibility.
+    - MANDATORY REFERENCE CHIP @ TAGGING IN EVERY RELEVANT SECTION OF promptEn:
+      * Every visual anchor maps to a clean lowercase ASCII slug without Turkish characters (e.g. name "Kalpli Bardak" -> slug "kalpli_bardak" -> tag "@kalpli_bardak", name "Zanaatkâr / Usta" -> tag "@zanaatkar_usta", name "Atölye Tezgâhı" -> tag "@atolye_tezgahi").
+      * In EVERY scene's 'promptEn', whenever the person, the object/prop, or the setting/location is framed or interacted with, YOU MUST USE THEIR EXACT CHIP TAG STARTING WITH @ (e.g. "@zanaatkar_usta focuses intently as hands assemble @kalpli_bardak on the surface of @atolye_tezgahi").
+      * NEVER refer to the main character, prototype object, or workstation setting with bare un-tagged words when visual anchors are defined. This instructs Google Veo to bind the uploaded reference image directly to the entity!
 
 11. "DEDICATED VISUAL PRODUCTION TYPE - DESKTOP DIY & CARDBOARD CRAFT (diy_craft_macro ONLY)":
 ${isDiyCraft ? `    * SPECIAL MULTI-SHOT & MULTI-ACTION DIRECTIVE ACTIVE FOR THIS STORYBOARD:
@@ -357,7 +476,7 @@ Return ONLY a valid JSON object matching this schema (no markdown fences, no con
       "dialogueTr": "Varsa karakterin Türkçe repliği veya boş string",
       "audioCueEn": "Audio: flowing mountain creek, wind through weeping willows",
       "sfxCueEn": "SFX: (frantic water splashing at 2s)",
-      "promptEn": "English dense physical prompt including fixedTraitsEn, followed by Audio, Says and SFX blocks..."
+      "promptEn": "English dense physical prompt referencing @person_tag, @object_tag on @location_tag (e.g. @zanaatkar_usta assembling @kalpli_bardak on @ahsap_atolye_tezgahi), followed by Audio, Says and SFX blocks..."
     }
   ]
 }
@@ -376,6 +495,25 @@ CRITICAL: Return valid JSON ONLY. No markdown backticks, no markdown code block 
     const isDiy = moodKey === "diy_craft_macro";
     const defaultDurs = targetDur === "3s" ? [3] : targetDur === "10s" ? [10] : targetDur === "15s" ? (isDiy ? [3, 4, 4, 4] : [5, 5, 5]) : targetDur === "60s" ? [8, 8, 8, 9, 9, 9, 9] : (isDiy ? [4, 5, 5, 5, 5, 6] : [6, 6, 6, 6, 6]);
     const fallbackDuration = defaultDurs.reduce((a, b) => a + b, 0);
+    const fallbackAnchors: VisualAnchorsSpec = {
+      person: {
+        name: "Zanaatkâr / Usta",
+        descriptionTr: "Hünerli usta elleri",
+        visualPromptEn: "Artisan maker hands and workshop apron",
+      },
+      location: {
+        name: "Atölye Masası",
+        descriptionTr: "Ahşap atölye masası ve kesim matı",
+        visualPromptEn: "Wooden craft workbench with green cutting mat",
+      },
+      object: {
+        name: input.topic.slice(0, 30),
+        descriptionTr: "Proje modeli ve mekanizma",
+        visualPromptEn: `Assembled craft mechanism of ${input.topic}`,
+      },
+    };
+    const fallbackChips = resolveVisualAnchorChips(fallbackAnchors);
+
     return {
       title: input.topic.slice(0, 40),
       narrativeTr: "Doğal sinematik akış ve sahne devamlılığı.",
@@ -383,21 +521,26 @@ CRITICAL: Return valid JSON ONLY. No markdown backticks, no markdown code block 
       totalDurationSeconds: fallbackDuration,
       visualMood: moodKey,
       aspectRatio: ratio,
-      scenes: defaultDurs.map((dur, i) => ({
-        sceneIndex: i + 1,
-        shotType: i === 0 ? "establishing" : i === defaultDurs.length - 1 ? "resolution_climax" : "action_development",
-        durationSeconds: dur,
-        actionType: "new_scene",
-        cameraSetup: isDiy
-          ? "3-shot dynamic jump cuts: 45° overhead desk -> macro tight focus -> low-angle motion profile"
-          : mood.lensInstruction,
-        lightingSetup: mood.lightingInstruction,
-        summaryTr: isDiy ? `Sahne ${i + 1}: 2 olaylı çok açılı montaj ve test adımı` : `Sahne ${i + 1} gelişimi`,
-        voiceoverTr: `Etkili kısa anlatım cümlesi sahne ${i + 1}.`,
-        promptEn: isDiy
+      visualAnchors: fallbackAnchors,
+      scenes: defaultDurs.map((dur, i) => {
+        const rawPrompt = isDiy
           ? `Three-shot dynamic sequence with rapid jump cuts for ${input.topic}. Shot 1: 45-degree top-down desk view of artisan hands measuring and aligning parts on green cutting mat. Rapid jump cut to Shot 2: extreme macro close-up of precision craft knife cutting cardboard edge with clean precision. Dynamic cut to Shot 3: low-angle side profile showing smooth axle rotation and mechanical engagement. ${mood.lensInstruction}, ${mood.lightingInstruction}, ${mood.colorGrading}. Strict physical realism: rigid body mechanics, zero liquid spillage on dry surfaces, all forces transfer through direct solid-to-solid contact, downward Newtonian gravity, no floating or phantom parts, complete spatial object permanence. Audio: tactile craft workshop sounds, crisp cutter glide. SFX: (mechanical snap at 2s).`
-          : `A focused scene ${i + 1} of ${input.topic}, ${mood.lensInstruction}, ${mood.lightingInstruction}, smooth cinematic camera movement, ${mood.colorGrading}.`,
-      })),
+          : `A focused scene ${i + 1} of ${input.topic}, ${mood.lensInstruction}, ${mood.lightingInstruction}, smooth cinematic camera movement, ${mood.colorGrading}.`;
+        return {
+          sceneIndex: i + 1,
+          shotType: i === 0 ? "establishing" : i === defaultDurs.length - 1 ? "resolution_climax" : "action_development",
+          durationSeconds: dur,
+          actionType: "new_scene",
+          cameraSetup: isDiy
+            ? "3-shot dynamic jump cuts: 45° overhead desk -> macro tight focus -> low-angle motion profile"
+            : mood.lensInstruction,
+          lightingSetup: mood.lightingInstruction,
+          summaryTr: isDiy ? `Sahne ${i + 1}: 2 olaylı çok açılı montaj ve test adımı` : `Sahne ${i + 1} gelişimi`,
+          voiceoverTr: `Etkili kısa anlatım cümlesi sahne ${i + 1}.`,
+          referenceChips: fallbackChips,
+          promptEn: bindReferenceChipsToPrompt(rawPrompt, fallbackChips),
+        };
+      }),
     };
   }
 
@@ -412,7 +555,7 @@ CRITICAL: Return valid JSON ONLY. No markdown backticks, no markdown code block 
       actionType: "new_scene" as const,
     };
   });
-    parsed.totalDurationSeconds = parsed.scenes.reduce((sum, sc) => sum + sc.durationSeconds, 0);
+  parsed.totalDurationSeconds = parsed.scenes.reduce((sum, sc) => sum + sc.durationSeconds, 0);
 
   // Sync 3-way visualAnchors and legacy characterAnchor
   if (!parsed.visualAnchors) {
@@ -432,6 +575,14 @@ CRITICAL: Return valid JSON ONLY. No markdown backticks, no markdown code block 
       fixedTraitsEn: parsed.visualAnchors.person.visualPromptEn,
     };
   }
+
+  // Bind reference chips to all scenes
+  const anchorChips = resolveVisualAnchorChips(parsed.visualAnchors, parsed.characterAnchor);
+  parsed.scenes = parsed.scenes.map((sc) => ({
+    ...sc,
+    referenceChips: sc.referenceChips && sc.referenceChips.length ? sc.referenceChips : anchorChips,
+    promptEn: bindReferenceChipsToPrompt(sc.promptEn, anchorChips),
+  }));
 
   return parsed;
 }
@@ -512,11 +663,16 @@ Return valid JSON matching this schema:
     throw new Error("Yenilenen sahne verisi geçerli bir formatta üretilemedi.");
   }
 
+  const anchorChips = resolveVisualAnchorChips(sb.visualAnchors, sb.characterAnchor);
+  const promptEn = bindReferenceChipsToPrompt(parsed.promptEn, anchorChips);
+
   return {
     ...targetScene,
     ...parsed,
     sceneIndex: targetScene.sceneIndex,
-    durationSeconds: 10,
+    durationSeconds: targetScene.durationSeconds || 10,
     actionType: "new_scene",
+    referenceChips: anchorChips,
+    promptEn,
   };
 }
