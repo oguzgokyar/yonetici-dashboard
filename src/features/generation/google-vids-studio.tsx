@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { WandSparkles, Sparkles, Trash2, RefreshCw } from "lucide-react";
 import { googleVidsFailureNotification } from "@/lib/google-vids-job-notification";
 
@@ -49,7 +49,17 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
   // Havuz & Kuyruk
   const [accountsPool, setAccountsPool] = useState<PoolAccount[]>([]);
   const [activeJob, setActiveJob] = useState<ActiveJob | null>(null);
-  const [dismissedErrorId, setDismissedErrorId] = useState<string | null>(null);
+  const [dismissedErrorId, setDismissedErrorId] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return localStorage.getItem(`google_vids_dismissed_err_${projectId}`);
+      } catch {}
+    }
+    return null;
+  });
+  const dismissedErrorIdRef = useRef<string | null>(dismissedErrorId);
+  dismissedErrorIdRef.current = dismissedErrorId;
+
   const [lastErrorJob, setLastErrorJob] = useState<{
     id?: string;
     error?: string;
@@ -159,9 +169,9 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         } else {
           setActiveJob(null);
           const failed = googleVidsFailureNotification(data.jobs || []);
-          if (failed && failed.id !== dismissedErrorId) {
+          if (failed && failed.id !== dismissedErrorIdRef.current) {
             setLastErrorJob(failed);
-          } else if (!failed || (failed && failed.id === dismissedErrorId)) {
+          } else {
             setLastErrorJob(null);
           }
         }
@@ -581,6 +591,10 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
           onClearError={() => {
             if (lastErrorJob?.id) {
               setDismissedErrorId(lastErrorJob.id);
+              dismissedErrorIdRef.current = lastErrorJob.id;
+              try {
+                localStorage.setItem(`google_vids_dismissed_err_${projectId}`, lastErrorJob.id);
+              } catch {}
             }
             setLastErrorJob(null);
           }}
