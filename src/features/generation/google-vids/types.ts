@@ -1,3 +1,5 @@
+export type TargetDurationOption = "3s" | "10s" | "15s" | "30s" | "60s";
+
 export type VisualMoodOption = {
   key:
     | "cinematic_photoreal"
@@ -10,6 +12,7 @@ export type VisualMoodOption = {
     | "diy_craft_macro";
   label: string;
   desc: string;
+  recommendedPacing?: string;
 };
 
 export const VISUAL_MOOD_OPTIONS: VisualMoodOption[] = [
@@ -17,41 +20,49 @@ export const VISUAL_MOOD_OPTIONS: VisualMoodOption[] = [
     key: "cinematic_photoreal",
     label: "Sinematik & Fotogerçekçi (35mm)",
     desc: "Doğal derinlik, film greni ve gerçekçi doku",
+    recommendedPacing: "Akıcı & Derinlikli (7-10s)",
   },
   {
     key: "golden_hour",
     label: "Sıcak Altın Saat (Golden Hour)",
     desc: "Batan güneş ışığı, sıcak amber ve bal tonları",
+    recommendedPacing: "Geniş & Süzülen (7-10s)",
   },
   {
     key: "moody_chiaroscuro",
     label: "Dramatik & Kara Film (Moody)",
     desc: "Derin gölgeler, tek yönlü kontrast ve atmosferik ışık",
+    recommendedPacing: "Odaklı & Ağır Planlar (8-10s)",
   },
   {
     key: "documentary_nature",
     label: "Belgesel & Doğal Çevre",
     desc: "NatGeo tarzı gerçekçi doğa, makro/telefoto detaylar",
+    recommendedPacing: "Doğal Gözlem (6-9s)",
   },
   {
     key: "retro_vintage_80s",
     label: "Retro & Vintage 80s Sinematik",
     desc: "Nostaljik film stoğu, yumuşak ışık halasyonu",
+    recommendedPacing: "Nostaljik Ritim (5-8s)",
   },
   {
     key: "minimal_commercial",
     label: "Minimalist & Modern Reklam",
     desc: "Stüdyo netliği, temiz hatlar ve keskin ürün odağı",
+    recommendedPacing: "Dinamik Ticari Ritim (4-6s)",
   },
   {
     key: "stylized_3d",
     label: "Animasyon & Stilize 3D",
     desc: "Zengin hacimsel ışık ve canlı animasyon paleti",
+    recommendedPacing: "Eğlenceli & Akıcı (5-7s)",
   },
   {
     key: "diy_craft_macro",
     label: "Masaüstü DIY & Karton Zanaat (Crafty Makro)",
     desc: "Yakın plan masaüstü zanaat, karton dokusu ve mekanizma testi",
+    recommendedPacing: "Hızlı Eylem & Montaj Adımları (3-5s)",
   },
 ];
 

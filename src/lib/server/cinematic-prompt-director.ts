@@ -88,7 +88,7 @@ export const CINEMATIC_VISUAL_MOODS: Record<CinematicVisualMood, CinematicVisual
   },
 };
 
-export type TargetDurationRange = "15s" | "30s" | "60s";
+export type TargetDurationRange = "3s" | "10s" | "15s" | "30s" | "60s";
 
 export interface CharacterAnchorSpec {
   name: string; // Karakter adı (örn: "Nasreddin Hoca")
@@ -206,12 +206,28 @@ MANDATORY LAWS FROM THE VISUAL-SKILLS REPOSITORY:
    - Detail 'fixedTraitsEn' (exact headwear/turban, clothing/robe color and fabric, beard type/hair, facial structure, footwear, accessories).
    - In EVERY scene prompt ('promptEn'), begin the character reference with these EXACT fixed traits so the AI cannot drift the character's face, clothing, or appearance between clips.
 
-8. "Google Vids Omni Scene Independence & Voiceover Duration Law (STRICT)":
-   - EXTEND (UZAT) IS FORBIDDEN: Every scene MUST have "actionType": "new_scene" and "durationSeconds": 10. Do NOT use "extend". Each clip will be generated independently and lined up onto the timeline sequentially.
-   - VOICEOVER PACE LIMIT (CRITICAL): In Turkish natural speech, pacing is ~2.2 words/second. A 10-second scene CANNOT accommodate more than 18-20 words!
-     * Each scene's 'voiceoverTr' MUST BE STRICTLY MAXIMUM 16-20 WORDS (~6-8 seconds spoken audio).
-     * Leave 2 seconds buffer per scene for camera movement and breath, so voiceover NEVER overflows the 10-second clip!
-   - Total video duration is scene_count * 10 seconds (~15s: 2 scenes [20s]; ~30s: 3 scenes [30s]; ~60s: 5-6 scenes [50-60s]).`;
+8. "Google Vids Omni Dynamic Scene Duration & Visual Style Rhythm Law (STRICT)":
+   - EXTEND (UZAT) IS FORBIDDEN: Every scene MUST have "actionType": "new_scene". Each clip is an independent Omni clip.
+   - SCENE DURATION FLEXIBILITY (3s to 10s):
+     * Scene durationSeconds MUST be an integer between 3 and 10 seconds (min: 3, max: 10). NEVER use durations outside 3-10!
+     * DURATION DETERMINED BY VISUAL STYLE & PACING:
+       - If visual style is Desktop DIY / Maker Craft ('diy_craft_macro') or fast commercial: Use snappy, rhythmic 3s to 5s scenes showing rapid assembly, gear spins, or quick action cuts!
+       - If visual style is Cinematic ('cinematic_photoreal', 'golden_hour') or Noir/Moody ('moody_chiaroscuro'): Use longer 7s to 10s scenes for sweeping camera movement and deep mood.
+       - If target duration is "3s": Exactly ONE 3-second scene (single-scene viral loop hook).
+       - If target duration is "10s": Exactly ONE 10-second scene.
+       - If target duration is "15s": 3 to 4 scenes totaling exactly 15 seconds (e.g. [3, 4, 4, 4] or [5, 5, 5]).
+       - If target duration is "30s": 4 to 6 scenes totaling exactly 30 seconds (e.g. [4, 5, 6, 5, 5, 5]).
+       - If target duration is "60s": 6 to 8 scenes totaling exactly 60 seconds (each scene 7-10s).
+     * TOTAL DURATION ACCURACY: The sum of all scene durationSeconds MUST equal totalDurationSeconds exactly!
+   - DYNAMIC VOICEOVER WORD LIMIT (CRITICAL):
+     * In Turkish natural speech, pacing is ~2 words per second.
+     * Each scene's 'voiceoverTr' word count MUST NOT EXCEED: (durationSeconds - 1) * 2 words!
+       - 3s scene: Maximum 4 words (~1 punchy sentence).
+       - 4s scene: Maximum 6 words.
+       - 5s scene: Maximum 8 words.
+       - 7s scene: Maximum 12 words.
+       - 10s scene: Maximum 18 words.
+     * Leave buffer for breath and camera motion so voiceover NEVER overflows the scene clip!`;
 
   const brandDirective = input.brandConcept?.summary ? `
 BRAND VISUAL IDENTITY & LIGHTING MANDATE (CRITICAL):
@@ -284,8 +300,9 @@ CRITICAL: Return valid JSON ONLY. No markdown backticks, no markdown code block 
 
   // Validate or apply fallback if parsed result is incomplete
   if (!parsed || !Array.isArray(parsed.scenes) || parsed.scenes.length === 0) {
-    const sceneCount = targetDur === "15s" ? 2 : targetDur === "60s" ? 5 : 3;
-    const fallbackDuration = sceneCount * 10;
+    const isDiy = moodKey === "diy_craft_macro";
+    const defaultDurs = targetDur === "3s" ? [3] : targetDur === "10s" ? [10] : targetDur === "15s" ? (isDiy ? [3, 4, 4, 4] : [5, 5, 5]) : targetDur === "60s" ? [8, 8, 8, 9, 9, 9, 9] : (isDiy ? [4, 5, 5, 5, 5, 6] : [6, 6, 6, 6, 6]);
+    const fallbackDuration = defaultDurs.reduce((a, b) => a + b, 0);
     return {
       title: input.topic.slice(0, 40),
       narrativeTr: "Doğal sinematik akış ve sahne devamlılığı.",
@@ -293,10 +310,10 @@ CRITICAL: Return valid JSON ONLY. No markdown backticks, no markdown code block 
       totalDurationSeconds: fallbackDuration,
       visualMood: moodKey,
       aspectRatio: ratio,
-      scenes: Array.from({ length: sceneCount }).map((_, i) => ({
+      scenes: defaultDurs.map((dur, i) => ({
         sceneIndex: i + 1,
-        shotType: i === 0 ? "establishing" : i === sceneCount - 1 ? "resolution_climax" : "action_development",
-        durationSeconds: 10,
+        shotType: i === 0 ? "establishing" : i === defaultDurs.length - 1 ? "resolution_climax" : "action_development",
+        durationSeconds: dur,
         actionType: "new_scene",
         cameraSetup: mood.lensInstruction,
         lightingSetup: mood.lightingInstruction,
@@ -307,14 +324,18 @@ CRITICAL: Return valid JSON ONLY. No markdown backticks, no markdown code block 
     };
   }
 
-  // Ensure all scenes strictly enforce 10s and new_scene (no extend)
-  parsed.scenes = parsed.scenes.map((sc, i) => ({
-    ...sc,
-    sceneIndex: i + 1,
-    durationSeconds: 10,
-    actionType: "new_scene",
-  }));
-  parsed.totalDurationSeconds = parsed.scenes.length * 10;
+  // Ensure valid dynamic duration (min: 3s, max: 10s) and enforce new_scene (no extend)
+  parsed.scenes = parsed.scenes.map((sc, i) => {
+    const rawDur = Number(sc.durationSeconds);
+    const validDur = Number.isFinite(rawDur) ? Math.max(3, Math.min(10, Math.round(rawDur))) : (moodKey === "diy_craft_macro" ? 4 : 6);
+    return {
+      ...sc,
+      sceneIndex: i + 1,
+      durationSeconds: validDur,
+      actionType: "new_scene" as const,
+    };
+  });
+  parsed.totalDurationSeconds = parsed.scenes.reduce((sum, sc) => sum + sc.durationSeconds, 0);
 
   return parsed;
 }
@@ -344,9 +365,9 @@ Your task is to RE-ROLL / RE-DIRECT exactly ONE SCENE (Scene ${input.sceneIndex}
 RULES:
 1. Preserve continuity: Retain the existing character anchor traits (${sb.characterAnchor?.fixedTraitsEn || "consistent subject"}), narrative mode (${sb.narrativeMode || "hybrid"}), overall visual mood, and surrounding scene progression.
 2. The Three-Detail Rule: Ensure the scene has concrete environmental pressure, body micro-actions, and sound/motif anchors.
-3. "Google Vids Omni Scene Independence & Voiceover Pace Limit":
-   - EXTEND (UZAT) IS FORBIDDEN: Scene actionType MUST be "new_scene" and durationSeconds: 10.
-   - VOICEOVER WORD LIMIT: 'voiceoverTr' MUST BE MAXIMUM 16-20 WORDS (~6-8 seconds spoken audio). Never write more than 20 words per scene.
+3. "Google Vids Omni Scene Independence & Dynamic Voiceover Pace Limit":
+   - EXTEND (UZAT) IS FORBIDDEN: Scene actionType MUST be "new_scene" and durationSeconds: ${targetScene.durationSeconds || 5} (min: 3, max: 10).
+   - VOICEOVER WORD LIMIT: 'voiceoverTr' word count MUST NOT EXCEED: (${targetScene.durationSeconds || 5} - 1) * 2 words! Never overflow the scene duration.
 4. Audio/Dialogue Syntax: Use Veo official format: [Physical visual action/camera/light] + Audio: ... + Says: ... + SFX: ...
 4. Follow Narrative Mode:
    - If 'voiceover_only', omit 'Says:' and focus on 'voiceoverTr'.

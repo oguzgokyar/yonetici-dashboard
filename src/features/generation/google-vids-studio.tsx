@@ -8,6 +8,7 @@ import { googleVidsFailureNotification } from "@/lib/google-vids-job-notificatio
 import {
   VISUAL_MOOD_OPTIONS,
   type VisualMoodOption,
+  type TargetDurationOption,
   type StoryboardResponse,
   type RenderedVideo,
   type PoolAccount,
@@ -22,7 +23,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
   // Form Durumları
   const [topic, setTopic] = useState("");
   const [visualMood, setVisualMood] = useState<VisualMoodOption["key"]>("cinematic_photoreal");
-  const [targetDuration, setTargetDuration] = useState<"15s" | "30s" | "60s">("30s");
+  const [targetDuration, setTargetDuration] = useState<TargetDurationOption>("30s");
   const [aspectRatio, setAspectRatio] = useState<"9:16" | "16:9" | "1:1">("9:16");
   const [narrativeMode, setNarrativeMode] = useState<"voiceover_only" | "dialogue_only" | "hybrid">("hybrid");
   const [includeMusic, setIncludeMusic] = useState(true);
@@ -339,6 +340,21 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
     setStoryboard({ ...storyboard, scenes: nextScenes });
   }
 
+  // Sahne Süresi Güncelleme (3s - 10s Dinamik Aralık)
+  function handleUpdateSceneDuration(index: number, duration: number) {
+    if (!storyboard) return;
+    const dur = Math.max(3, Math.min(10, Math.round(duration)));
+    const nextScenes = storyboard.scenes.map((s, idx) =>
+      idx === index ? { ...s, durationSeconds: dur } : s
+    );
+    const nextTotal = nextScenes.reduce((sum, s) => sum + (s.durationSeconds || dur), 0);
+    setStoryboard({
+      ...storyboard,
+      scenes: nextScenes,
+      totalDurationSeconds: nextTotal,
+    });
+  }
+
   // Müzik Promptu Güncelleme
   function handleUpdateMusicPrompt(value: string) {
     if (!storyboard?.musicSpec) return;
@@ -521,6 +537,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         onGenerateCharacterImage={() => void handleGenerateCharacterImage()}
         onRerollScene={(idx) => void handleRerollScene(idx)}
         onUpdateScenePrompt={handleUpdateScenePrompt}
+        onUpdateSceneDuration={handleUpdateSceneDuration}
         onUpdateMusicPrompt={handleUpdateMusicPrompt}
         onGenerateRevision={() => void handleGenerateStoryboard(true)}
         onConfirmAndEnqueue={() => void handleConfirmAndEnqueue()}

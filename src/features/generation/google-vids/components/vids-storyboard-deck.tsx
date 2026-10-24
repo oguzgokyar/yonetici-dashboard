@@ -39,6 +39,7 @@ interface VidsStoryboardDeckProps {
     field: "summaryTr" | "voiceoverTr" | "dialogueTr" | "promptEn",
     value: string
   ) => void;
+  onUpdateSceneDuration?: (sceneIndex: number, durationSeconds: number) => void;
   onUpdateMusicPrompt: (value: string) => void;
   onGenerateRevision: () => void;
   onConfirmAndEnqueue: () => void;
@@ -59,6 +60,7 @@ export function VidsStoryboardDeck({
   onGenerateCharacterImage,
   onRerollScene,
   onUpdateScenePrompt,
+  onUpdateSceneDuration,
   onUpdateMusicPrompt,
   onGenerateRevision,
   onConfirmAndEnqueue,
@@ -527,9 +529,9 @@ export function VidsStoryboardDeck({
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                       <span
                         style={{
-                          background: "#612bd3",
-                          color: "#fff",
-                          fontSize: "12px",
+                          fontSize: "11px",
+                          background: "#e0e7ff",
+                          color: "#3730a3",
                           fontWeight: 700,
                           padding: "4px 10px",
                           borderRadius: "99px",
@@ -537,18 +539,49 @@ export function VidsStoryboardDeck({
                       >
                         Sahne {currentIdx + 1} / {storyboard.scenes.length}
                       </span>
-                      <span
+                      <div
                         style={{
-                          fontSize: "12.5px",
-                          fontWeight: 600,
-                          color: "#0f172a",
                           display: "inline-flex",
                           alignItems: "center",
-                          gap: "5px",
+                          gap: "6px",
+                          background: "#f8fafc",
+                          padding: "2px 8px",
+                          borderRadius: "8px",
+                          border: "1px solid #e2e8f0",
                         }}
                       >
-                        <Clock size={14} /> {scene.durationSeconds || 10} sn (Bağımsız Sahne)
-                      </span>
+                        <Clock size={13} color="#6366f1" />
+                        <span style={{ fontSize: "12px", fontWeight: 600, color: "#334155" }}>
+                          Süre:
+                        </span>
+                        <select
+                          value={scene.durationSeconds || 5}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            if (onUpdateSceneDuration) {
+                              onUpdateSceneDuration(currentIdx, val);
+                            }
+                          }}
+                          style={{
+                            padding: "2px 6px",
+                            borderRadius: "6px",
+                            border: "1px solid #cbd5e1",
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            background: "#ffffff",
+                            color: "#0f172a",
+                            cursor: "pointer",
+                          }}
+                          title="Google Vids Omni klip üretim süresi (3-10 sn)"
+                        >
+                          {[3, 4, 5, 6, 7, 8, 9, 10].map((sec) => (
+                            <option key={sec} value={sec}>
+                              {sec} saniye
+                            </option>
+                          ))}
+                        </select>
+                        <span style={{ fontSize: "11px", color: "#64748b" }}>(Omni Klip)</span>
+                      </div>
                     </div>
 
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>

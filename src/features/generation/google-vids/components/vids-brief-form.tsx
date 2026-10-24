@@ -5,6 +5,7 @@ import { X, ChevronDown, Sparkles, LoaderCircle, Film, Trash2 } from "lucide-rea
 import {
   VISUAL_MOOD_OPTIONS,
   type VisualMoodOption,
+  type TargetDurationOption,
   type PoolAccount,
   type ActiveJob,
 } from "../types";
@@ -14,8 +15,8 @@ interface VidsBriefFormProps {
   setTopic: (topic: string) => void;
   visualMood: VisualMoodOption["key"];
   setVisualMood: (mood: VisualMoodOption["key"]) => void;
-  targetDuration: "15s" | "30s" | "60s";
-  setTargetDuration: (dur: "15s" | "30s" | "60s") => void;
+  targetDuration: TargetDurationOption;
+  setTargetDuration: (dur: TargetDurationOption) => void;
   aspectRatio: "9:16" | "16:9" | "1:1";
   setAspectRatio: (ratio: "9:16" | "16:9" | "1:1") => void;
   narrativeMode: "voiceover_only" | "dialogue_only" | "hybrid";
@@ -168,11 +169,13 @@ export function VidsBriefForm({
           <div>
             <select
               value={targetDuration}
-              onChange={(e) => setTargetDuration(e.target.value as "15s" | "30s" | "60s")}
+              onChange={(e) => setTargetDuration(e.target.value as TargetDurationOption)}
             >
-              <option value="15s">~10 - 15 sn (Hızlı Giriş / Hook)</option>
-              <option value="30s">~20 - 30 sn (Standart Hikaye)</option>
-              <option value="60s">~45 - 60 sn (Geniş Sinematik Anlatım)</option>
+              <option value="3s">⚡ 3 sn (Viral Mikro-Kanca / Sonsuz Döngü)</option>
+              <option value="10s">🎯 10 sn (Tek Vuruş Kanca / Short)</option>
+              <option value="15s">⏱️ 15 sn (Dinamik Montaj / DIY Adımları)</option>
+              <option value="30s">🎬 30 sn (Standart Kurgu & Hikaye)</option>
+              <option value="60s">📜 60 sn (Kapsamlı Sinematik Anlatım)</option>
             </select>
             <ChevronDown size={14} />
           </div>
