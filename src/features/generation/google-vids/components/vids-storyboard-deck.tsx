@@ -30,8 +30,7 @@ interface VidsStoryboardDeckProps {
   visualMood: VisualMoodOption["key"];
   narrativeMode: NarrativeModeOption;
   message?: string;
-  generatingAnchorImg: boolean;
-  generatingAnchorType?: "person" | "location" | "object" | null;
+  activeAnchorGenerations?: Record<string, boolean>;
   rerollingIndex: number | null;
   revising: boolean;
   enqueueing: boolean;
@@ -40,6 +39,7 @@ interface VidsStoryboardDeckProps {
   setRevisionNote: (note: string) => void;
   onGenerateCharacterImage: () => void;
   onGenerateVisualAnchor?: (type: "person" | "location" | "object") => void;
+  onGenerateAllVisualAnchors?: () => void;
   onUploadVisualAnchor?: (type: "person" | "location" | "object", file: File) => void;
   onRerollScene: (sceneIndex: number) => void;
   onUpdateScenePrompt: (
@@ -59,8 +59,7 @@ export function VidsStoryboardDeck({
   visualMood,
   narrativeMode,
   message,
-  generatingAnchorImg,
-  generatingAnchorType,
+  activeAnchorGenerations,
   rerollingIndex,
   revising,
   enqueueing,
@@ -69,6 +68,7 @@ export function VidsStoryboardDeck({
   setRevisionNote,
   onGenerateCharacterImage,
   onGenerateVisualAnchor,
+  onGenerateAllVisualAnchors,
   onUploadVisualAnchor,
   onRerollScene,
   onUpdateScenePrompt,
@@ -108,6 +108,7 @@ export function VidsStoryboardDeck({
   const visualAnchors = enrichedStoryboard?.visualAnchors || {};
   const currentScene = enrichedStoryboard?.scenes?.[activeSceneTabIdx];
   const currentIdx = activeSceneTabIdx;
+  const hasActiveGeneration = Boolean(activeAnchorGenerations && Object.keys(activeAnchorGenerations).length > 0);
 
   return (
     <section className="generation-results" style={{ width: "100%", maxWidth: "100%", boxSizing: "border-box" }}>
@@ -203,14 +204,41 @@ export function VidsStoryboardDeck({
               gap: "10px",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
-              <span style={{ fontSize: "13px", fontWeight: 700, color: "#581c87", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                <Sparkles size={14} color="#7e22ce" />
-                Referans Görseller (Google Vids Omni Çipleri)
-              </span>
-              <span style={{ fontSize: "11px", color: "#6b21a8", fontWeight: 500 }}>
-                Kişi, ortam ve maket düzenini kilitler (Maks. 3 çip)
-              </span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+              <div>
+                <span style={{ fontSize: "13px", fontWeight: 700, color: "#581c87", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                  <Sparkles size={14} color="#7e22ce" />
+                  Referans Görseller (Google Vids Omni Çipleri)
+                </span>
+                <span style={{ fontSize: "11px", color: "#6b21a8", fontWeight: 500, display: "block", marginTop: "2px" }}>
+                  Kişi, ortam ve maket düzenini kilitler (Maks. 3 çip)
+                </span>
+              </div>
+              {onGenerateAllVisualAnchors && (
+                <button
+                  type="button"
+                  onClick={onGenerateAllVisualAnchors}
+                  disabled={hasActiveGeneration}
+                  style={{
+                    fontSize: "11.5px",
+                    fontWeight: 700,
+                    padding: "5px 12px",
+                    borderRadius: "7px",
+                    border: "1px solid #a855f7",
+                    background: hasActiveGeneration ? "#f3e8ff" : "#7e22ce",
+                    color: hasActiveGeneration ? "#7e22ce" : "#ffffff",
+                    cursor: hasActiveGeneration ? "not-allowed" : "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    boxShadow: "0 1px 3px rgba(126, 34, 206, 0.2)",
+                  }}
+                  title="3 referans görselini de aynı anda paralel üretir"
+                >
+                  {hasActiveGeneration ? <LoaderCircle size={12} className="spin" /> : <Sparkles size={12} />}
+                  {hasActiveGeneration ? "Üretiliyor..." : "✨ 3 Referansı da Üret"}
+                </button>
+              )}
             </div>
 
             {message && (
@@ -228,7 +256,7 @@ export function VidsStoryboardDeck({
                   fontWeight: 600,
                 }}
               >
-                {generatingAnchorImg ? <LoaderCircle size={13} className="spin" /> : <Sparkles size={13} />}
+                {hasActiveGeneration ? <LoaderCircle size={13} className="spin" /> : <Sparkles size={13} />}
                 <span>{message}</span>
               </div>
             )}
@@ -255,7 +283,7 @@ export function VidsStoryboardDeck({
                   visualPromptEn: storyboard.characterAnchor.masterVisualPromptEn,
                   imageUrl: storyboard.characterAnchor.referenceImageUrl,
                 } : null);
-                const isGen = generatingAnchorType === "person" || (generatingAnchorImg && !generatingAnchorType);
+                const isGen = Boolean(activeAnchorGenerations?.person);
                 return (
                   <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: "10px", border: "1px solid #e9d5ff", display: "flex", gap: "10px", alignItems: "center" }}>
                     <div style={{ width: "52px", height: "52px", borderRadius: "8px", overflow: "hidden", background: "#f3e8ff", border: "1px solid #d8b4fe", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -302,7 +330,7 @@ export function VidsStoryboardDeck({
               {/* Kart B: Mekan / Ortam */}
               {(() => {
                 const loc = visualAnchors.location;
-                const isGen = generatingAnchorType === "location";
+                const isGen = Boolean(activeAnchorGenerations?.location);
                 return (
                   <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: "10px", border: "1px solid #e9d5ff", display: "flex", gap: "10px", alignItems: "center" }}>
                     <div style={{ width: "52px", height: "52px", borderRadius: "8px", overflow: "hidden", background: "#f3e8ff", border: "1px solid #d8b4fe", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -346,7 +374,7 @@ export function VidsStoryboardDeck({
               {/* Kart C: Obje / Maket (Fiziksel Düzenek) */}
               {(() => {
                 const obj = visualAnchors.object;
-                const isGen = generatingAnchorType === "object";
+                const isGen = Boolean(activeAnchorGenerations?.object);
                 return (
                   <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: "10px", border: "1px solid #e9d5ff", display: "flex", gap: "10px", alignItems: "center" }}>
                     <div style={{ width: "52px", height: "52px", borderRadius: "8px", overflow: "hidden", background: "#f3e8ff", border: "1px solid #d8b4fe", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>

@@ -40,8 +40,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
   const [planning, setPlanning] = useState(false);
   const [revising, setRevising] = useState(false);
   const [enqueueing, setEnqueueing] = useState(false);
-  const [generatingAnchorImg, setGeneratingAnchorImg] = useState(false);
-  const [generatingAnchorType, setGeneratingAnchorType] = useState<"person" | "location" | "object" | null>(null);
+  const [activeAnchorGenerations, setActiveAnchorGenerations] = useState<Record<string, boolean>>({});
   const [rerollingIndex, setRerollingIndex] = useState<number | null>(null);
   const [loadingVideos, setLoadingVideos] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -281,13 +280,13 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
   // 3 Boyutlu Referans Görsel Üretimi (Kişi • Mekan • Obje)
   async function handleGenerateVisualAnchor(type: "person" | "location" | "object") {
     if (!storyboard) return;
-    const enrichedSb = ensureVisualAnchors(storyboard, topic);
-    const targetAnchor = enrichedSb.visualAnchors![type]!;
+    if (activeAnchorGenerations[type]) return;
 
-    setGeneratingAnchorType(type);
-    setGeneratingAnchorImg(true);
-    const targetMoodKey = enrichedSb.visualMood || visualMood;
+    const currentSb = ensureVisualAnchors(storyboard, topic);
+    const targetAnchor = currentSb.visualAnchors![type]!;
     const label = type === "person" ? "Kişi" : type === "location" ? "Mekan" : "Maket/Obje";
+
+    setActiveAnchorGenerations((prev) => ({ ...prev, [type]: true }));
     setMessage(`${label} referans görseli üretiliyor...`);
 
     try {
@@ -299,54 +298,74 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
           name: targetAnchor.name,
           descriptionTr: targetAnchor.descriptionTr,
           visualPromptEn: targetAnchor.visualPromptEn,
-          visualMood: targetMoodKey,
+          visualMood: currentSb.visualMood || visualMood,
           aspectRatio: type === "location" ? "16:9" : "1:1",
         }),
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.message || "Görsel üretilemedi.");
+      if (!res.ok || !data.ok) throw new Error(data.message || `${label} görseli üretilemedi.`);
 
-      const nextAnchors = {
-        ...enrichedSb.visualAnchors,
-        [type]: {
-          ...targetAnchor,
+      // Functional state update: Preserves all concurrent and existing anchor images!
+      setStoryboard((prevStoryboard) => {
+        if (!prevStoryboard) return prevStoryboard;
+        const base = ensureVisualAnchors(prevStoryboard, topic);
+        const existingAnchors = base.visualAnchors || {};
+        const updatedAnchor = {
+          ...(existingAnchors[type] || targetAnchor),
           imageUrl: data.imageUrl,
-        },
-      };
+        };
 
-      const nextSb: StoryboardResponse = {
-        ...enrichedSb,
-        visualAnchors: nextAnchors,
-        characterAnchor:
-          type === "person"
-            ? {
-                name: targetAnchor.name,
-                archetypeTr: targetAnchor.descriptionTr,
-                masterVisualPromptEn: targetAnchor.visualPromptEn,
-                fixedTraitsEn: targetAnchor.visualPromptEn,
-                referenceImageUrl: data.imageUrl,
-              }
-            : enrichedSb.characterAnchor,
-      };
+        return {
+          ...base,
+          visualAnchors: {
+            ...existingAnchors,
+            [type]: updatedAnchor,
+          },
+          characterAnchor:
+            type === "person"
+              ? {
+                  name: updatedAnchor.name || "Karakter",
+                  archetypeTr: updatedAnchor.descriptionTr || "",
+                  masterVisualPromptEn: updatedAnchor.visualPromptEn || "",
+                  fixedTraitsEn: updatedAnchor.visualPromptEn || "",
+                  referenceImageUrl: data.imageUrl,
+                }
+              : base.characterAnchor,
+        };
+      });
 
-      setStoryboard(nextSb);
       setMessage(`${label} referans görseli başarıyla oluşturuldu!`);
     } catch (err: unknown) {
-      setMessage(err instanceof Error ? err.message : "Referans görseli üretilemedi.");
+      setMessage(err instanceof Error ? err.message : `${label} görseli üretilemedi.`);
     } finally {
-      setGeneratingAnchorType(null);
-      setGeneratingAnchorImg(false);
+      setActiveAnchorGenerations((prev) => {
+        const next = { ...prev };
+        delete next[type];
+        return next;
+      });
     }
+  }
+
+  // 3 Referansı da Aynı Anda Paralel Üret
+  async function handleGenerateAllVisualAnchors() {
+    if (!storyboard) return;
+    setMessage("3 referans görseli (Kişi, Mekan, Maket) aynı anda üretiliyor...");
+    await Promise.allSettled([
+      handleGenerateVisualAnchor("person"),
+      handleGenerateVisualAnchor("location"),
+      handleGenerateVisualAnchor("object"),
+    ]);
   }
 
   // Kendi Fotoğrafını Yükleme (Upload)
   async function handleUploadVisualAnchor(type: "person" | "location" | "object", file: File) {
     if (!storyboard) return;
-    const enrichedSb = ensureVisualAnchors(storyboard, topic);
-    const targetAnchor = enrichedSb.visualAnchors![type]!;
+    const currentSb = ensureVisualAnchors(storyboard, topic);
+    const targetAnchor = currentSb.visualAnchors![type]!;
     const label = type === "person" ? "Kişi" : type === "location" ? "Mekan" : "Maket/Obje";
+
+    setActiveAnchorGenerations((prev) => ({ ...prev, [type]: true }));
     setMessage(`${label} görseli yükleniyor...`);
-    setGeneratingAnchorType(type);
 
     try {
       const formData = new FormData();
@@ -359,37 +378,46 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         body: formData,
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.message || "Görsel yüklenemedi.");
+      if (!res.ok || !data.ok) throw new Error(data.message || `${label} görseli yüklenemedi.`);
 
-      const nextAnchors = {
-        ...enrichedSb.visualAnchors,
-        [type]: {
-          ...targetAnchor,
+      // Functional state update: Preserves all other anchor images!
+      setStoryboard((prevStoryboard) => {
+        if (!prevStoryboard) return prevStoryboard;
+        const base = ensureVisualAnchors(prevStoryboard, topic);
+        const existingAnchors = base.visualAnchors || {};
+        const updatedAnchor = {
+          ...(existingAnchors[type] || targetAnchor),
           imageUrl: data.imageUrl,
-        },
-      };
+        };
 
-      const nextSb: StoryboardResponse = {
-        ...enrichedSb,
-        visualAnchors: nextAnchors,
-        characterAnchor:
-          type === "person"
-            ? {
-                name: targetAnchor.name,
-                archetypeTr: targetAnchor.descriptionTr,
-                masterVisualPromptEn: targetAnchor.visualPromptEn,
-                fixedTraitsEn: targetAnchor.visualPromptEn,
-                referenceImageUrl: data.imageUrl,
-              }
-            : enrichedSb.characterAnchor,
-      };
+        return {
+          ...base,
+          visualAnchors: {
+            ...existingAnchors,
+            [type]: updatedAnchor,
+          },
+          characterAnchor:
+            type === "person"
+              ? {
+                  name: updatedAnchor.name || "Karakter",
+                  archetypeTr: updatedAnchor.descriptionTr || "",
+                  masterVisualPromptEn: updatedAnchor.visualPromptEn || "",
+                  fixedTraitsEn: updatedAnchor.visualPromptEn || "",
+                  referenceImageUrl: data.imageUrl,
+                }
+              : base.characterAnchor,
+        };
+      });
 
-      setStoryboard(nextSb);
       setMessage(`${label} görseli başarıyla yüklendi!`);
     } catch (err: unknown) {
-      setMessage(err instanceof Error ? err.message : "Görsel yüklenirken hata oluştu.");
+      setMessage(err instanceof Error ? err.message : `${label} görseli yüklenirken hata oluştu.`);
     } finally {
-      setGeneratingAnchorType(null);
+      setActiveAnchorGenerations((prev) => {
+        const next = { ...prev };
+        delete next[type];
+        return next;
+      });
     }
   }
 
@@ -634,8 +662,8 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         visualMood={visualMood}
         narrativeMode={narrativeMode}
         message={message}
-        generatingAnchorImg={generatingAnchorImg}
-        generatingAnchorType={generatingAnchorType}
+        activeAnchorGenerations={activeAnchorGenerations}
+        onGenerateAllVisualAnchors={() => void handleGenerateAllVisualAnchors()}
         rerollingIndex={rerollingIndex}
         revising={revising}
         enqueueing={enqueueing}
