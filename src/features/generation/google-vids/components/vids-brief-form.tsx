@@ -6,6 +6,7 @@ import {
   VISUAL_MOOD_OPTIONS,
   type VisualMoodOption,
   type TargetDurationOption,
+  type NarrativeModeOption,
   type PoolAccount,
   type ActiveJob,
 } from "../types";
@@ -19,8 +20,8 @@ interface VidsBriefFormProps {
   setTargetDuration: (dur: TargetDurationOption) => void;
   aspectRatio: "9:16" | "16:9" | "1:1";
   setAspectRatio: (ratio: "9:16" | "16:9" | "1:1") => void;
-  narrativeMode: "voiceover_only" | "dialogue_only" | "hybrid";
-  setNarrativeMode: (mode: "voiceover_only" | "dialogue_only" | "hybrid") => void;
+  narrativeMode: NarrativeModeOption;
+  setNarrativeMode: (mode: NarrativeModeOption) => void;
   includeMusic: boolean;
   setIncludeMusic: (inc: boolean) => void;
   selectedAccountId: string;
@@ -136,11 +137,13 @@ export function VidsBriefForm({
             <select
               value={narrativeMode}
               onChange={(e) =>
-                setNarrativeMode(e.target.value as "voiceover_only" | "dialogue_only" | "hybrid")
+                setNarrativeMode(e.target.value as NarrativeModeOption)
               }
             >
+              <option value="diy_asmr">🛠️ Masaüstü DIY ASMR (Konuşmasız • Eylem Sesleri &amp; Foley)</option>
+              <option value="silent_captions">🔇 Sessiz &amp; Metin Odaklı (Sessiz Mod • Büyük Ekran Metinleri)</option>
               <option value="hybrid">🎭 Hibrit (Anlatıcı + Karakter Diyaloğu)</option>
-              <option value="voiceover_only">🎙️ Dış Ses / Masal Anlatıcısı (Sadece Anlatım)</option>
+              <option value="voiceover_only">🎙️ Dış Ses / Anlatıcı (Sadece Anlatım)</option>
               <option value="dialogue_only">💬 Karakter Diyalogları (Konuşmalı / Lip-Sync)</option>
             </select>
             <ChevronDown size={14} />

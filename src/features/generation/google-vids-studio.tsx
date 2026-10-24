@@ -9,6 +9,7 @@ import {
   VISUAL_MOOD_OPTIONS,
   type VisualMoodOption,
   type TargetDurationOption,
+  type NarrativeModeOption,
   type StoryboardResponse,
   type RenderedVideo,
   type PoolAccount,
@@ -25,7 +26,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
   const [visualMood, setVisualMood] = useState<VisualMoodOption["key"]>("cinematic_photoreal");
   const [targetDuration, setTargetDuration] = useState<TargetDurationOption>("30s");
   const [aspectRatio, setAspectRatio] = useState<"9:16" | "16:9" | "1:1">("9:16");
-  const [narrativeMode, setNarrativeMode] = useState<"voiceover_only" | "dialogue_only" | "hybrid">("hybrid");
+  const [narrativeMode, setNarrativeMode] = useState<NarrativeModeOption>("diy_asmr");
   const [includeMusic, setIncludeMusic] = useState(true);
   const [selectedAccountId, setSelectedAccountId] = useState("auto");
 
@@ -336,7 +337,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
   // Sahne Promptu Güncelleme
   function handleUpdateScenePrompt(
     index: number,
-    field: "promptEn" | "summaryTr" | "voiceoverTr" | "dialogueTr",
+    field: "promptEn" | "summaryTr" | "voiceoverTr" | "dialogueTr" | "onScreenTextTr",
     value: string
   ) {
     if (!storyboard) return;

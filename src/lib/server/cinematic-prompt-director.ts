@@ -101,7 +101,7 @@ export interface CharacterAnchorSpec {
 export interface ScriptScenePlan {
   sceneIndex: number;
   shotType: "establishing" | "action_development" | "resolution_climax";
-  durationSeconds: number; // 10 veya 20
+  durationSeconds: number; // 3 - 10 saniye arası
   actionType: "new_scene" | "extend"; // Google Vids'te yeni sahne mi yoksa uzatma (Extend) mi?
   cameraSetup: string; // örn: "35mm anamorphic, slow push-in"
   lightingSetup: string; // örn: "Low-angle golden hour rim light"
@@ -109,11 +109,17 @@ export interface ScriptScenePlan {
   promptEn: string; // Google Vids Omni'ye gönderilecek katı İngilizce prompt (Veo/Vids resmi Audio/Says/SFX sentaksı)
   voiceoverTr?: string; // Google Vids yerleşik Voiceover paneline girilecek Türkçe dış ses anlatımı
   dialogueTr?: string; // Sahne içinde karakterlerin konuşmaları / replikleri (Türkçe)
+  onScreenTextTr?: string; // Ekranda görünecek büyük kanca, adım veya altyazı metni
   audioCueEn?: string; // Veo/Vids Audio katmanı (örn: "Audio: rustling leaves, distant creek stream")
   sfxCueEn?: string; // Veo/Vids SFX katmanı (örn: "SFX: (water splash at 2s)")
 }
 
-export type NarrativeMode = "voiceover_only" | "dialogue_only" | "hybrid";
+export type NarrativeMode =
+  | "voiceover_only"
+  | "dialogue_only"
+  | "hybrid"
+  | "diy_asmr"
+  | "silent_captions";
 
 export interface MusicMoodSpec {
   moodTr: string; // örn: "Nüktedan ve Neşeli Halk Müziği"
@@ -183,11 +189,19 @@ MANDATORY LAWS FROM THE VISUAL-SKILLS REPOSITORY:
      SFX: [punctual sound event, e.g. (water splashing franticly), (cloth ripping)]
    - In 'audioCueEn', extract the clean Audio line (e.g. "Audio: flowing mountain creek, wind through weeping willows").
    - In 'sfxCueEn', extract the SFX line (e.g. "SFX: (frantic water splashing at 2s)").
-5. "NARRATIVE MODE LAWS (CRITICAL)":
+5. "NARRATIVE MODE LAWS (CRITICAL) - NATIVE GOOGLE VIDS & VEO ONLY, NO EXTERNAL SERVICES":
    - Current mode is: "${narrativeMode.toUpperCase()}"
-   - If 'voiceover_only': Sシーン MUST NOT have character speech or 'dialogueTr'. Focus 100% on rich, literary, storytelling Turkish narrator voiceover ('voiceoverTr'). Omit 'Says:' lines from 'promptEn'.
-   - If 'dialogue_only': Scenes MUST NOT have narrator voiceover ('voiceoverTr' MUST BE EMPTY OR OMITTED). Every scene is driven directly by in-scene character dialogue ('dialogueTr') with full character names and Veo 'Says: [Character] says [tone]: "[line]"' syntax.
+   - If 'voiceover_only': Scenes MUST NOT have character speech or 'dialogueTr'. Focus 100% on rich, literary, storytelling Turkish narrator voiceover ('voiceoverTr') synthesized natively via Google Vids TTS. Omit 'Says:' lines from 'promptEn'.
+   - If 'dialogue_only': Scenes MUST NOT have narrator voiceover ('voiceoverTr' MUST BE EMPTY OR OMITTED). Every scene is driven directly by in-scene character dialogue ('dialogueTr') with full character names and Veo native 'Says: [Character] says [tone]: "[line]"' lip-sync syntax.
    - If 'hybrid': Balance narrator storytelling ('voiceoverTr') with character emotion/dialogue notes ('dialogueTr'), BUT DO NOT include 'Says:' speech lines inside 'promptEn'. In hybrid mode, captions and audio must come strictly from the narrator's voiceover ('voiceoverTr') so that character speech and narrator captions NEVER overlap on screen!
+   - If 'diy_asmr': STRICTLY NO SPOKEN WORDS, NO SPEECH, NO NARRATOR ('voiceoverTr' and 'dialogueTr' MUST BE OMITTED OR EMPTY).
+     * All auditory focus is on Google Veo's in-world Foley and physical material sounds. NO external audio or external TTS!
+     * In 'promptEn', construct rich tactile auditory descriptions: e.g. "Audio: tactile cardboard slicing, rhythmic plastic gear clicks, gentle motor whirr. SFX: (precise mechanical snap at 2s)".
+     * Provide punchy on-screen text steps in 'onScreenTextTr' (e.g. "Adım 1: Gövdeyi Kes", "Adım 2: Şırıngayı Bağla").
+   - If 'silent_captions': STRICTLY NO SPOKEN VOICEOVER OR DIALOGUE ('voiceoverTr' and 'dialogueTr' MUST BE EMPTY).
+     * Designed for silent viewing with bold on-screen text overlays ('onScreenTextTr').
+     * Focus 100% on visual clarity and powerful, readable Turkish on-screen text cards and steps!
+   - Always provide 'onScreenTextTr' for every scene as a visual anchor.
 
 6. "VISUAL-SKILLS MUSIC DIRECTION (camera-lighting-vocabulary.md §8)":
    - If includeMusic is active, analyze the core emotional spine of the story and design 'musicSpec'.
@@ -280,7 +294,8 @@ Return ONLY a valid JSON object matching this schema (no markdown fences, no con
       "cameraSetup": "Wide angle 35mm, slow steady tracking",
       "lightingSetup": "Warm sunset backlight with natural dust haze",
       "summaryTr": "Sahne 1 Türkçe kısa özeti",
-      "voiceoverTr": "Etkili, akıcı ve hikayeyi anlatan Türkçe dış ses metni",
+      "onScreenTextTr": "Ekranda büyük ve net görünecek Türkçe kanca veya adım metni (örn: Adım 1: Gövdeyi Kes)",
+      "voiceoverTr": "Etkili, akıcı ve hikayeyi anlatan Türkçe dış ses metni (diy_asmr veya silent_captions modunda boş bırakın)",
       "dialogueTr": "Varsa karakterin Türkçe repliği veya boş string",
       "audioCueEn": "Audio: flowing mountain creek, wind through weeping willows",
       "sfxCueEn": "SFX: (frantic water splashing at 2s)",

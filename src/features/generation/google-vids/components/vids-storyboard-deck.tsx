@@ -19,12 +19,13 @@ import {
   type StoryboardResponse,
   type ScriptScenePlan,
   type VisualMoodOption,
+  type NarrativeModeOption,
 } from "../types";
 
 interface VidsStoryboardDeckProps {
   storyboard: StoryboardResponse | null;
   visualMood: VisualMoodOption["key"];
-  narrativeMode: "voiceover_only" | "dialogue_only" | "hybrid";
+  narrativeMode: NarrativeModeOption;
   generatingAnchorImg: boolean;
   rerollingIndex: number | null;
   revising: boolean;
@@ -36,7 +37,7 @@ interface VidsStoryboardDeckProps {
   onRerollScene: (sceneIndex: number) => void;
   onUpdateScenePrompt: (
     sceneIndex: number,
-    field: "summaryTr" | "voiceoverTr" | "dialogueTr" | "promptEn",
+    field: "summaryTr" | "voiceoverTr" | "dialogueTr" | "promptEn" | "onScreenTextTr",
     value: string
   ) => void;
   onUpdateSceneDuration?: (sceneIndex: number, durationSeconds: number) => void;
@@ -691,7 +692,7 @@ export function VidsStoryboardDeck({
                     />
                   </div>
 
-                  {/* Dış Ses (Voiceover) & Diyaloglar */}
+                  {/* Dış Ses (Voiceover) & Diyaloglar & ASMR & Ekran Metni */}
                   <div
                     style={{
                       background: "#f8fafc",
@@ -703,7 +704,58 @@ export function VidsStoryboardDeck({
                       gap: "10px",
                     }}
                   >
-                    {narrativeMode !== "dialogue_only" && (
+                    {/* A Modu: DIY ASMR Eylem Sesleri */}
+                    {narrativeMode === "diy_asmr" && (
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                          <label style={{ fontSize: "11.5px", fontWeight: 700, color: "#059669", display: "flex", alignItems: "center", gap: "5px" }}>
+                            🛠️ Veo Yerleşik Fiziksel Sesler (Foley / ASMR • Konuşma Yok)
+                          </label>
+                          <span style={{ fontSize: "11px", color: "#059669", fontWeight: 600 }}>
+                            Fiziksel Materyal Sesleri
+                          </span>
+                        </div>
+                        <div style={{ padding: "8px 12px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", fontSize: "12.5px", color: "#166534" }}>
+                          {scene.audioCueEn || scene.sfxCueEn || "Veo fiziksel montaj, karton kesme ve motor sesleri"}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* E Modu: Sessiz Video & Ekran Metni */}
+                    {(narrativeMode === "silent_captions" || scene.onScreenTextTr) && (
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                          <label style={{ fontSize: "11.5px", fontWeight: 700, color: "#d97706", display: "flex", alignItems: "center", gap: "5px" }}>
+                            📱 Ekranda Görünecek Büyük Metin (On-Screen Hook / Adım)
+                          </label>
+                          <span style={{ fontSize: "11px", color: "#64748b" }}>
+                            Sessiz izleyenler için görsel metin
+                          </span>
+                        </div>
+                        <input
+                          type="text"
+                          value={scene.onScreenTextTr || ""}
+                          onChange={(e) => {
+                            if (onUpdateScenePrompt) {
+                              onUpdateScenePrompt(currentIdx, "onScreenTextTr" as any, e.target.value);
+                            }
+                          }}
+                          placeholder="Örn: Adım 1: Karton Gövdeyi Kes • 10 Dakikalık Proje"
+                          style={{
+                            width: "100%",
+                            padding: "8px 12px",
+                            fontSize: "13px",
+                            fontWeight: 600,
+                            borderRadius: "8px",
+                            border: "1px solid #cbd5e1",
+                            boxSizing: "border-box",
+                            background: "#ffffff",
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    {narrativeMode !== "dialogue_only" && narrativeMode !== "diy_asmr" && narrativeMode !== "silent_captions" && (
                       <div>
                         <div
                           style={{
@@ -800,7 +852,7 @@ export function VidsStoryboardDeck({
                       </div>
                     )}
 
-                    {narrativeMode !== "voiceover_only" && (
+                    {narrativeMode !== "voiceover_only" && narrativeMode !== "diy_asmr" && narrativeMode !== "silent_captions" && (
                       <div>
                         <div
                           style={{

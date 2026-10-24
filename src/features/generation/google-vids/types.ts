@@ -74,6 +74,13 @@ export type CharacterAnchorSpec = {
   referenceImageUrl?: string;
 };
 
+export type NarrativeModeOption =
+  | "voiceover_only"
+  | "dialogue_only"
+  | "hybrid"
+  | "diy_asmr"
+  | "silent_captions";
+
 export type ScriptScenePlan = {
   sceneIndex: number;
   shotType: "establishing" | "action_development" | "resolution_climax";
@@ -85,6 +92,7 @@ export type ScriptScenePlan = {
   promptEn: string;
   voiceoverTr?: string;
   dialogueTr?: string;
+  onScreenTextTr?: string;
   audioCueEn?: string;
   sfxCueEn?: string;
 };
@@ -99,7 +107,7 @@ export type MusicMoodSpec = {
 export type StoryboardResponse = {
   title: string;
   narrativeTr: string;
-  narrativeMode?: "voiceover_only" | "dialogue_only" | "hybrid";
+  narrativeMode?: NarrativeModeOption;
   totalDurationSeconds: number;
   visualMood: VisualMoodOption["key"];
   aspectRatio: "9:16" | "16:9" | "1:1";
