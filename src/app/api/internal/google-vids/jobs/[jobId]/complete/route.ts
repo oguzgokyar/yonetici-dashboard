@@ -60,9 +60,11 @@ export async function POST(request: Request, context: Context) {
   fs.writeFileSync(staging, videoBuffer);
   try {
     nativeMetadata = validateGoogleVidsNativeArtifact(staging, nativeMetadata, jobId, req);
-  } catch {
+  } catch (valErr) {
     fs.unlinkSync(staging);
-    return Response.json({ok:false,message:"Google Vids native artifact doğrulaması başarısız."},{status:422});
+    const errMsg = (valErr as Error)?.message || "Doğrulama hatası";
+    console.error(`[GoogleVids Complete] Doğrulama hatası (jobId=${jobId}):`, errMsg);
+    return Response.json({ok:false,message:`Google Vids native artifact doğrulaması başarısız: ${errMsg}`},{status:422});
   }
   const current = database.prepare("SELECT status,error FROM generation_jobs WHERE id=?").get(jobId) as {status:string;error?:string} | undefined;
   if (!current || ["cancelled","canceled"].includes(current.status) || current.error === "Kullanıcı tarafından iptal edildi.") { fs.unlinkSync(staging); return Response.json({ok:false},{status:409}); }
