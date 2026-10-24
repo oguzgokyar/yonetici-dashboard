@@ -260,11 +260,14 @@ MANDATORY LAWS FROM THE VISUAL-SKILLS REPOSITORY:
    - Always append this strict physical boundary token to EVERY scene's 'promptEn':
      "Strict physical realism: rigid body mechanics, zero liquid spillage on dry surfaces, all forces transfer through direct solid-to-solid contact, downward Newtonian gravity, no floating or phantom parts, complete spatial object permanence."
 
-10. "3-WAY VISUAL ANCHORS SPECIFICATION (PERSON • LOCATION • OBJECT)":
+10. "3-WAY VISUAL ANCHORS SPECIFICATION (PERSON • LOCATION • OBJECT - MULTI-ANGLE MODEL SHEETS)":
     - Define comprehensive 'visualAnchors' in your JSON output with 3 dedicated references:
       * 'person': Person or artisan character anchor (name, descriptionTr, visualPromptEn).
-      * 'location': Environment/setting anchor (name, descriptionTr, visualPromptEn - e.g. workshop desk, greenhouse, modern lab).
-      * 'object': Central device, tool, or mechanical prototype anchor (name, descriptionTr, visualPromptEn - e.g. cardboard hydraulic dispenser setup, soil moisture sensor pot).
+        - 'visualPromptEn': MUST specify a 3-view turnaround character model sheet (front silhouette, 3/4 dynamic crafting angle, and macro close-up of artisan hands with tools) to guarantee consistent anatomy and wardrobe across angles.
+      * 'location': Environment/setting anchor (name, descriptionTr, visualPromptEn).
+        - 'visualPromptEn': MUST specify a focused maker workstation environment (clean wooden workbench, dark green grid cutting mat, tidy tools on wall, warm directional task lamp from upper left, strictly unmanned, zero people, zero hands).
+      * 'object': Central device, tool, or mechanical prototype anchor (name, descriptionTr, visualPromptEn).
+        - 'visualPromptEn': MUST specify a 3-angle technical prototype reference sheet (45° isometric assembly view, orthographic front layout, and macro close-up of moving joints/axles/wires) to lock complete 3D mechanical permanence.
     - Also maintain 'characterAnchor' for legacy compatibility.
 
 11. "DEDICATED VISUAL PRODUCTION TYPE - DESKTOP DIY & CARDBOARD CRAFT (diy_craft_macro ONLY)":
@@ -326,18 +329,18 @@ Return ONLY a valid JSON object matching this schema (no markdown fences, no con
   "visualAnchors": {
     "person": {
       "name": "Kişi / Usta",
-      "descriptionTr": "Zanaatkâr ustanın elleri ve çalışma kıyafeti",
-      "visualPromptEn": "Macro close-up portrait or hands of a focused maker/artisan with clean workshop sleeves"
+      "descriptionTr": "Zanaatkâr ustanın elleri, çalışma önlüğü ve 3 açılı model duruşu",
+      "visualPromptEn": "Professional 3-view character turnaround model sheet of focused artisan maker: 1) front silhouette with workshop apron, 2) 3/4 crafting posture holding cutter, 3) macro close-up of artisan hands and finger dexterity"
     },
     "location": {
       "name": "Mekan / Atölye",
-      "descriptionTr": "Ahşap atölye masası, yeşil kesim matı ve yumuşak stüdyo ışığı",
-      "visualPromptEn": "Cozy organized maker craft workbench, dark green grid cutting mat, tidy tools in background, warm directional sunlight"
+      "descriptionTr": "Ahşap atölye masası, yeşil kesim matı ve yumuşak stüdyo ışığı (insansız)",
+      "visualPromptEn": "Focused maker workstation: clean wooden craft workbench surface, dark green grid cutting mat, neatly arranged tools in background, warm directional task lamp from upper left, strictly unmanned, zero people, zero hands"
     },
     "object": {
       "name": "Maket / Proje Düzeneği",
-      "descriptionTr": "Karton ve şırıngalı hidrolik sistemin doğru montajlanmış ana karesi",
-      "visualPromptEn": "Detailed close-up of the assembled cardboard hydraulic candy dispenser prototype with transparent syringe and silicone tubing tightly connected"
+      "descriptionTr": "Karton ve mekanik sistemin 3 açılı teknik montaj şeması",
+      "visualPromptEn": "Professional 3-angle technical prototype reference sheet: 1) 45-degree isometric assembled view showing full layout, 2) orthographic front profile with tubing connections, 3) macro close-up of moving mechanical joints and axles"
     }
   },
   "scenes": [

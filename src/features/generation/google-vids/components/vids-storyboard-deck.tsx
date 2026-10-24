@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Clapperboard,
   Clock,
@@ -17,6 +17,9 @@ import {
   Cpu,
   ChevronDown,
   ChevronUp,
+  X,
+  ExternalLink,
+  ZoomIn,
 } from "lucide-react";
 import {
   ensureVisualAnchors,
@@ -81,6 +84,22 @@ export function VidsStoryboardDeck({
   const [activeSceneTabIdx, setActiveSceneTabIdx] = useState(0);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [showPromptAccordion, setShowPromptAccordion] = useState(false);
+  const [lightboxAnchor, setLightboxAnchor] = useState<{
+    type: "person" | "location" | "object";
+    name: string;
+    label: string;
+    descriptionTr: string;
+    visualPromptEn?: string;
+    imageUrl: string;
+  } | null>(null);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setLightboxAnchor(null);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Dosya yükleme referansları
   const personFileInputRef = useRef<HTMLInputElement>(null);
@@ -286,7 +305,35 @@ export function VidsStoryboardDeck({
                 const isGen = Boolean(activeAnchorGenerations?.person);
                 return (
                   <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: "10px", border: "1px solid #e9d5ff", display: "flex", gap: "10px", alignItems: "center" }}>
-                    <div style={{ width: "52px", height: "52px", borderRadius: "8px", overflow: "hidden", background: "#f3e8ff", border: "1px solid #d8b4fe", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div
+                      onClick={() => {
+                        if (person?.imageUrl) {
+                          setLightboxAnchor({
+                            type: "person",
+                            name: person.name || "Kişi / Karakter",
+                            label: "Kişi • 3 Açılı Turnaround",
+                            descriptionTr: person.descriptionTr || "Karakter DNA'sı",
+                            visualPromptEn: person.visualPromptEn,
+                            imageUrl: person.imageUrl,
+                          });
+                        }
+                      }}
+                      style={{
+                        width: "52px",
+                        height: "52px",
+                        borderRadius: "8px",
+                        overflow: "hidden",
+                        background: "#f3e8ff",
+                        border: "1px solid #d8b4fe",
+                        flexShrink: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: person?.imageUrl ? "zoom-in" : "default",
+                        position: "relative",
+                      }}
+                      title={person?.imageUrl ? "Tam ekran incelemek için tıklayın" : undefined}
+                    >
                       {person?.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={person.imageUrl} alt="Kişi" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -295,9 +342,36 @@ export function VidsStoryboardDeck({
                       )}
                     </div>
                     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "2px" }}>
-                      <strong style={{ fontSize: "12px", color: "#1e1b4b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {person?.name || "Kişi / Karakter"}
-                      </strong>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "4px" }}>
+                        <strong style={{ fontSize: "12px", color: "#1e1b4b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {person?.name || "Kişi / Karakter"}
+                        </strong>
+                        {person?.imageUrl && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onGenerateVisualAnchor) onGenerateVisualAnchor("person");
+                              else onGenerateCharacterImage();
+                            }}
+                            disabled={isGen}
+                            title="Prompt özelliklerini koruyarak farklı bir varyasyon üret (Yenile)"
+                            style={{
+                              padding: "2px 4px",
+                              borderRadius: "4px",
+                              border: "1px solid #e9d5ff",
+                              background: isGen ? "#f3e8ff" : "#faf5ff",
+                              color: "#7e22ce",
+                              cursor: isGen ? "not-allowed" : "pointer",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <RefreshCw size={11} className={isGen ? "spin" : ""} />
+                          </button>
+                        )}
+                      </div>
                       <span style={{ fontSize: "11px", color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {person?.descriptionTr || "Karakter DNA'sı"}
                       </span>
@@ -333,7 +407,35 @@ export function VidsStoryboardDeck({
                 const isGen = Boolean(activeAnchorGenerations?.location);
                 return (
                   <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: "10px", border: "1px solid #e9d5ff", display: "flex", gap: "10px", alignItems: "center" }}>
-                    <div style={{ width: "52px", height: "52px", borderRadius: "8px", overflow: "hidden", background: "#f3e8ff", border: "1px solid #d8b4fe", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div
+                      onClick={() => {
+                        if (loc?.imageUrl) {
+                          setLightboxAnchor({
+                            type: "location",
+                            name: loc.name || "Mekan / Atölye",
+                            label: "Mekan • Atölye İstasyonu",
+                            descriptionTr: loc.descriptionTr || "Ortam ve Işık (İnsansız)",
+                            visualPromptEn: loc.visualPromptEn,
+                            imageUrl: loc.imageUrl,
+                          });
+                        }
+                      }}
+                      style={{
+                        width: "52px",
+                        height: "52px",
+                        borderRadius: "8px",
+                        overflow: "hidden",
+                        background: "#f3e8ff",
+                        border: "1px solid #d8b4fe",
+                        flexShrink: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: loc?.imageUrl ? "zoom-in" : "default",
+                        position: "relative",
+                      }}
+                      title={loc?.imageUrl ? "Tam ekran incelemek için tıklayın" : undefined}
+                    >
                       {loc?.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={loc.imageUrl} alt="Mekan" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -342,9 +444,35 @@ export function VidsStoryboardDeck({
                       )}
                     </div>
                     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "2px" }}>
-                      <strong style={{ fontSize: "12px", color: "#1e1b4b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {loc?.name || "Mekan / Atölye"}
-                      </strong>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "4px" }}>
+                        <strong style={{ fontSize: "12px", color: "#1e1b4b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {loc?.name || "Mekan / Atölye"}
+                        </strong>
+                        {loc?.imageUrl && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onGenerateVisualAnchor) onGenerateVisualAnchor("location");
+                            }}
+                            disabled={isGen}
+                            title="Prompt özelliklerini koruyarak farklı bir varyasyon üret (Yenile)"
+                            style={{
+                              padding: "2px 4px",
+                              borderRadius: "4px",
+                              border: "1px solid #e9d5ff",
+                              background: isGen ? "#f3e8ff" : "#faf5ff",
+                              color: "#7e22ce",
+                              cursor: isGen ? "not-allowed" : "pointer",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <RefreshCw size={11} className={isGen ? "spin" : ""} />
+                          </button>
+                        )}
+                      </div>
                       <span style={{ fontSize: "11px", color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {loc?.descriptionTr || "Ortam ve Işık"}
                       </span>
@@ -377,7 +505,35 @@ export function VidsStoryboardDeck({
                 const isGen = Boolean(activeAnchorGenerations?.object);
                 return (
                   <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: "10px", border: "1px solid #e9d5ff", display: "flex", gap: "10px", alignItems: "center" }}>
-                    <div style={{ width: "52px", height: "52px", borderRadius: "8px", overflow: "hidden", background: "#f3e8ff", border: "1px solid #d8b4fe", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div
+                      onClick={() => {
+                        if (obj?.imageUrl) {
+                          setLightboxAnchor({
+                            type: "object",
+                            name: obj.name || "Maket / Proje",
+                            label: "Maket • 3 Açılı Teknik Montaj",
+                            descriptionTr: obj.descriptionTr || "Hatasız Fiziksel Düzenek",
+                            visualPromptEn: obj.visualPromptEn,
+                            imageUrl: obj.imageUrl,
+                          });
+                        }
+                      }}
+                      style={{
+                        width: "52px",
+                        height: "52px",
+                        borderRadius: "8px",
+                        overflow: "hidden",
+                        background: "#f3e8ff",
+                        border: "1px solid #d8b4fe",
+                        flexShrink: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: obj?.imageUrl ? "zoom-in" : "default",
+                        position: "relative",
+                      }}
+                      title={obj?.imageUrl ? "Tam ekran incelemek için tıklayın" : undefined}
+                    >
                       {obj?.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={obj.imageUrl} alt="Maket" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -386,9 +542,35 @@ export function VidsStoryboardDeck({
                       )}
                     </div>
                     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "2px" }}>
-                      <strong style={{ fontSize: "12px", color: "#1e1b4b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {obj?.name || "Maket / Proje"}
-                      </strong>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "4px" }}>
+                        <strong style={{ fontSize: "12px", color: "#1e1b4b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {obj?.name || "Maket / Proje"}
+                        </strong>
+                        {obj?.imageUrl && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onGenerateVisualAnchor) onGenerateVisualAnchor("object");
+                            }}
+                            disabled={isGen}
+                            title="Prompt özelliklerini koruyarak farklı bir varyasyon üret (Yenile)"
+                            style={{
+                              padding: "2px 4px",
+                              borderRadius: "4px",
+                              border: "1px solid #e9d5ff",
+                              background: isGen ? "#f3e8ff" : "#faf5ff",
+                              color: "#7e22ce",
+                              cursor: isGen ? "not-allowed" : "pointer",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <RefreshCw size={11} className={isGen ? "spin" : ""} />
+                          </button>
+                        )}
+                      </div>
                       <span style={{ fontSize: "11px", color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {obj?.descriptionTr || "Hatasız Fiziksel Düzenek"}
                       </span>
@@ -779,6 +961,213 @@ export function VidsStoryboardDeck({
           <p style={{ fontSize: "12px", color: "#64748b", maxWidth: "340px", lineHeight: 1.5 }}>
             Soldan video konusunu ve sanat tarzını seçip &ldquo;Senaryo &amp; Sahneleri Oluştur&rdquo; butonuna tıklayın.
           </p>
+        </div>
+      )}
+
+      {/* 6. Tam Ekran Referans Görsel İnceleme Modalı (Lightbox) */}
+      {lightboxAnchor && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(15, 23, 42, 0.88)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px",
+            boxSizing: "border-box",
+          }}
+          onClick={() => setLightboxAnchor(null)}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "16px",
+              maxWidth: "880px",
+              width: "100%",
+              maxHeight: "92vh",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+              border: "1px solid rgba(255,255,255,0.2)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Başlık Çubuğu */}
+            <div
+              style={{
+                padding: "12px 18px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                borderBottom: "1px solid #e2e8f0",
+                background: "#f8fafc",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    padding: "3px 9px",
+                    borderRadius: "6px",
+                    background: "#f3e8ff",
+                    color: "#7e22ce",
+                    border: "1px solid #d8b4fe",
+                  }}
+                >
+                  {lightboxAnchor.label}
+                </span>
+                <strong style={{ fontSize: "14px", color: "#0f172a" }}>
+                  {lightboxAnchor.name}
+                </strong>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLightboxAnchor(null)}
+                style={{
+                  background: "#ffffff",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "8px",
+                  padding: "5px",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#64748b",
+                }}
+                title="Kapat (ESC)"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Gövdesi: Tam Boy Görsel */}
+            <div
+              style={{
+                flex: 1,
+                minHeight: "320px",
+                maxHeight: "62vh",
+                background: "#090d16",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+                position: "relative",
+                padding: "14px",
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={lightboxAnchor.imageUrl}
+                alt={lightboxAnchor.name}
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: "100%",
+                  objectFit: "contain",
+                  borderRadius: "8px",
+                  boxShadow: "0 10px 30px rgba(0,0,0,0.6)",
+                }}
+              />
+            </div>
+
+            {/* Modal Alt Bilgi ve Hızlı Eylem Çubuğu */}
+            <div
+              style={{
+                padding: "14px 18px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "12px",
+                borderTop: "1px solid #e2e8f0",
+                background: "#ffffff",
+              }}
+            >
+              <div style={{ flex: 1, minWidth: "240px" }}>
+                <span style={{ fontSize: "12.5px", color: "#334155", fontWeight: 500, display: "block" }}>
+                  {lightboxAnchor.descriptionTr}
+                </span>
+                {lightboxAnchor.visualPromptEn && (
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      color: "#64748b",
+                      display: "block",
+                      marginTop: "3px",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      maxWidth: "520px",
+                      fontFamily: "monospace",
+                    }}
+                    title={lightboxAnchor.visualPromptEn}
+                  >
+                    Prompt: {lightboxAnchor.visualPromptEn}
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onGenerateVisualAnchor) {
+                      onGenerateVisualAnchor(lightboxAnchor.type);
+                    } else if (lightboxAnchor.type === "person") {
+                      onGenerateCharacterImage();
+                    }
+                  }}
+                  disabled={Boolean(activeAnchorGenerations?.[lightboxAnchor.type])}
+                  style={{
+                    padding: "7px 14px",
+                    borderRadius: "8px",
+                    border: "1px solid #a855f7",
+                    background: Boolean(activeAnchorGenerations?.[lightboxAnchor.type]) ? "#f3e8ff" : "#7e22ce",
+                    color: Boolean(activeAnchorGenerations?.[lightboxAnchor.type]) ? "#7e22ce" : "#ffffff",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    cursor: Boolean(activeAnchorGenerations?.[lightboxAnchor.type]) ? "not-allowed" : "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                  title="Aynı prompt özelliklerini koruyarak alternatif yeni bir varyasyon üretir"
+                >
+                  {Boolean(activeAnchorGenerations?.[lightboxAnchor.type]) ? (
+                    <LoaderCircle size={13} className="spin" />
+                  ) : (
+                    <RefreshCw size={13} />
+                  )}
+                  {Boolean(activeAnchorGenerations?.[lightboxAnchor.type]) ? "Üretiliyor..." : "Farklı Varyasyon Üret"}
+                </button>
+
+                <a
+                  href={lightboxAnchor.imageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    padding: "7px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid #cbd5e1",
+                    background: "#f8fafc",
+                    color: "#334155",
+                    fontSize: "12px",
+                    fontWeight: 500,
+                    textDecoration: "none",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                  }}
+                >
+                  <ExternalLink size={13} /> Orijinal Görsel
+                </a>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </section>

@@ -319,3 +319,28 @@ test("Desktop DIY & Cardboard craft has dedicated multi-shot (3 angles) and mult
   assert.ok(capturedRerollPromptOther.includes("SINGLE TAKE CONTINUITY"));
   assert.ok(capturedRerollPromptOther.includes("DO NOT use multi-cut jump-cuts"));
 });
+
+test("Visual anchors support multi-angle turnaround model sheets, unmanned workstation, lightbox fullscreen and refresh variation", () => {
+  const deckSource = fs.readFileSync(new URL("../src/features/generation/google-vids/components/vids-storyboard-deck.tsx", import.meta.url), "utf8");
+  const generateAnchorSource = fs.readFileSync(new URL("../src/app/api/projects/[projectId]/google-vids/generate-anchor/route.ts", import.meta.url), "utf8");
+  const charAnchorSource = fs.readFileSync(new URL("../src/app/api/projects/[projectId]/google-vids/character-anchor/route.ts", import.meta.url), "utf8");
+  const directorSource = fs.readFileSync(new URL("../src/lib/server/cinematic-prompt-director.ts", import.meta.url), "utf8");
+
+  // 1. T2I Generate Anchor Prompt: 3-view turnaround for person and object, unmanned workstation for location
+  assert.ok(generateAnchorSource.includes("3-view character turnaround model sheet"), "generate-anchor must specify 3-view turnaround for person");
+  assert.ok(generateAnchorSource.includes("3-angle technical prototype and mechanism reference sheet"), "generate-anchor must specify 3-angle technical prototype for object");
+  assert.ok(generateAnchorSource.includes("strictly unmanned workstation, zero people, zero human figures, zero hands"), "generate-anchor must ensure unmanned workstation for location");
+  assert.ok(!generateAnchorSource.includes("no split screen"), "generate-anchor must remove no split screen constraint to allow multi-angle sheets");
+
+  // 2. Character anchor route also supports 3-view turnaround
+  assert.ok(charAnchorSource.includes("3-view character turnaround model sheet"), "character-anchor must support 3-view turnaround sheet");
+
+  // 3. Director prompt instructions specify multi-angle model sheets
+  assert.ok(directorSource.includes("3-WAY VISUAL ANCHORS SPECIFICATION (PERSON • LOCATION • OBJECT - MULTI-ANGLE MODEL SHEETS)"), "cinematic director must specify multi-angle sheets rule");
+
+  // 4. Storyboard Deck UI: Lightbox Modal and Refresh Variation buttons
+  assert.ok(deckSource.includes("lightboxAnchor"), "deck must have lightboxAnchor state for fullscreen preview");
+  assert.ok(deckSource.includes("Tam Ekran Referans Görsel İnceleme Modalı (Lightbox)"), "deck must render lightbox modal");
+  assert.ok(deckSource.includes("Farklı bir varyasyon üret (Yenile)") || deckSource.includes("Farklı Varyasyon Üret"), "deck must have variation refresh buttons");
+  assert.ok(deckSource.includes("setLightboxAnchor(null)"), "deck must allow closing lightbox");
+});
