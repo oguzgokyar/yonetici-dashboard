@@ -46,6 +46,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
   // Havuz & Kuyruk
   const [accountsPool, setAccountsPool] = useState<PoolAccount[]>([]);
   const [activeJob, setActiveJob] = useState<ActiveJob | null>(null);
+  const [dismissedErrorId, setDismissedErrorId] = useState<string | null>(null);
   const [lastErrorJob, setLastErrorJob] = useState<{
     id?: string;
     error?: string;
@@ -154,7 +155,12 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
           }
         } else {
           setActiveJob(null);
-          setLastErrorJob(googleVidsFailureNotification(data.jobs || []));
+          const failed = googleVidsFailureNotification(data.jobs || []);
+          if (failed && failed.id !== dismissedErrorId) {
+            setLastErrorJob(failed);
+          } else if (!failed || (failed && failed.id === dismissedErrorId)) {
+            setLastErrorJob(null);
+          }
         }
       }
     } catch {}
@@ -491,7 +497,12 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         <VidsActiveJobBanner
           activeJob={activeJob}
           lastErrorJob={lastErrorJob}
-          onClearError={() => setLastErrorJob(null)}
+          onClearError={() => {
+            if (lastErrorJob?.id) {
+              setDismissedErrorId(lastErrorJob.id);
+            }
+            setLastErrorJob(null);
+          }}
         />
 
         {/* Brief & Parametre Formu */}
