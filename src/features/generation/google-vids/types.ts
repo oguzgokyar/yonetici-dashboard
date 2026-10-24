@@ -87,6 +87,69 @@ export type VisualAnchorsSpec = {
   object?: AnchorItemSpec;
 };
 
+export function ensureVisualAnchors(
+  sb: StoryboardResponse,
+  fallbackTopic?: string
+): StoryboardResponse {
+  const title = sb.title || fallbackTopic || "Maker Projesi";
+  const firstSceneSummary = sb.scenes?.[0]?.summaryTr || "";
+
+  const anchors: VisualAnchorsSpec = { ...(sb.visualAnchors || {}) };
+
+  // 1. Person
+  if (!anchors.person || !anchors.person.visualPromptEn) {
+    if (sb.characterAnchor) {
+      anchors.person = {
+        name: sb.characterAnchor.name || "Zanaatkâr / Usta",
+        descriptionTr: sb.characterAnchor.archetypeTr || "Hünerli usta elleri",
+        visualPromptEn:
+          sb.characterAnchor.masterVisualPromptEn ||
+          sb.characterAnchor.fixedTraitsEn ||
+          `Macro close-up portrait and focused artisan hands of a skilled maker working on ${title}. ${firstSceneSummary}. Clean workshop shirt, focused craftsman aesthetic, natural warm workshop light, sharp detail.`,
+        imageUrl: sb.characterAnchor.referenceImageUrl || anchors.person?.imageUrl,
+      };
+    } else {
+      anchors.person = {
+        name: anchors.person?.name || "Zanaatkâr / Usta",
+        descriptionTr: anchors.person?.descriptionTr || "Hünerli usta elleri ve odaklanmış bakış",
+        visualPromptEn:
+          anchors.person?.visualPromptEn ||
+          `Macro close-up portrait and focused artisan hands of a skilled maker working on ${title}. ${firstSceneSummary}. Clean workshop shirt, focused craftsman aesthetic, natural warm workshop light, sharp detail.`,
+        imageUrl: anchors.person?.imageUrl,
+      };
+    }
+  }
+
+  // 2. Location
+  if (!anchors.location || !anchors.location.visualPromptEn) {
+    anchors.location = {
+      name: anchors.location?.name || "Mekan / Atölye",
+      descriptionTr: anchors.location?.descriptionTr || "Ahşap atölye masası, yeşil kesim matı ve sıcak stüdyo ışığı",
+      visualPromptEn:
+        anchors.location?.visualPromptEn ||
+        `Authentic cozy maker workshop workbench for ${title}, dark green metric grid cutting mat, neatly arranged brass tools, clean craft setting, warm natural sunlight.`,
+      imageUrl: anchors.location?.imageUrl,
+    };
+  }
+
+  // 3. Object
+  if (!anchors.object || !anchors.object.visualPromptEn) {
+    anchors.object = {
+      name: anchors.object?.name || "Maket / Proje Düzeneği",
+      descriptionTr: anchors.object?.descriptionTr || "Montajı tamamlanmış çalışan mekanizma",
+      visualPromptEn:
+        anchors.object?.visualPromptEn ||
+        `Crisp macro photograph of the assembled ${title} working prototype mechanism. ${firstSceneSummary}. Perfectly fitted components, tightly connected tubing, authentic DIY cardboard and acrylic craft aesthetic, sharp focus.`,
+      imageUrl: anchors.object?.imageUrl,
+    };
+  }
+
+  return {
+    ...sb,
+    visualAnchors: anchors,
+  };
+}
+
 export type NarrativeModeOption =
   | "voiceover_only"
   | "dialogue_only"

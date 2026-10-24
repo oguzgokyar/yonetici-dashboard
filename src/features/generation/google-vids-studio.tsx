@@ -7,6 +7,7 @@ import { googleVidsFailureNotification } from "@/lib/google-vids-job-notificatio
 // Modüler Tipler ve Alt Bileşenler
 import {
   VISUAL_MOOD_OPTIONS,
+  ensureVisualAnchors,
   type VisualMoodOption,
   type TargetDurationOption,
   type NarrativeModeOption,
@@ -84,7 +85,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
           if (isSinematik) {
             localStorage.removeItem(`google_vids_form_${projectId}`);
           } else if (!storyboard) {
-            setStoryboard(parsed.storyboard);
+            setStoryboard(ensureVisualAnchors(parsed.storyboard, parsed.topic));
           }
         }
       }
@@ -253,7 +254,8 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         throw new Error(body.message || "Senaryo oluşturulamadı.");
       }
 
-      setStoryboard(body.storyboard);
+      const enriched = ensureVisualAnchors(body.storyboard, topic);
+      setStoryboard(enriched);
       if (isRevision) setRevisionNote("");
       setMessage(
         `Senaryo hazır: ${body.storyboard.scenes.length} sahne, toplam ${body.storyboard.totalDurationSeconds} sn. İnceleyip onaylayabilirsiniz.`
@@ -269,26 +271,12 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
   // 3 Boyutlu Referans Görsel Üretimi (Kişi • Mekan • Obje)
   async function handleGenerateVisualAnchor(type: "person" | "location" | "object") {
     if (!storyboard) return;
-    const targetAnchor =
-      storyboard.visualAnchors?.[type] ||
-      (type === "person" && storyboard.characterAnchor
-        ? {
-            name: storyboard.characterAnchor.name,
-            descriptionTr: storyboard.characterAnchor.archetypeTr,
-            visualPromptEn:
-              storyboard.characterAnchor.masterVisualPromptEn ||
-              storyboard.characterAnchor.fixedTraitsEn,
-          }
-        : null);
-
-    if (!targetAnchor) {
-      setMessage(`Bu senaryoda ${type} referans tanımı bulunamadı.`);
-      return;
-    }
+    const enrichedSb = ensureVisualAnchors(storyboard, topic);
+    const targetAnchor = enrichedSb.visualAnchors![type]!;
 
     setGeneratingAnchorType(type);
     setGeneratingAnchorImg(true);
-    const targetMoodKey = storyboard.visualMood || visualMood;
+    const targetMoodKey = enrichedSb.visualMood || visualMood;
     const label = type === "person" ? "Kişi" : type === "location" ? "Mekan" : "Maket/Obje";
     setMessage(`${label} referans görseli üretiliyor...`);
 
@@ -309,24 +297,29 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
       if (!res.ok || !data.ok) throw new Error(data.message || "Görsel üretilemedi.");
 
       const nextAnchors = {
-        ...(storyboard.visualAnchors || {}),
+        ...enrichedSb.visualAnchors,
         [type]: {
           ...targetAnchor,
           imageUrl: data.imageUrl,
         },
       };
 
-      setStoryboard({
-        ...storyboard,
+      const nextSb: StoryboardResponse = {
+        ...enrichedSb,
         visualAnchors: nextAnchors,
         characterAnchor:
-          type === "person" && storyboard.characterAnchor
+          type === "person"
             ? {
-                ...storyboard.characterAnchor,
+                name: targetAnchor.name,
+                archetypeTr: targetAnchor.descriptionTr,
+                masterVisualPromptEn: targetAnchor.visualPromptEn,
+                fixedTraitsEn: targetAnchor.visualPromptEn,
                 referenceImageUrl: data.imageUrl,
               }
-            : storyboard.characterAnchor,
-      });
+            : enrichedSb.characterAnchor,
+      };
+
+      setStoryboard(nextSb);
       setMessage(`${label} referans görseli başarıyla oluşturuldu!`);
     } catch (err: unknown) {
       setMessage(err instanceof Error ? err.message : "Referans görseli üretilemedi.");
@@ -339,6 +332,8 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
   // Kendi Fotoğrafını Yükleme (Upload)
   async function handleUploadVisualAnchor(type: "person" | "location" | "object", file: File) {
     if (!storyboard) return;
+    const enrichedSb = ensureVisualAnchors(storyboard, topic);
+    const targetAnchor = enrichedSb.visualAnchors![type]!;
     const label = type === "person" ? "Kişi" : type === "location" ? "Mekan" : "Maket/Obje";
     setMessage(`${label} görseli yükleniyor...`);
     setGeneratingAnchorType(type);
@@ -347,7 +342,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("anchorType", type);
-      formData.append("name", storyboard.visualAnchors?.[type]?.name || `${label} Referansı`);
+      formData.append("name", targetAnchor.name || `${label} Referansı`);
 
       const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/google-vids/generate-anchor`, {
         method: "POST",
@@ -356,30 +351,30 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.message || "Görsel yüklenemedi.");
 
-      const currentAnchor = storyboard.visualAnchors?.[type] || {
-        name: `${label} Referansı`,
-        descriptionTr: "",
-        visualPromptEn: "",
-      };
       const nextAnchors = {
-        ...(storyboard.visualAnchors || {}),
+        ...enrichedSb.visualAnchors,
         [type]: {
-          ...currentAnchor,
+          ...targetAnchor,
           imageUrl: data.imageUrl,
         },
       };
 
-      setStoryboard({
-        ...storyboard,
+      const nextSb: StoryboardResponse = {
+        ...enrichedSb,
         visualAnchors: nextAnchors,
         characterAnchor:
-          type === "person" && storyboard.characterAnchor
+          type === "person"
             ? {
-                ...storyboard.characterAnchor,
+                name: targetAnchor.name,
+                archetypeTr: targetAnchor.descriptionTr,
+                masterVisualPromptEn: targetAnchor.visualPromptEn,
+                fixedTraitsEn: targetAnchor.visualPromptEn,
                 referenceImageUrl: data.imageUrl,
               }
-            : storyboard.characterAnchor,
-      });
+            : enrichedSb.characterAnchor,
+      };
+
+      setStoryboard(nextSb);
       setMessage(`${label} görseli başarıyla yüklendi!`);
     } catch (err: unknown) {
       setMessage(err instanceof Error ? err.message : "Görsel yüklenirken hata oluştu.");
@@ -624,6 +619,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         storyboard={storyboard}
         visualMood={visualMood}
         narrativeMode={narrativeMode}
+        message={message}
         generatingAnchorImg={generatingAnchorImg}
         generatingAnchorType={generatingAnchorType}
         rerollingIndex={rerollingIndex}

@@ -19,6 +19,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import {
+  ensureVisualAnchors,
   type StoryboardResponse,
   type VisualMoodOption,
   type NarrativeModeOption,
@@ -28,6 +29,7 @@ interface VidsStoryboardDeckProps {
   storyboard: StoryboardResponse | null;
   visualMood: VisualMoodOption["key"];
   narrativeMode: NarrativeModeOption;
+  message?: string;
   generatingAnchorImg: boolean;
   generatingAnchorType?: "person" | "location" | "object" | null;
   rerollingIndex: number | null;
@@ -54,7 +56,9 @@ interface VidsStoryboardDeckProps {
 
 export function VidsStoryboardDeck({
   storyboard,
+  visualMood,
   narrativeMode,
+  message,
   generatingAnchorImg,
   generatingAnchorType,
   rerollingIndex,
@@ -100,8 +104,9 @@ export function VidsStoryboardDeck({
     e.target.value = "";
   }
 
-  const visualAnchors = storyboard?.visualAnchors || {};
-  const currentScene = storyboard?.scenes?.[activeSceneTabIdx];
+  const enrichedStoryboard = storyboard ? ensureVisualAnchors(storyboard) : null;
+  const visualAnchors = enrichedStoryboard?.visualAnchors || {};
+  const currentScene = enrichedStoryboard?.scenes?.[activeSceneTabIdx];
   const currentIdx = activeSceneTabIdx;
 
   return (
@@ -207,6 +212,26 @@ export function VidsStoryboardDeck({
                 Kişi, ortam ve maket düzenini kilitler (Maks. 3 çip)
               </span>
             </div>
+
+            {message && (
+              <div
+                style={{
+                  fontSize: "12px",
+                  padding: "7px 12px",
+                  borderRadius: "8px",
+                  background: message.includes("hata") || message.includes("Hata") || message.includes("bulunamadı") ? "#fee2e2" : "#f0fdf4",
+                  color: message.includes("hata") || message.includes("Hata") || message.includes("bulunamadı") ? "#991b1b" : "#166534",
+                  border: `1px solid ${message.includes("hata") || message.includes("Hata") || message.includes("bulunamadı") ? "#fecaca" : "#bbf7d0"}`,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  fontWeight: 600,
+                }}
+              >
+                {generatingAnchorImg ? <LoaderCircle size={13} className="spin" /> : <Sparkles size={13} />}
+                <span>{message}</span>
+              </div>
+            )}
 
             {/* Gizli Dosya Girişleri */}
             <input type="file" ref={personFileInputRef} accept="image/*" style={{ display: "none" }} onChange={(e) => handleFileSelected("person", e)} />
