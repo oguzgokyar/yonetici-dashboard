@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   if (!/^[a-z0-9_-]{1,64}$/i.test(id)) return new Response("Not found", { status: 404 });
-  const exists = getDatabase().prepare("SELECT 1 FROM generation_jobs WHERE id=? AND type IN ('video', 'google-vids') AND status='complete'").get(id);
+  const exists = getDatabase().prepare("SELECT 1 FROM generation_jobs WHERE id=? AND type IN ('video', 'google-vids', 'flow-video') AND status='complete'").get(id);
   if (!exists) return new Response("Not found", { status: 404 });
 
   const url = new URL(_request.url);

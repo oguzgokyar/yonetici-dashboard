@@ -4,12 +4,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Player } from "@remotion/player";
-import { Blend, Check, Clapperboard, Download, ImageOff, Layers3, LoaderCircle, Play, RefreshCw, Send, Sparkles, Type } from "lucide-react";
+import { Blend, Check, Clapperboard, Download, Film, ImageOff, Layers3, LoaderCircle, Play, RefreshCw, Send, Sparkles, Type } from "lucide-react";
 import { TelegramSendButton } from "@/components/ui/telegram-send-button";
 import { useProjects } from "@/features/projects/projects-context";
 import { AnimatedCreative } from "@/remotion/AnimatedCreative";
 import { AnimatedCreativeProps, MotionStyle } from "@/remotion/types";
 import { GoogleVidsStudio } from "./google-vids-studio";
+import { FlowVideoStudio } from "./flow-video-studio";
 
 type CreativeAsset = { id: string; url: string; model: string; prompt: string; createdAt: string };
 type RenderedVideo = { id: string; url: string; sourceAssetId?: string; durationSeconds?: number; motionStyle?: string; createdAt: string };
@@ -44,16 +45,17 @@ export function VideoGenerationStudio({ projectId }: { projectId: string }) {
   const [packageId, setPackageId] = useState("");
   const [preparedSpec, setPreparedSpec] = useState<AnimatedCreativeProps | null>(null);
   const [message, setMessage] = useState("");
-  const [activeStudioTab, setActiveStudioTab] = useState<"motion" | "vids">("motion");
+  const [activeStudioTab, setActiveStudioTab] = useState<"motion" | "vids" | "flow">("motion");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("studio") === "vids") {
-      setActiveStudioTab("vids");
+    const requested = params.get("studio");
+    if (requested === "vids" || requested === "flow") {
+      setActiveStudioTab(requested);
     }
   }, []);
 
-  function switchStudioTab(tab: "motion" | "vids") {
+  function switchStudioTab(tab: "motion" | "vids" | "flow") {
     setActiveStudioTab(tab);
     const url = new URL(window.location.href);
     url.searchParams.set("studio", tab);
@@ -147,10 +149,23 @@ export function VideoGenerationStudio({ projectId }: { projectId: string }) {
           <Sparkles size={14} />
           Google Vids (Omni AI)
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeStudioTab === "flow"}
+          onClick={() => switchStudioTab("flow")}
+          className={`button ${activeStudioTab === "flow" ? "primary" : "secondary"}`}
+          style={{ height: "34px", fontSize: "12px", padding: "0 14px", border: "none" }}
+        >
+          <Film size={14} />
+          Flow Video (Veo REST)
+        </button>
       </div>
 
       {activeStudioTab === "vids" ? (
         <GoogleVidsStudio projectId={projectId} />
+      ) : activeStudioTab === "flow" ? (
+        <FlowVideoStudio projectId={projectId} />
       ) : (
         <div className="video-studio">
       <section className="video-controls">

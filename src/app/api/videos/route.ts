@@ -49,7 +49,7 @@ function localUrlToDataUrl(url: string | undefined) {
 export async function GET(request: Request) {
   const projectId = new URL(request.url).searchParams.get("projectId")?.trim();
   if (!projectId) return Response.json({ ok: false, message: "Proje gerekli." }, { status: 400 });
-  const rows = getDatabase().prepare("SELECT id, type, model, request_json, response_json, created_at, completed_at FROM generation_jobs WHERE project_id=? AND type IN ('video', 'google-vids') AND status='complete' ORDER BY created_at DESC LIMIT 50").all(projectId) as unknown as (VideoJobRow & { type?: string; model?: string })[];
+  const rows = getDatabase().prepare("SELECT id, type, model, request_json, response_json, created_at, completed_at FROM generation_jobs WHERE project_id=? AND type IN ('video', 'google-vids', 'flow-video') AND status='complete' ORDER BY created_at DESC LIMIT 50").all(projectId) as unknown as (VideoJobRow & { type?: string; model?: string })[];
   const validRows = rows.filter((row) => {
     try {
       const req = JSON.parse(row.request_json || "{}");
@@ -66,6 +66,7 @@ export async function GET(request: Request) {
     let motionStyle: string | undefined;
     let isStockRender = false;
     let isGoogleVids = row.type === "google-vids";
+    let isFlowVideo = row.type === "flow-video";
     let googleVidsUrl: string | undefined;
     let metadata: Record<string, unknown> | undefined;
 
@@ -121,9 +122,10 @@ export async function GET(request: Request) {
     return {
       id: row.id,
       url: responseState.url || `/api/videos/${row.id}`,
-      title: responseState.title || (isGoogleVids ? "Google Vids Video" : isStockRender ? "Stok Üretim Video" : undefined),
+      title: responseState.title || (isGoogleVids ? "Google Vids Video" : isFlowVideo ? "Flow Video (Veo)" : isStockRender ? "Stok Üretim Video" : undefined),
       isStockRender,
       isGoogleVids: isGoogleVids || Boolean(responseState.isGoogleVids),
+      isFlowVideo,
       googleVidsUrl,
       sourceAssetId,
       durationSeconds: responseState.durationSeconds || durationSeconds,

@@ -15,7 +15,7 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   const input = await request.json() as ProviderInput;
-  if (!input.provider || !["cliproxy", "openai", "gemini"].includes(input.provider)) return Response.json({ ok: false, message: "Geçersiz sağlayıcı." }, { status: 400 });
+  if (!input.provider || !["cliproxy", "openai", "gemini", "flow"].includes(input.provider)) return Response.json({ ok: false, message: "Geçersiz sağlayıcı." }, { status: 400 });
   const database = getDatabase();
   const existing = database.prepare("SELECT encrypted_api_key FROM ai_provider_configs WHERE provider = ?").get(input.provider) as { encrypted_api_key?: string } | undefined;
   const encryptedKey = input.apiKey?.trim() ? encryptSecret(input.apiKey.trim()) : existing?.encrypted_api_key || null;
