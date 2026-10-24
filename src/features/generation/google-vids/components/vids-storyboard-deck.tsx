@@ -646,6 +646,7 @@ export function VidsStoryboardDeck({
                         placeholder="Google Vids Omni İngilizce promptu..."
                         style={{
                           width: "100%",
+                          minHeight: "150px",
                           padding: "8px 10px",
                           fontSize: "12px",
                           fontFamily: "monospace",
@@ -676,7 +677,7 @@ export function VidsStoryboardDeck({
                       cursor: currentIdx === 0 ? "not-allowed" : "pointer",
                     }}
                   >
-                    ← Önceki
+                    ← Önceki Sahne
                   </button>
                   <span style={{ fontSize: "11.5px", color: "#64748b" }}>
                     {currentIdx + 1} / {storyboard.scenes.length}
@@ -695,7 +696,7 @@ export function VidsStoryboardDeck({
                       cursor: currentIdx === storyboard.scenes.length - 1 ? "not-allowed" : "pointer",
                     }}
                   >
-                    Sonraki →
+                    Sonraki Sahne →
                   </button>
                 </div>
               </div>

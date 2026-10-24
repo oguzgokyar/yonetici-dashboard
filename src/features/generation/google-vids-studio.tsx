@@ -289,6 +289,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
     setActiveAnchorGenerations((prev) => ({ ...prev, [type]: true }));
     setMessage(`${label} referans görseli üretiliyor...`);
 
+    const targetMoodKey = currentSb.visualMood || visualMood;
     try {
       const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/google-vids/generate-anchor`, {
         method: "POST",
@@ -298,7 +299,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
           name: targetAnchor.name,
           descriptionTr: targetAnchor.descriptionTr,
           visualPromptEn: targetAnchor.visualPromptEn,
-          visualMood: currentSb.visualMood || visualMood,
+          visualMood: targetMoodKey,
           aspectRatio: type === "location" ? "16:9" : "1:1",
         }),
       });

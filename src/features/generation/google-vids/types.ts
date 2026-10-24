@@ -61,7 +61,7 @@ export const VISUAL_MOOD_OPTIONS: VisualMoodOption[] = [
   {
     key: "diy_craft_macro",
     label: "Masaüstü DIY & Karton Zanaat (Crafty Makro)",
-    desc: "Yakın plan masaüstü zanaat, karton dokusu ve mekanizma testi",
+    desc: "2 olay & 3 dinamik çekim açısı (jump-cut), yakın plan masaüstü zanaat ve akıcı montaj",
     recommendedPacing: "Hızlı Eylem & Montaj Adımları (3-5s)",
   },
 ];

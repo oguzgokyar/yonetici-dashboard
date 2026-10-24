@@ -81,9 +81,9 @@ export const CINEMATIC_VISUAL_MOODS: Record<CinematicVisualMood, CinematicVisual
   diy_craft_macro: {
     key: "diy_craft_macro",
     label: "Masaüstü DIY & Karton Zanaat (Crafty Makro)",
-    description: "Yakın plan masaüstü zanaat, net karton ve tutkal dokusu, tatmin edici mekanizma testi.",
+    description: "Yakın plan masaüstü zanaat, 2 olay & 3 dinamik çekim açısı (jump-cut), net karton dokusu ve akıcı montaj.",
     lightingInstruction: "Focused warm tungsten task lamp, soft overhead daylight fill, crisp micro-shadows defining cardboard flutes and tactile edges.",
-    lensInstruction: "Shot on 50mm macro cinema lens, shallow depth of field, top-down 45-degree angle focusing sharply on artisan fingers, cutter guides and moving gears.",
+    lensInstruction: "3-shot dynamic jump cuts: 45° overhead desk angle -> macro tight focus -> low-angle motion profile, shallow depth of field, rapid fluid cuts.",
     colorGrading: "Warm inviting workshop grade, rich organic cardboard kraft browns, vibrant colorful accent pieces (caps, rubber bands, balloon), clean high micro-contrast.",
   },
 };
@@ -178,6 +178,7 @@ export async function planCinematicStoryboard(input: {
   const ratio = input.aspectRatio || "9:16";
   const narrativeMode: NarrativeMode = input.narrativeMode || "hybrid";
   const includeMusic = input.includeMusic !== false;
+  const isDiyCraft = moodKey === "diy_craft_macro";
 
   const systemPrompt = `You are a world-class AI Film Director, Screenwriter and Dramaturge operating strictly under the 'smixs/visual-skills' framework (references: dramaturgy.md, universal-rules.md, veo.md).
 Your specialty is directing Google Vids Omni / Veo cinematic video generators.
@@ -264,7 +265,21 @@ MANDATORY LAWS FROM THE VISUAL-SKILLS REPOSITORY:
       * 'person': Person or artisan character anchor (name, descriptionTr, visualPromptEn).
       * 'location': Environment/setting anchor (name, descriptionTr, visualPromptEn - e.g. workshop desk, greenhouse, modern lab).
       * 'object': Central device, tool, or mechanical prototype anchor (name, descriptionTr, visualPromptEn - e.g. cardboard hydraulic dispenser setup, soil moisture sensor pot).
-    - Also maintain 'characterAnchor' for legacy compatibility.`;
+    - Also maintain 'characterAnchor' for legacy compatibility.
+
+11. "DEDICATED VISUAL PRODUCTION TYPE - DESKTOP DIY & CARDBOARD CRAFT (diy_craft_macro ONLY)":
+${isDiyCraft ? `    * SPECIAL MULTI-SHOT & MULTI-ACTION DIRECTIVE ACTIVE FOR THIS STORYBOARD:
+      - Every single scene MUST feature TWO distinct micro-events (actions) and THREE different dynamic camera angles (jump cuts / angle shifts) within its 3-5s span.
+      - This fast-cut multi-angle structure conceals generative AI morphing flaws and creates fluid, high-retention viral pacing.
+      - In EVERY scene:
+        * Action 1 + Angle 1 (45° Top-Down Desk Angle): Artisan hands measuring, scoring, or aligning parts on the green cutting mat.
+        * Action 2 + Angle 2 (Rapid Jump Cut to Extreme Macro Close-Up): Craft knife slicing cardboard flutes, hot glue bonding joints, or assembling components with crisp precision.
+        * Resolution + Angle 3 (Dynamic Cut to Low-Angle / Action Profile): Mechanism turning, axle spinning, lever pressing, LED glowing, or moving part engaging smoothly.
+      - 'cameraSetup': MUST specify "3-shot dynamic jump cuts: 45° overhead desk -> macro tight focus -> low-angle motion profile".
+      - 'promptEn': MUST explicitly be structured as a 3-shot sequence:
+        "Three-shot dynamic sequence with rapid jump cuts: [Shot 1: 45-degree top-down desk angle: artisan hands initiate action 1...] -> [Rapid jump cut to Shot 2: extreme macro close-up on precision detail completing action 2...] -> [Dynamic cut to Shot 3: low-angle action profile showcasing mechanical movement and result...]. Strict physical realism... Audio: ... SFX: ..."` : `    * INACTIVE FOR CURRENT STYLE ("${mood.label}"):
+      - Maintain classic continuous single-camera take with motivated camera movement appropriate for ${mood.label}.
+      - Strictly DO NOT use multi-cut jump-cuts or 3-shot sequences.`}`;
 
   const brandDirective = input.brandConcept?.summary ? `
 BRAND VISUAL IDENTITY & LIGHTING MANDATE (CRITICAL):
@@ -370,11 +385,15 @@ CRITICAL: Return valid JSON ONLY. No markdown backticks, no markdown code block 
         shotType: i === 0 ? "establishing" : i === defaultDurs.length - 1 ? "resolution_climax" : "action_development",
         durationSeconds: dur,
         actionType: "new_scene",
-        cameraSetup: mood.lensInstruction,
+        cameraSetup: isDiy
+          ? "3-shot dynamic jump cuts: 45° overhead desk -> macro tight focus -> low-angle motion profile"
+          : mood.lensInstruction,
         lightingSetup: mood.lightingInstruction,
-        summaryTr: `Sahne ${i + 1} gelişimi`,
+        summaryTr: isDiy ? `Sahne ${i + 1}: 2 olaylı çok açılı montaj ve test adımı` : `Sahne ${i + 1} gelişimi`,
         voiceoverTr: `Etkili kısa anlatım cümlesi sahne ${i + 1}.`,
-        promptEn: `A focused scene ${i + 1} of ${input.topic}, ${mood.lensInstruction}, ${mood.lightingInstruction}, smooth cinematic camera movement, ${mood.colorGrading}.`,
+        promptEn: isDiy
+          ? `Three-shot dynamic sequence with rapid jump cuts for ${input.topic}. Shot 1: 45-degree top-down desk view of artisan hands measuring and aligning parts on green cutting mat. Rapid jump cut to Shot 2: extreme macro close-up of precision craft knife cutting cardboard edge with clean precision. Dynamic cut to Shot 3: low-angle side profile showing smooth axle rotation and mechanical engagement. ${mood.lensInstruction}, ${mood.lightingInstruction}, ${mood.colorGrading}. Strict physical realism: rigid body mechanics, zero liquid spillage on dry surfaces, all forces transfer through direct solid-to-solid contact, downward Newtonian gravity, no floating or phantom parts, complete spatial object permanence. Audio: tactile craft workshop sounds, crisp cutter glide. SFX: (mechanical snap at 2s).`
+          : `A focused scene ${i + 1} of ${input.topic}, ${mood.lensInstruction}, ${mood.lightingInstruction}, smooth cinematic camera movement, ${mood.colorGrading}.`,
       })),
     };
   }
@@ -432,6 +451,7 @@ export async function rerollSingleScene(input: {
 
   const moodKey = input.visualMood || sb.visualMood || "cinematic_photoreal";
   const mood = CINEMATIC_VISUAL_MOODS[moodKey] || CINEMATIC_VISUAL_MOODS.cinematic_photoreal;
+  const isDiyCraft = moodKey === "diy_craft_macro";
 
   const systemPrompt = `You are a world-class AI Film Director operating under the 'smixs/visual-skills' framework.
 Your task is to RE-ROLL / RE-DIRECT exactly ONE SCENE (Scene ${input.sceneIndex}) inside an existing multi-scene sequence.
@@ -443,12 +463,18 @@ RULES:
    - EXTEND (UZAT) IS FORBIDDEN: Scene actionType MUST be "new_scene" and durationSeconds: ${targetScene.durationSeconds || 5} (min: 3, max: 10).
    - VOICEOVER WORD LIMIT: 'voiceoverTr' word count MUST NOT EXCEED: (${targetScene.durationSeconds || 5} - 1) * 2 words! Never overflow the scene duration.
 4. Audio/Dialogue Syntax: Use Veo official format: [Physical visual action/camera/light] + Audio: ... + Says: ... + SFX: ...
-4. Follow Narrative Mode:
+5. Follow Narrative Mode:
    - If 'voiceover_only', omit 'Says:' and focus on 'voiceoverTr'.
    - If 'dialogue_only', omit 'voiceoverTr' and focus on 'Says:' and 'dialogueTr'.
    - If 'hybrid', provide both.
-5. BANNED LAZY WORDS: Never output "cinematic", "photorealistic", "8k", "masterpiece".
-6. Return ONLY a valid JSON object matching the single ScriptScenePlan schema (no markdown, no array wrapping).`;
+6. BANNED LAZY WORDS: Never output "cinematic", "photorealistic", "8k", "masterpiece".
+7. "MULTI-SHOT / SINGLE-TAKE DIRECTION":
+${isDiyCraft ? `   - SPECIAL MULTI-SHOT & MULTI-ACTION DIRECTIVE (ACTIVE FOR diy_craft_macro):
+     * Scene ${input.sceneIndex} MUST feature TWO distinct micro-events (actions) and THREE dynamic camera angles (Shot 1: 45° overhead desk angle -> Shot 2: rapid jump cut to extreme macro -> Shot 3: dynamic cut to low-angle action profile) with fluid jump cuts to hide AI visual artifacts and keep high viral retention.
+     * 'cameraSetup': Specify "3-shot dynamic jump cuts: 45° overhead desk -> macro tight focus -> low-angle motion profile".
+     * 'promptEn': Explicitly structure as a 3-shot sequence: "Three-shot dynamic sequence with rapid jump cuts: [Shot 1: 45-degree top-down desk angle...] -> [Rapid jump cut to Shot 2: extreme macro close-up...] -> [Dynamic cut to Shot 3: low-angle action profile...]. Strict physical realism... Audio: ... SFX: ..."` : `   - SINGLE TAKE CONTINUITY:
+     * For visual mood "${mood.label}", maintain standard cinematic single-camera take with motivated camera movement. DO NOT use multi-cut jump-cuts.`}
+8. Return ONLY a valid JSON object matching the single ScriptScenePlan schema (no markdown, no array wrapping).`;
 
   const userPrompt = `ORIGINAL STORY TOPIC: "${input.topic}"
 EXISTING NARRATIVE ARC: "${sb.narrativeTr}"
