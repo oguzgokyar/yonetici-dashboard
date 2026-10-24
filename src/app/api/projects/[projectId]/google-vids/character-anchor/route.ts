@@ -85,7 +85,7 @@ export async function POST(request: Request, context: Context) {
     }
 
     // Enhance prompt strictly following visual-skills U7 (Character consistency anchor) and project visual mood
-    const enhancedPrompt = `Visual-skills 3-view character turnaround model sheet of ${body.characterName || "Hero"}, ${body.archetypeTr || ""}. ${styleDescriptor}. PHYSICAL IDENTITY SPECS: ${body.fixedTraitsEn || promptEn}. Master character reference turnaround sheet showing 3 key angles: 1) clean front profile silhouette and costume, 2) 3/4 dynamic crafting/action posture, 3) macro close-up detail of hands and distinctive facial features. Consistent facial structure, distinctive wardrobe, clothing textures, eyes and silhouette. Neutral clean studio background, no text labels, no watermarks, no duplicate disfigured faces.`;
+    const enhancedPrompt = `Visual-skills 3-view character turnaround model sheet of bright school-age junior maker ${body.characterName || "Can"}, ${body.archetypeTr || "youthful student maker kid"}. ${styleDescriptor}. PHYSICAL IDENTITY SPECS: ${body.fixedTraitsEn || promptEn}. Master character reference turnaround sheet showing 3 key angles: 1) clean front profile silhouette and costume, 2) 3/4 dynamic crafting/action posture, 3) macro close-up detail of nimble young hands and distinctive facial features. Consistent youthful school-age facial structure, curious expressive eyes, distinctive wardrobe, clothing textures, and silhouette. Neutral clean studio background, no text labels, no watermarks, no duplicate disfigured faces.`;
 
     // type='character-anchor' olarak kaydedilir; böylece görsel stüdyosu ('image') ve motion video listelerine karışmaz
     db.prepare(

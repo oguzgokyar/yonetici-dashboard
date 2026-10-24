@@ -388,6 +388,8 @@ test("Reference chips tagging (@slug), clean ASCII filenames, and direct inserti
     visualMood: "diy_craft_macro",
   });
   assert.ok(fallbackSb.scenes.length >= 3);
+  assert.equal(fallbackSb.visualAnchors.person.name, "Genç Maker Can", "default character must be child maker kid (Genç Maker Can)");
+  assert.ok(fallbackSb.visualAnchors.person.descriptionTr.includes("7-14"), "character must target 7-14 child demographic");
   for (const sc of fallbackSb.scenes) {
     assert.ok(sc.referenceChips && sc.referenceChips.length > 0, "every scene must carry referenceChips");
     assert.ok(sc.promptEn.includes("@"), "promptEn must contain @ tags");
@@ -398,4 +400,5 @@ test("Reference chips tagging (@slug), clean ASCII filenames, and direct inserti
   assert.ok(!autoScript.includes("btns = Array.from(document.querySelectorAll('[aria-label*=\"Yeni sahne\"]'));"), "automation script must not click '+' to avoid 5s blank scene padding");
   assert.ok(autoScript.includes("to_clean_chip_slug"), "automation script must sanitize chip filenames to clean slugs");
   assert.ok(autoScript.includes("cleared_chips = await eval_js(ws"), "automation script must clear previous scene chips before attaching");
+  assert.ok(autoScript.includes("junior maker"), "automation script must sanitize to child junior maker");
 });

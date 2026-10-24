@@ -100,21 +100,21 @@ export function ensureVisualAnchors(
   if (!anchors.person || !anchors.person.visualPromptEn) {
     if (sb.characterAnchor) {
       anchors.person = {
-        name: sb.characterAnchor.name || "Zanaatkâr / Usta",
-        descriptionTr: sb.characterAnchor.archetypeTr || "Hünerli usta elleri",
+        name: sb.characterAnchor.name || "Genç Maker Can",
+        descriptionTr: sb.characterAnchor.archetypeTr || "7-14 yaş aralığında meraklı, üretken genç maker çocuk",
         visualPromptEn:
           sb.characterAnchor.masterVisualPromptEn ||
           sb.characterAnchor.fixedTraitsEn ||
-          `Macro close-up portrait and focused artisan hands of a skilled maker working on ${title}. ${firstSceneSummary}. Clean workshop shirt, focused craftsman aesthetic, natural warm workshop light, sharp detail.`,
+          `Professional 3-view character turnaround model sheet of bright school-age junior maker apprentice Can working on ${title}. ${firstSceneSummary}. Youthful student maker kid with curious expressive eyes, colorful casual workshop hoodie with rolled-up sleeves, nimble young hands eager to craft, warm natural light.`,
         imageUrl: sb.characterAnchor.referenceImageUrl || anchors.person?.imageUrl,
       };
     } else {
       anchors.person = {
-        name: anchors.person?.name || "Zanaatkâr / Usta",
-        descriptionTr: anchors.person?.descriptionTr || "Hünerli usta elleri ve odaklanmış bakış",
+        name: anchors.person?.name || "Genç Maker Can",
+        descriptionTr: anchors.person?.descriptionTr || "7-14 yaş aralığında meraklı, üretken genç maker çocuk",
         visualPromptEn:
           anchors.person?.visualPromptEn ||
-          `Macro close-up portrait and focused artisan hands of a skilled maker working on ${title}. ${firstSceneSummary}. Clean workshop shirt, focused craftsman aesthetic, natural warm workshop light, sharp detail.`,
+          `Professional 3-view character turnaround model sheet of bright school-age junior maker apprentice Can working on ${title}. ${firstSceneSummary}. Youthful student maker kid with curious expressive eyes, colorful casual workshop hoodie with rolled-up sleeves, nimble young hands eager to craft, warm natural light.`,
         imageUrl: anchors.person?.imageUrl,
       };
     }
