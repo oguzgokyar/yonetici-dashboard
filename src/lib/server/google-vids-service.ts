@@ -27,6 +27,11 @@ export interface GoogleVidsJobRequest {
     fixedTraitsEn?: string;
     referenceImageUrl?: string;
   };
+  visualAnchors?: {
+    person?: { name?: string; descriptionTr?: string; visualPromptEn?: string; imageUrl?: string };
+    location?: { name?: string; descriptionTr?: string; visualPromptEn?: string; imageUrl?: string };
+    object?: { name?: string; descriptionTr?: string; visualPromptEn?: string; imageUrl?: string };
+  };
   musicSpec?: Record<string, unknown>;
   preferredAuthuser?: number;
   preferredAccountId?: string;
@@ -242,12 +247,22 @@ export async function processGoogleVidsJob(job: {
     return;
   }
 
-  // Referans görsel URL (varsa)
-  const referenceImagePublicUrl = req.characterAnchor?.referenceImageUrl
-    ? req.characterAnchor.referenceImageUrl.startsWith("http")
-      ? req.characterAnchor.referenceImageUrl
-      : `${callbackBaseUrl}${req.characterAnchor.referenceImageUrl}`
-    : "";
+  // Referans görsel URL'leri (Kişi, Mekan, Obje - maks 3 adet)
+  const rawRefUrls: string[] = [];
+  if (req.visualAnchors?.person?.imageUrl) {
+    rawRefUrls.push(req.visualAnchors.person.imageUrl);
+  } else if (req.characterAnchor?.referenceImageUrl) {
+    rawRefUrls.push(req.characterAnchor.referenceImageUrl);
+  }
+  if (req.visualAnchors?.location?.imageUrl) {
+    rawRefUrls.push(req.visualAnchors.location.imageUrl);
+  }
+  if (req.visualAnchors?.object?.imageUrl) {
+    rawRefUrls.push(req.visualAnchors.object.imageUrl);
+  }
+
+  const referenceImagePublicUrls = rawRefUrls.map(u => u.startsWith("http") ? u : `${callbackBaseUrl}${u}`).slice(0, 3);
+  const referenceImagePublicUrl = referenceImagePublicUrls[0] || "";
 
   const downloadRefImageCmd = referenceImagePublicUrl
     ? `curl -sL "${referenceImagePublicUrl}" -o "/tmp/vids_ref_${job.id}.png"\n`
@@ -280,6 +295,7 @@ export async function processGoogleVidsJob(job: {
           profile_dir: profileDir,
           scenes,
           reference_image_url: referenceImagePublicUrl,
+          reference_image_urls: referenceImagePublicUrls,
           callback_url: callbackUrl,
           callback_token: callbackToken,
           remove_watermark: true,

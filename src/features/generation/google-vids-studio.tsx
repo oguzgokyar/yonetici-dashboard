@@ -40,6 +40,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
   const [revising, setRevising] = useState(false);
   const [enqueueing, setEnqueueing] = useState(false);
   const [generatingAnchorImg, setGeneratingAnchorImg] = useState(false);
+  const [generatingAnchorType, setGeneratingAnchorType] = useState<"person" | "location" | "object" | null>(null);
   const [rerollingIndex, setRerollingIndex] = useState<number | null>(null);
   const [loadingVideos, setLoadingVideos] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -265,41 +266,125 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
     }
   }
 
-  // Karakter Referans Portresi Üret
-  async function handleGenerateCharacterImage() {
-    if (!storyboard?.characterAnchor) return;
+  // 3 Boyutlu Referans Görsel Üretimi (Kişi • Mekan • Obje)
+  async function handleGenerateVisualAnchor(type: "person" | "location" | "object") {
+    if (!storyboard) return;
+    const targetAnchor =
+      storyboard.visualAnchors?.[type] ||
+      (type === "person" && storyboard.characterAnchor
+        ? {
+            name: storyboard.characterAnchor.name,
+            descriptionTr: storyboard.characterAnchor.archetypeTr,
+            visualPromptEn:
+              storyboard.characterAnchor.masterVisualPromptEn ||
+              storyboard.characterAnchor.fixedTraitsEn,
+          }
+        : null);
+
+    if (!targetAnchor) {
+      setMessage(`Bu senaryoda ${type} referans tanımı bulunamadı.`);
+      return;
+    }
+
+    setGeneratingAnchorType(type);
     setGeneratingAnchorImg(true);
     const targetMoodKey = storyboard.visualMood || visualMood;
-    const moodLabel = VISUAL_MOOD_OPTIONS.find((m) => m.key === targetMoodKey)?.label || "Seçilen Tarz";
-    setMessage(`Visual-skills motoruyla karakterin referans portresi üretiliyor (${moodLabel})...`);
+    const label = type === "person" ? "Kişi" : type === "location" ? "Mekan" : "Maket/Obje";
+    setMessage(`${label} referans görseli üretiliyor...`);
+
     try {
-      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/google-vids/character-anchor`, {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/google-vids/generate-anchor`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          characterName: storyboard.characterAnchor.name,
-          masterVisualPromptEn: storyboard.characterAnchor.masterVisualPromptEn,
-          archetypeTr: storyboard.characterAnchor.archetypeTr,
-          fixedTraitsEn: storyboard.characterAnchor.fixedTraitsEn,
+          anchorType: type,
+          name: targetAnchor.name,
+          descriptionTr: targetAnchor.descriptionTr,
+          visualPromptEn: targetAnchor.visualPromptEn,
           visualMood: targetMoodKey,
-          aspectRatio: "1:1",
+          aspectRatio: type === "location" ? "16:9" : "1:1",
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.message || "Görsel üretilemedi.");
 
+      const nextAnchors = {
+        ...(storyboard.visualAnchors || {}),
+        [type]: {
+          ...targetAnchor,
+          imageUrl: data.imageUrl,
+        },
+      };
+
       setStoryboard({
         ...storyboard,
-        characterAnchor: {
-          ...storyboard.characterAnchor,
-          referenceImageUrl: data.imageUrl,
-        },
+        visualAnchors: nextAnchors,
+        characterAnchor:
+          type === "person" && storyboard.characterAnchor
+            ? {
+                ...storyboard.characterAnchor,
+                referenceImageUrl: data.imageUrl,
+              }
+            : storyboard.characterAnchor,
       });
-      setMessage("Karakter referans görseli başarıyla oluşturuldu ve kilitlendi!");
+      setMessage(`${label} referans görseli başarıyla oluşturuldu!`);
     } catch (err: unknown) {
       setMessage(err instanceof Error ? err.message : "Referans görseli üretilemedi.");
     } finally {
+      setGeneratingAnchorType(null);
       setGeneratingAnchorImg(false);
+    }
+  }
+
+  // Kendi Fotoğrafını Yükleme (Upload)
+  async function handleUploadVisualAnchor(type: "person" | "location" | "object", file: File) {
+    if (!storyboard) return;
+    const label = type === "person" ? "Kişi" : type === "location" ? "Mekan" : "Maket/Obje";
+    setMessage(`${label} görseli yükleniyor...`);
+    setGeneratingAnchorType(type);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("anchorType", type);
+      formData.append("name", storyboard.visualAnchors?.[type]?.name || `${label} Referansı`);
+
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/google-vids/generate-anchor`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.message || "Görsel yüklenemedi.");
+
+      const currentAnchor = storyboard.visualAnchors?.[type] || {
+        name: `${label} Referansı`,
+        descriptionTr: "",
+        visualPromptEn: "",
+      };
+      const nextAnchors = {
+        ...(storyboard.visualAnchors || {}),
+        [type]: {
+          ...currentAnchor,
+          imageUrl: data.imageUrl,
+        },
+      };
+
+      setStoryboard({
+        ...storyboard,
+        visualAnchors: nextAnchors,
+        characterAnchor:
+          type === "person" && storyboard.characterAnchor
+            ? {
+                ...storyboard.characterAnchor,
+                referenceImageUrl: data.imageUrl,
+              }
+            : storyboard.characterAnchor,
+      });
+      setMessage(`${label} görseli başarıyla yüklendi!`);
+    } catch (err: unknown) {
+      setMessage(err instanceof Error ? err.message : "Görsel yüklenirken hata oluştu.");
+    } finally {
+      setGeneratingAnchorType(null);
     }
   }
 
@@ -540,13 +625,16 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         visualMood={visualMood}
         narrativeMode={narrativeMode}
         generatingAnchorImg={generatingAnchorImg}
+        generatingAnchorType={generatingAnchorType}
         rerollingIndex={rerollingIndex}
         revising={revising}
         enqueueing={enqueueing}
         planning={planning}
         revisionNote={revisionNote}
         setRevisionNote={setRevisionNote}
-        onGenerateCharacterImage={() => void handleGenerateCharacterImage()}
+        onGenerateCharacterImage={() => void handleGenerateVisualAnchor("person")}
+        onGenerateVisualAnchor={(type) => void handleGenerateVisualAnchor(type)}
+        onUploadVisualAnchor={(type, file) => void handleUploadVisualAnchor(type, file)}
         onRerollScene={(idx) => void handleRerollScene(idx)}
         onUpdateScenePrompt={handleUpdateScenePrompt}
         onUpdateSceneDuration={handleUpdateSceneDuration}

@@ -176,6 +176,7 @@ export async function POST(request: Request, context: Context) {
       narrativeTr: storyboard.narrativeTr,
       narrativeMode: storyboard.narrativeMode || "hybrid",
       characterAnchor: storyboard.characterAnchor,
+      visualAnchors: storyboard.visualAnchors,
       musicSpec: storyboard.musicSpec,
       isSceneClip: Boolean(body.isSceneClip || storyboard.isSceneClip),
       scope: (body.isSceneClip || storyboard.isSceneClip) ? "scene_clip" : undefined,

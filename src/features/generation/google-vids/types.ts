@@ -74,6 +74,19 @@ export type CharacterAnchorSpec = {
   referenceImageUrl?: string;
 };
 
+export type AnchorItemSpec = {
+  name: string;
+  descriptionTr: string;
+  visualPromptEn: string;
+  imageUrl?: string;
+};
+
+export type VisualAnchorsSpec = {
+  person?: AnchorItemSpec;
+  location?: AnchorItemSpec;
+  object?: AnchorItemSpec;
+};
+
 export type NarrativeModeOption =
   | "voiceover_only"
   | "dialogue_only"
@@ -112,6 +125,7 @@ export type StoryboardResponse = {
   visualMood: VisualMoodOption["key"];
   aspectRatio: "9:16" | "16:9" | "1:1";
   characterAnchor?: CharacterAnchorSpec;
+  visualAnchors?: VisualAnchorsSpec;
   musicSpec?: MusicMoodSpec;
   scenes: ScriptScenePlan[];
   isSceneClip?: boolean;
@@ -162,6 +176,7 @@ export type ActiveJob = {
     visualMood?: VisualMoodOption["key"];
     narrativeTr?: string;
     characterAnchor?: CharacterAnchorSpec;
+    visualAnchors?: VisualAnchorsSpec;
     scenes?: ScriptScenePlan[];
     origin?: string;
   };

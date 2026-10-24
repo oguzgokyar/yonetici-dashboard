@@ -128,6 +128,19 @@ export interface MusicMoodSpec {
   tempoBpm?: number;
 }
 
+export interface AnchorItemSpec {
+  name: string;
+  descriptionTr: string;
+  visualPromptEn: string;
+  imageUrl?: string;
+}
+
+export interface VisualAnchorsSpec {
+  person?: AnchorItemSpec;
+  location?: AnchorItemSpec;
+  object?: AnchorItemSpec;
+}
+
 export interface StoryboardResponse {
   title: string;
   narrativeTr: string;
@@ -136,6 +149,7 @@ export interface StoryboardResponse {
   visualMood: CinematicVisualMood;
   aspectRatio: "9:16" | "16:9" | "1:1";
   characterAnchor?: CharacterAnchorSpec; // Hikayede sabit kalması gereken ana karakter/obje
+  visualAnchors?: VisualAnchorsSpec; // 3'lü referans çıpası: Kişi, Mekan, Obje/Maket
   musicSpec?: MusicMoodSpec; // Hikayenin duygusuna göre üretilen müzik spesifikasyonu
   scenes: ScriptScenePlan[];
 }
@@ -236,12 +250,21 @@ MANDATORY LAWS FROM THE VISUAL-SKILLS REPOSITORY:
    - DYNAMIC VOICEOVER WORD LIMIT (CRITICAL):
      * In Turkish natural speech, pacing is ~2 words per second.
      * Each scene's 'voiceoverTr' word count MUST NOT EXCEED: (durationSeconds - 1) * 2 words!
-       - 3s scene: Maximum 4 words (~1 punchy sentence).
-       - 4s scene: Maximum 6 words.
-       - 5s scene: Maximum 8 words.
-       - 7s scene: Maximum 12 words.
-       - 10s scene: Maximum 18 words.
-     * Leave buffer for breath and camera motion so voiceover NEVER overflows the scene clip!`;
+     * Leave buffer for breath and camera motion so voiceover NEVER overflows the scene clip!
+
+9. "UNIVERSAL PHYSICAL REALISM & RIGID TOPOLOGY LAWS (CRITICAL - NO LOGIC ERRORS)":
+   - Closed-Circuit Flow: Any fluid (water, oil, air) moves ONLY through dedicated sealed conduits (tubes, pipes, nozzles). Syringe nozzles MUST connect directly into the silicone tube; water flows strictly INSIDE the clear tube; ZERO liquid spillage on dry cardboard or desk surfaces.
+   - Grounded Sensors & Probes: Electrical probes, sensors, wires, and breadboard pins MUST be rigidly seated or inserted into their designated media (e.g., moisture sensor prongs are firmly plunged 5cm deep vertically inside the soil of the flowerpot; watering cans pour strictly onto the soil surface, never outside the pot).
+   - Solid Mechanical Contact: Gears, levers, pistons, and sliding doors actuate only via physical direct mechanical interlock and friction-fit contact. Zero floating parts.
+   - Always append this strict physical boundary token to EVERY scene's 'promptEn':
+     "Strict physical realism: rigid body mechanics, zero liquid spillage on dry surfaces, all forces transfer through direct solid-to-solid contact, downward Newtonian gravity, no floating or phantom parts, complete spatial object permanence."
+
+10. "3-WAY VISUAL ANCHORS SPECIFICATION (PERSON • LOCATION • OBJECT)":
+    - Define comprehensive 'visualAnchors' in your JSON output with 3 dedicated references:
+      * 'person': Person or artisan character anchor (name, descriptionTr, visualPromptEn).
+      * 'location': Environment/setting anchor (name, descriptionTr, visualPromptEn - e.g. workshop desk, greenhouse, modern lab).
+      * 'object': Central device, tool, or mechanical prototype anchor (name, descriptionTr, visualPromptEn - e.g. cardboard hydraulic dispenser setup, soil moisture sensor pot).
+    - Also maintain 'characterAnchor' for legacy compatibility.`;
 
   const brandDirective = input.brandConcept?.summary ? `
 BRAND VISUAL IDENTITY & LIGHTING MANDATE (CRITICAL):
@@ -280,10 +303,27 @@ Return ONLY a valid JSON object matching this schema (no markdown fences, no con
     "musicPromptEn": "Instrumental music generation prompt for Google Vids Audio in English, no vocals"
   },
   "characterAnchor": {
-    "name": "Karakter adı (örn: Nasreddin Hoca veya Ana Karakter)",
-    "archetypeTr": "Türkçe arketip (örn: Bilge halk filozofu, 60'lı yaşlar)",
+    "name": "Karakter adı (örn: Nasreddin Hoca veya Zanaatkâr)",
+    "archetypeTr": "Türkçe arketip (örn: Bilge usta, hünerli eller)",
     "masterVisualPromptEn": "Detailed character design prompt in English for generating the reference image",
-    "fixedTraitsEn": "Exact recurring traits: white round turban, turquoise wool robe, full white beard, gentle smiling eyes"
+    "fixedTraitsEn": "Exact recurring traits: artisan hands, clean work sleeves, focused gaze"
+  },
+  "visualAnchors": {
+    "person": {
+      "name": "Kişi / Usta",
+      "descriptionTr": "Zanaatkâr ustanın elleri ve çalışma kıyafeti",
+      "visualPromptEn": "Macro close-up portrait or hands of a focused maker/artisan with clean workshop sleeves"
+    },
+    "location": {
+      "name": "Mekan / Atölye",
+      "descriptionTr": "Ahşap atölye masası, yeşil kesim matı ve yumuşak stüdyo ışığı",
+      "visualPromptEn": "Cozy organized maker craft workbench, dark green grid cutting mat, tidy tools in background, warm directional sunlight"
+    },
+    "object": {
+      "name": "Maket / Proje Düzeneği",
+      "descriptionTr": "Karton ve şırıngalı hidrolik sistemin doğru montajlanmış ana karesi",
+      "visualPromptEn": "Detailed close-up of the assembled cardboard hydraulic candy dispenser prototype with transparent syringe and silicone tubing tightly connected"
+    }
   },
   "scenes": [
     {
@@ -350,7 +390,26 @@ CRITICAL: Return valid JSON ONLY. No markdown backticks, no markdown code block 
       actionType: "new_scene" as const,
     };
   });
-  parsed.totalDurationSeconds = parsed.scenes.reduce((sum, sc) => sum + sc.durationSeconds, 0);
+    parsed.totalDurationSeconds = parsed.scenes.reduce((sum, sc) => sum + sc.durationSeconds, 0);
+
+  // Sync 3-way visualAnchors and legacy characterAnchor
+  if (!parsed.visualAnchors) {
+    parsed.visualAnchors = {};
+  }
+  if (parsed.characterAnchor && !parsed.visualAnchors.person) {
+    parsed.visualAnchors.person = {
+      name: parsed.characterAnchor.name,
+      descriptionTr: parsed.characterAnchor.archetypeTr,
+      visualPromptEn: parsed.characterAnchor.masterVisualPromptEn || parsed.characterAnchor.fixedTraitsEn,
+    };
+  } else if (parsed.visualAnchors.person && !parsed.characterAnchor) {
+    parsed.characterAnchor = {
+      name: parsed.visualAnchors.person.name,
+      archetypeTr: parsed.visualAnchors.person.descriptionTr,
+      masterVisualPromptEn: parsed.visualAnchors.person.visualPromptEn,
+      fixedTraitsEn: parsed.visualAnchors.person.visualPromptEn,
+    };
+  }
 
   return parsed;
 }
