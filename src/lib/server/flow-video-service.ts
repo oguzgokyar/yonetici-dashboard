@@ -86,12 +86,20 @@ export function getFlowConfig(): FlowStoredConfig {
     }
   }
 
+  const isLocal =
+    baseUrl.includes("127.0.0.1") ||
+    baseUrl.includes("localhost") ||
+    baseUrl.includes("flow-agent") ||
+    baseUrl.includes(":8001") ||
+    baseUrl.includes("10.0.1.1") ||
+    baseUrl.includes("10.0.7.1");
+
   return {
     enabled,
     baseUrl: baseUrl.replace(/\/+$/, ""),
     apiKey,
-    hasApiKey: Boolean(apiKey),
-    maskedKey: apiKey ? maskSecret(apiKey) : "",
+    hasApiKey: Boolean(apiKey) || isLocal,
+    maskedKey: apiKey ? maskSecret(apiKey) : isLocal ? "Yerel Motor (API anahtarsız)" : "",
     defaultModel,
   };
 }
