@@ -183,7 +183,10 @@ export async function createFlowVideoJob(params: {
   const isLocal =
     config.baseUrl.includes("127.0.0.1") ||
     config.baseUrl.includes("localhost") ||
-    config.baseUrl.includes(":8001");
+    config.baseUrl.includes("flow-agent") ||
+    config.baseUrl.includes(":8001") ||
+    config.baseUrl.includes("10.0.1.1") ||
+    config.baseUrl.includes("10.0.7.1");
 
   if (!config.apiKey && !isLocal && !process.env.FLOW_MOCK) {
     throw new Error(
@@ -457,7 +460,10 @@ export async function syncFlowJobStatus(jobId: string): Promise<FlowVideoJob | n
   const isLocal =
     config.baseUrl.includes("127.0.0.1") ||
     config.baseUrl.includes("localhost") ||
-    config.baseUrl.includes(":8001");
+    config.baseUrl.includes("flow-agent") ||
+    config.baseUrl.includes(":8001") ||
+    config.baseUrl.includes("10.0.1.1") ||
+    config.baseUrl.includes("10.0.7.1");
   const remoteJobId = (req.remoteJobId as string) || row.id;
 
   if (!config.apiKey && !isLocal && !process.env.FLOW_MOCK) {

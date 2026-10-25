@@ -29,7 +29,13 @@ export async function POST(request: Request) {
       const config = getFlowConfig();
       const testApiKey = apiKey?.trim() || config.apiKey;
       const testBaseUrl = (baseUrl?.trim() || config.baseUrl).replace(/\/+$/, "");
-      const isLocal = testBaseUrl.includes("127.0.0.1") || testBaseUrl.includes("localhost") || testBaseUrl.includes(":8001");
+      const isLocal =
+        testBaseUrl.includes("127.0.0.1") ||
+        testBaseUrl.includes("localhost") ||
+        testBaseUrl.includes("flow-agent") ||
+        testBaseUrl.includes(":8001") ||
+        testBaseUrl.includes("10.0.1.1") ||
+        testBaseUrl.includes("10.0.7.1");
 
       if (!testApiKey && !isLocal) {
         return Response.json(
