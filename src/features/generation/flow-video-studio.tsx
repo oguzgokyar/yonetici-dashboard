@@ -30,6 +30,17 @@ import { useProjects } from "@/features/projects/projects-context";
 
 type CreativeAsset = { id: string; url: string; model?: string; prompt?: string; createdAt?: string };
 
+export type PoolAccount = {
+  id: string;
+  email: string;
+  authuser_index: number;
+  profile_directory: string;
+  display_name: string;
+  quota_status: "available" | "exhausted" | "cooldown";
+  total_videos_rendered: number;
+  is_active: number;
+};
+
 export interface FlowVideoItem {
   id: string;
   projectId: string;
@@ -39,6 +50,7 @@ export interface FlowVideoItem {
   aspectRatio: string;
   durationSeconds: number;
   sourceAssetId?: string;
+  accountEmail?: string;
   videoUrl?: string;
   thumbnailUrl?: string;
   error?: string | null;
@@ -75,6 +87,8 @@ export function FlowVideoStudio({ projectId }: { projectId: string }) {
   // Data states
   const [assets, setAssets] = useState<CreativeAsset[]>([]);
   const [videos, setVideos] = useState<FlowVideoItem[]>([]);
+  const [accountsPool, setAccountsPool] = useState<PoolAccount[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState("auto");
   const [selectedVideoId, setSelectedVideoId] = useState<string>("");
   const [isConfigured, setIsConfigured] = useState(true);
 
@@ -96,6 +110,15 @@ export function FlowVideoStudio({ projectId }: { projectId: string }) {
   const activeJob = useMemo(
     () => videos.find((v) => v.status === "running" || v.status === "queued"),
     [videos]
+  );
+
+  const activeAvailableCount = useMemo(
+    () => accountsPool.filter((a) => a.is_active !== 0 && a.quota_status === "available").length,
+    [accountsPool]
+  );
+  const activeTotalCount = useMemo(
+    () => accountsPool.filter((a) => a.is_active !== 0).length || accountsPool.length || 1,
+    [accountsPool]
   );
 
   // Selected or latest completed video
@@ -123,6 +146,9 @@ export function FlowVideoStudio({ projectId }: { projectId: string }) {
       if (flowRes.ok) {
         const flowData = await flowRes.json();
         setVideos(flowData.videos || []);
+        if (Array.isArray(flowData.accounts)) {
+          setAccountsPool(flowData.accounts);
+        }
         setIsConfigured(Boolean(flowData.configured));
         if (flowData.defaultModel) {
           setModel(flowData.defaultModel);
@@ -201,6 +227,7 @@ export function FlowVideoStudio({ projectId }: { projectId: string }) {
           aspectRatio,
           durationSeconds: duration,
           sourceAssetId: selectedAssetId || undefined,
+          preferredAccountId: selectedAccountId !== "auto" ? selectedAccountId : undefined,
         }),
       });
 
@@ -481,6 +508,57 @@ export function FlowVideoStudio({ projectId }: { projectId: string }) {
             Diyalog için Veo formatı: Çift tırnak içinde konuşma cümleleri yerel dudak senkronizasyonu üretir.
           </small>
         </div>
+
+        {/* Google Hesap Havuzu (Multi-Account) */}
+        {accountsPool.length > 0 && (
+          <div className="video-control-section">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+              <strong style={{ fontSize: "12px", color: "#1e293b" }}>Google Hesap Havuzu</strong>
+              <Link
+                href="/settings"
+                style={{
+                  color: "#2563eb",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  textDecoration: "none",
+                }}
+                title="Sistem Ayarları > Google Vids/Flow Havuz sayfasına gider"
+              >
+                ⚙️ Havuzu Yönet →
+              </Link>
+            </div>
+            <small>Üretim yapılacak Google hesabı ve kota durumu</small>
+            <div style={{ marginTop: "8px" }}>
+              <select
+                value={selectedAccountId}
+                onChange={(e) => setSelectedAccountId(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "8px 10px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border, #cbd5e1)",
+                  fontSize: "12px",
+                  background: "#ffffff",
+                  boxSizing: "border-box",
+                }}
+              >
+                <option value="auto">
+                  🔄 Otomatik Havuz Rotasyonu ({activeAvailableCount}/{activeTotalCount} Uygun)
+                </option>
+                {accountsPool.map((acc) => (
+                  <option key={acc.id} value={acc.id} disabled={acc.is_active === 0}>
+                    {acc.is_active === 0 ? "⏸️" : acc.quota_status === "available" ? "🟢" : "🔴"}{" "}
+                    {acc.email} [{acc.profile_directory || "Default"}]{" "}
+                    {acc.is_active === 0 ? "(Pasif)" : acc.quota_status !== "available" ? "(Kotada)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
 
         {/* Model Seçimi */}
         <div className="video-control-section">

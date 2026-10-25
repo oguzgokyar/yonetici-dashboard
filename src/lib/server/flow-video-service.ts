@@ -6,6 +6,11 @@ import path from "node:path";
 import { execSync } from "node:child_process";
 import { getDatabase } from "@/lib/server/database";
 import { decryptSecret, encryptSecret, maskSecret } from "@/lib/server/secrets";
+import {
+  acquireAvailableVidsAccount,
+  recordVidsAccountRenderSuccess,
+  markVidsAccountQuotaExhausted,
+} from "@/lib/server/google-vids-account-pool";
 
 export type FlowVideoModel = "veo-3.1-fast" | "veo-3.1-quality" | "veo-3.1-lite" | "omni-flash";
 export type FlowAspectRatio = "9:16" | "16:9" | "1:1";
@@ -29,6 +34,7 @@ export interface FlowVideoJob {
   aspectRatio: string;
   durationSeconds: number;
   sourceAssetId?: string;
+  accountEmail?: string;
   videoUrl?: string;
   thumbnailUrl?: string;
   error?: string | null;
@@ -186,6 +192,7 @@ export async function createFlowVideoJob(params: {
   aspectRatio?: FlowAspectRatio;
   durationSeconds?: FlowDurationSeconds;
   sourceAssetId?: string;
+  preferredAccountId?: string;
 }): Promise<FlowVideoJob> {
   const config = getFlowConfig();
   const isLocal =
@@ -206,6 +213,12 @@ export async function createFlowVideoJob(params: {
   if (!cleanPrompt) {
     throw new Error("Video üretimi için prompt (açıklama) gereklidir.");
   }
+
+  // Acquire Google account from the shared pool
+  let accountInfo: { id: string; authuser: number; profileDirectory: string; email: string; isFallback: boolean } | null = null;
+  try {
+    accountInfo = acquireAvailableVidsAccount(params.preferredAccountId);
+  } catch {}
 
   const model = params.model || config.defaultModel || DEFAULT_FLOW_MODEL;
   const aspectRatio = params.aspectRatio || "9:16";
@@ -230,8 +243,14 @@ export async function createFlowVideoJob(params: {
 
   // Dispatch REST request to Flow endpoint if not in mock test mode
   if (!process.env.FLOW_MOCK && (config.apiKey || isLocal)) {
-    const isLocalFlowAgent = config.baseUrl.includes(":8001") || config.baseUrl.includes("/api/v1");
-    const videoEndpoint = isLocalFlowAgent ? `${config.baseUrl}/api/v1/video` : `${config.baseUrl}/videos`;
+    const isLocalFlowAgent =
+      isLocal ||
+      config.baseUrl.includes(":8001") ||
+      config.baseUrl.includes("/api/v1") ||
+      config.baseUrl.includes("flow-agent");
+    const videoEndpoint = isLocalFlowAgent
+      ? `${config.baseUrl.replace(/\/+$/, "")}/api/v1/video`
+      : `${config.baseUrl.replace(/\/+$/, "")}/videos`;
 
     const requestPayload: Record<string, unknown> = {
       prompt: cleanPrompt,
@@ -241,6 +260,12 @@ export async function createFlowVideoJob(params: {
       duration: `${durationSeconds}s`,
       quality: "720p",
     };
+
+    if (accountInfo) {
+      requestPayload.email = accountInfo.email;
+      requestPayload.authuser = accountInfo.authuser;
+      requestPayload.profileDirectory = accountInfo.profileDirectory;
+    }
 
     if (sourceImageData) {
       requestPayload.imageUrl = sourceImageData;
@@ -365,13 +390,21 @@ export async function createFlowVideoJob(params: {
     aspectRatio,
     durationSeconds,
     sourceAssetId: params.sourceAssetId,
+    account: accountInfo ? {
+      id: accountInfo.id,
+      email: accountInfo.email,
+      authuser: accountInfo.authuser,
+      profileDirectory: accountInfo.profileDirectory,
+    } : undefined,
     remoteJobId,
   };
 
   const progressState = {
     phase: initialPhase,
     percent: 15,
-    detail: "Flow REST API kuyruğuna iletildi",
+    detail: accountInfo
+      ? `Flow REST API kuyruğuna iletildi (${accountInfo.email})`
+      : "Flow REST API kuyruğuna iletildi",
     updatedAt: now,
   };
 
@@ -400,8 +433,9 @@ export async function createFlowVideoJob(params: {
     aspectRatio,
     durationSeconds,
     sourceAssetId: params.sourceAssetId,
+    accountEmail: accountInfo?.email,
     progressPercent: 15,
-    progressDetail: "Flow REST API kuyruğuna iletildi",
+    progressDetail: progressState.detail,
     createdAt: now,
   };
 }
@@ -450,6 +484,7 @@ export async function syncFlowJobStatus(jobId: string): Promise<FlowVideoJob | n
     aspectRatio: (req.aspectRatio as string) || "9:16",
     durationSeconds: Number(req.durationSeconds || 5),
     sourceAssetId: req.sourceAssetId as string | undefined,
+    accountEmail: (req.account as { email?: string })?.email,
     videoUrl: (res.videoUrl as string) || (row.status === "complete" ? `/api/videos/${row.id}` : undefined),
     thumbnailUrl: row.status === "complete" ? `/api/videos/${row.id}?thumb=1` : undefined,
     error: row.error,
@@ -480,10 +515,14 @@ export async function syncFlowJobStatus(jobId: string): Promise<FlowVideoJob | n
 
   // Remote Poll
   try {
-    const isStandardEndpoint = config.baseUrl.includes(":8001") || config.baseUrl.includes("/api/v1");
+    const isStandardEndpoint =
+      isLocal ||
+      config.baseUrl.includes(":8001") ||
+      config.baseUrl.includes("/api/v1") ||
+      config.baseUrl.includes("flow-agent");
     const checkEndpoint = isStandardEndpoint
-      ? `${config.baseUrl}/api/v1/video/${encodeURIComponent(remoteJobId)}`
-      : `${config.baseUrl}/videos/${encodeURIComponent(remoteJobId)}`;
+      ? `${config.baseUrl.replace(/\/+$/, "")}/api/v1/video/${encodeURIComponent(remoteJobId)}`
+      : `${config.baseUrl.replace(/\/+$/, "")}/videos/${encodeURIComponent(remoteJobId)}`;
 
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (config.apiKey) headers["Authorization"] = `Bearer ${config.apiKey}`;
@@ -673,6 +712,7 @@ export async function listFlowVideos(projectId: string): Promise<FlowVideoJob[]>
       aspectRatio: (req.aspectRatio as string) || "9:16",
       durationSeconds: Number(req.durationSeconds || 5),
       sourceAssetId: req.sourceAssetId as string | undefined,
+      accountEmail: (req.account as { email?: string })?.email,
       videoUrl: (res.videoUrl as string) || (row.status === "complete" ? `/api/videos/${row.id}` : undefined),
       thumbnailUrl: row.status === "complete" ? `/api/videos/${row.id}?thumb=1` : undefined,
       error: row.error,

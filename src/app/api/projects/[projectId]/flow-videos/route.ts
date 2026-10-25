@@ -6,6 +6,7 @@ import {
   type FlowAspectRatio,
   type FlowDurationSeconds,
 } from "@/lib/server/flow-video-service";
+import { listGoogleVidsAccounts } from "@/lib/server/google-vids-account-pool";
 
 export const runtime = "nodejs";
 
@@ -21,9 +22,15 @@ export async function GET(_request: Request, context: Context) {
     const videos = await listFlowVideos(projectId);
     const config = getFlowConfig();
 
+    let accounts: unknown[] = [];
+    try {
+      accounts = listGoogleVidsAccounts();
+    } catch {}
+
     return Response.json({
       ok: true,
       videos,
+      accounts,
       configured: config.hasApiKey,
       defaultModel: config.defaultModel,
     });
@@ -41,7 +48,7 @@ export async function POST(request: Request, context: Context) {
     }
 
     const body = await request.json();
-    const { prompt, model, aspectRatio, durationSeconds, sourceAssetId } = body;
+    const { prompt, model, aspectRatio, durationSeconds, sourceAssetId, preferredAccountId } = body;
 
     if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
       return Response.json(
@@ -57,6 +64,7 @@ export async function POST(request: Request, context: Context) {
       aspectRatio: aspectRatio as FlowAspectRatio | undefined,
       durationSeconds: durationSeconds as FlowDurationSeconds | undefined,
       sourceAssetId: sourceAssetId ? String(sourceAssetId) : undefined,
+      preferredAccountId: preferredAccountId ? String(preferredAccountId) : undefined,
     });
 
     return Response.json({
