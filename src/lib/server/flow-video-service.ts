@@ -281,7 +281,7 @@ export async function createFlowVideoJob(params: {
         method: "POST",
         headers,
         body: JSON.stringify(requestPayload),
-        signal: AbortSignal.timeout(60_000),
+        signal: AbortSignal.timeout(240_000),
       });
 
       const responseBody = await response.json().catch(() => null);

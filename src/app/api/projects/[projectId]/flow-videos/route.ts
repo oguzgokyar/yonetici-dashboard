@@ -9,6 +9,7 @@ import {
 import { listGoogleVidsAccounts } from "@/lib/server/google-vids-account-pool";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 type Context = { params: Promise<{ projectId: string }> };
 
