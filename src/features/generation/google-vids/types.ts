@@ -100,21 +100,21 @@ export function ensureVisualAnchors(
   if (!anchors.person || !anchors.person.visualPromptEn) {
     if (sb.characterAnchor) {
       anchors.person = {
-        name: sb.characterAnchor.name || "Genç Maker Can",
-        descriptionTr: sb.characterAnchor.archetypeTr || "7-14 yaş aralığında meraklı, üretken genç maker çocuk",
+        name: sb.characterAnchor.name || "Karakter",
+        descriptionTr: sb.characterAnchor.archetypeTr || "Hikaye karakteri",
         visualPromptEn:
           sb.characterAnchor.masterVisualPromptEn ||
           sb.characterAnchor.fixedTraitsEn ||
-          `Professional 3-view character turnaround model sheet of bright school-age junior maker apprentice Can working on ${title}. ${firstSceneSummary}. Youthful student maker kid with curious expressive eyes, colorful casual workshop hoodie with rolled-up sleeves, nimble young hands eager to craft, warm natural light.`,
+          `Professional 3-view character turnaround model sheet for ${title}. ${firstSceneSummary}. Consistent facial features, distinctive wardrobe, natural ambient lighting.`,
         imageUrl: sb.characterAnchor.referenceImageUrl || anchors.person?.imageUrl,
       };
     } else {
       anchors.person = {
-        name: anchors.person?.name || "Genç Maker Can",
-        descriptionTr: anchors.person?.descriptionTr || "7-14 yaş aralığında meraklı, üretken genç maker çocuk",
+        name: anchors.person?.name || "Karakter",
+        descriptionTr: anchors.person?.descriptionTr || "Hikaye karakteri",
         visualPromptEn:
           anchors.person?.visualPromptEn ||
-          `Professional 3-view character turnaround model sheet of bright school-age junior maker apprentice Can working on ${title}. ${firstSceneSummary}. Youthful student maker kid with curious expressive eyes, colorful casual workshop hoodie with rolled-up sleeves, nimble young hands eager to craft, warm natural light.`,
+          `Professional 3-view character turnaround model sheet for ${title}. ${firstSceneSummary}. Consistent facial features, distinctive wardrobe, natural ambient lighting.`,
         imageUrl: anchors.person?.imageUrl,
       };
     }

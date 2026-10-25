@@ -123,14 +123,47 @@ export async function POST(request: Request, context: Context) {
       : "cinematic_photoreal";
     const mood = CINEMATIC_VISUAL_MOODS[moodKey];
 
+    const project = db
+      .prepare("SELECT name, brand_json, brand_concept_json FROM projects WHERE id = ?")
+      .get(projectId) as { name?: string; brand_json?: string; brand_concept_json?: string } | undefined;
+
+    let brandPhotographyStyle = "";
+    let brandVisualStyle = "";
+    if (project?.brand_concept_json) {
+      try {
+        const concept = JSON.parse(project.brand_concept_json);
+        if (concept.photographyStyle) brandPhotographyStyle = String(concept.photographyStyle).trim();
+        if (concept.visualStyle) brandVisualStyle = String(concept.visualStyle).trim();
+      } catch {}
+    }
+
+    const isAnim = moodKey === "stylized_3d";
+    let styleLock = "";
+    let antiDriftDirective = "";
+
+    if (isAnim) {
+      styleLock = `Stylized 3D digital animation aesthetic, Pixar and Unreal Engine 3D character/environment rendering, expressive stylized geometry, vibrant saturated palette, ${mood.lightingInstruction}`;
+      antiDriftDirective = "STRICT VISUAL STYLE RULE: Strictly avoid photorealism, avoid live-action photography, avoid real human photographic skin textures. Render strictly as a clean, polished 3D animated model.";
+    } else {
+      const brandContext = [brandPhotographyStyle, brandVisualStyle].filter(Boolean).join(". ");
+      styleLock = `Live-action cinematic 35mm photography, ${mood.lightingInstruction}, ${mood.lensInstruction}, ${mood.colorGrading}.${brandContext ? ` Brand visual style: ${brandContext}.` : ""}`;
+      antiDriftDirective = "STRICT VISUAL STYLE RULE: Must be a genuine live-action cinematic photograph of a real subject. Strictly avoid anime, manga, cartoon, 2D illustration, cel shading, comic book art, line art, drawing, digital sketch, CGI video game render. High micro-contrast, authentic physical textures, realistic depth of field.";
+    }
+
     let enhancedPrompt = "";
     if (body.anchorType === "person") {
-      enhancedPrompt = `Professional 3-view character turnaround model sheet of bright school-age junior maker ${body.name || "Can"}, ${body.descriptionTr || "energetic young student maker kid"}. ${promptEn}. 3-panel comprehensive model sheet layout showing: 1) clean front profile showing youthful school-age child silhouette in casual colorful workshop hoodie with rolled-up sleeves and sneakers, 2) three-quarter dynamic crafting angle holding precision tools or craft parts with cheerful focused gaze, 3) macro close-up detail of nimble young maker hands, finger precision and tool dexterity. Master visual character anchor for AI video consistency: consistent youthful child facial features, curious expressive brown eyes, exact clothing colors, neutral clean workshop background, ${mood.lightingInstruction}, high micro-contrast, photorealistic textures, no text labels, no watermarks, no blurry limbs.`;
+      const subjectName = body.name ? body.name.trim() : "Character";
+      const subjectDesc = body.descriptionTr ? `${body.descriptionTr.trim()}. ` : "";
+      enhancedPrompt = `Professional 3-view character turnaround model sheet of ${subjectName}. ${subjectDesc}${promptEn}. Layout: 3-panel comprehensive model sheet showing 1) clean front silhouette and full attire, 2) three-quarter dynamic action or crafting angle, 3) macro close-up detail of hands and expressive facial features. ${styleLock}. ${antiDriftDirective} Consistent facial features, exact clothing colors, neutral clean background, no text labels, no watermarks, no blurry limbs.`;
     } else if (body.anchorType === "location") {
-      enhancedPrompt = `Cinematic workbench and craft workstation environment reference photograph of ${body.name || "artisan workshop"}, ${body.descriptionTr || ""}. ${promptEn}. Focused maker workstation layout: clean wooden craft workbench surface, dark green grid cutting mat, neatly arranged hand tools (cutter, metal rulers, glue stand, wire spools) in background tool racks, shallow depth of field with soft workshop background blur. Strict environmental anchor: clear motivated lighting vector with warm directional task lamp from upper left, ambient fill, ${mood.colorGrading}, strictly unmanned workstation, zero people, zero human figures, zero hands, no logos, no text labels.`;
+      const locName = body.name ? body.name.trim() : "Environment";
+      const locDesc = body.descriptionTr ? `${body.descriptionTr.trim()}. ` : "";
+      enhancedPrompt = `Cinematic environment reference photograph of ${locName}. ${locDesc}${promptEn}. Strict environmental anchor: ${styleLock}. ${antiDriftDirective} strictly unmanned workstation, zero people, zero human figures, zero hands, no logos, no text labels.`;
     } else {
       // object / maket / prototype
-      enhancedPrompt = `Professional 3-angle technical prototype and mechanism reference sheet of ${body.name || "maker project device"}, ${body.descriptionTr || ""}. ${promptEn}. 3-panel engineering turnaround sheet showing: 1) 45-degree isometric assembled view showing full 3D spatial layout with all tubing, wires and structure rigidly aligned, 2) orthographic front profile showing complete component arrangement and mechanical proportions, 3) macro cutaway close-up showing moving mechanical joints, axles, gears or electrical terminals in ultra-sharp focus. Tabletop craft aesthetic on cutting mat, clean workshop task lighting, zero floating parts, strictly zero liquid spillage, complete spatial permanence, no text labels, no watermarks, crisp edge definition.`;
+      const objName = body.name ? body.name.trim() : "Prototype Device";
+      const objDesc = body.descriptionTr ? `${body.descriptionTr.trim()}. ` : "";
+      enhancedPrompt = `Professional 3-angle technical prototype and mechanism reference sheet of ${objName}. ${objDesc}${promptEn}. 3-panel engineering turnaround sheet showing: 1) 45-degree isometric assembled view showing full 3D spatial layout, 2) orthographic front profile showing complete component arrangement, 3) macro cutaway close-up showing moving mechanical joints, axles, or connections in sharp focus. ${styleLock}. ${antiDriftDirective} Zero floating parts, complete spatial permanence, no text labels, no watermarks, crisp edge definition.`;
     }
 
     db.prepare(

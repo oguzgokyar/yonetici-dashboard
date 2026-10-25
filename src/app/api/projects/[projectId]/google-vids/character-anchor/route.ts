@@ -69,23 +69,50 @@ export async function POST(request: Request, context: Context) {
       : "cinematic_photoreal";
     const mood = CINEMATIC_VISUAL_MOODS[moodKey];
 
+    const project = db
+      .prepare("SELECT name, brand_json, brand_concept_json FROM projects WHERE id = ?")
+      .get(projectId) as { name?: string; brand_json?: string; brand_concept_json?: string } | undefined;
+
+    let brandPhotographyStyle = "";
+    let brandVisualStyle = "";
+    if (project?.brand_concept_json) {
+      try {
+        const concept = JSON.parse(project.brand_concept_json);
+        if (concept.photographyStyle) brandPhotographyStyle = String(concept.photographyStyle).trim();
+        if (concept.visualStyle) brandVisualStyle = String(concept.visualStyle).trim();
+      } catch {}
+    }
+
+    const isAnim = moodKey === "stylized_3d";
     let styleDescriptor = `35mm cinema framing, ${mood.lightingInstruction}, ${mood.lensInstruction}, ${mood.colorGrading}`;
-    if (moodKey === "stylized_3d") {
+    let antiDriftDirective = "";
+
+    if (isAnim) {
       styleDescriptor = `Stylized 3D animated character design model sheet, Pixar and Unreal Engine 3D digital animation aesthetic, expressive stylized facial features, vibrant three-point volumetric rim lighting, lush saturated palette, clean 3D character render, zero realistic photo texture`;
-    } else if (moodKey === "retro_vintage_80s") {
-      styleDescriptor = `1980s retro vintage cinema character portrait sheet, vintage Panavision lens halation, authentic 80s film stock grain, nostalgic warm color grading`;
-    } else if (moodKey === "moody_chiaroscuro") {
-      styleDescriptor = `Dramatic chiaroscuro cinema portrait sheet, single hard directional side lighting, deep inky shadows, noir atmospheric depth`;
-    } else if (moodKey === "minimal_commercial") {
-      styleDescriptor = `High-end minimalist modern studio portrait sheet, edge-to-edge sharpness, clean neutral studio bounce, calibrated commercial look`;
-    } else if (moodKey === "documentary_nature") {
-      styleDescriptor = `National Geographic documentary portrait grade, authentic natural environmental lighting, crisp true-to-life textures`;
-    } else if (moodKey === "golden_hour") {
-      styleDescriptor = `Warm golden hour cinema portrait sheet, low-angle sunset backlighting, golden rim light, rich bronze shadows`;
+      antiDriftDirective = "STRICT VISUAL STYLE RULE: Strictly avoid photorealism, avoid live-action photography, avoid real human photographic skin textures. Render strictly as a clean, polished 3D animated model.";
+    } else {
+      const brandContext = [brandPhotographyStyle, brandVisualStyle].filter(Boolean).join(". ");
+      if (moodKey === "retro_vintage_80s") {
+        styleDescriptor = `1980s retro vintage cinema character portrait sheet, vintage Panavision lens halation, authentic 80s film stock grain, nostalgic warm color grading`;
+      } else if (moodKey === "moody_chiaroscuro") {
+        styleDescriptor = `Dramatic chiaroscuro cinema portrait sheet, single hard directional side lighting, deep inky shadows, noir atmospheric depth`;
+      } else if (moodKey === "minimal_commercial") {
+        styleDescriptor = `High-end minimalist modern studio portrait sheet, edge-to-edge sharpness, clean neutral studio bounce, calibrated commercial look`;
+      } else if (moodKey === "documentary_nature") {
+        styleDescriptor = `National Geographic documentary portrait grade, authentic natural environmental lighting, crisp true-to-life textures`;
+      } else if (moodKey === "golden_hour") {
+        styleDescriptor = `Warm golden hour cinema portrait sheet, low-angle sunset backlighting, golden rim light, rich bronze shadows`;
+      }
+      if (brandContext) {
+        styleDescriptor += `. Brand visual style: ${brandContext}`;
+      }
+      antiDriftDirective = "STRICT VISUAL STYLE RULE: Must be a genuine live-action cinematic photograph of a real subject. Strictly avoid anime, manga, cartoon, 2D illustration, cel shading, comic book art, line art, drawing, digital sketch, CGI video game render. High micro-contrast, authentic physical textures, realistic depth of field.";
     }
 
     // Enhance prompt strictly following visual-skills U7 (Character consistency anchor) and project visual mood
-    const enhancedPrompt = `Visual-skills 3-view character turnaround model sheet of bright school-age junior maker ${body.characterName || "Can"}, ${body.archetypeTr || "youthful student maker kid"}. ${styleDescriptor}. PHYSICAL IDENTITY SPECS: ${body.fixedTraitsEn || promptEn}. Master character reference turnaround sheet showing 3 key angles: 1) clean front profile silhouette and costume, 2) 3/4 dynamic crafting/action posture, 3) macro close-up detail of nimble young hands and distinctive facial features. Consistent youthful school-age facial structure, curious expressive eyes, distinctive wardrobe, clothing textures, and silhouette. Neutral clean studio background, no text labels, no watermarks, no duplicate disfigured faces.`;
+    const charName = body.characterName ? body.characterName.trim() : "Character";
+    const charArchetype = body.archetypeTr ? `${body.archetypeTr.trim()}. ` : "";
+    const enhancedPrompt = `Visual-skills 3-view character turnaround model sheet of ${charName}, ${charArchetype}${styleDescriptor}. PHYSICAL IDENTITY SPECS: ${body.fixedTraitsEn || promptEn}. Master character reference turnaround sheet showing 3 key angles: 1) clean front profile silhouette and costume, 2) 3/4 dynamic crafting/action posture, 3) macro close-up detail of hands and distinctive facial features. ${antiDriftDirective} Consistent facial structure, distinctive wardrobe, clothing textures, and silhouette. Neutral clean studio background, no text labels, no watermarks, no duplicate disfigured faces.`;
 
     // type='character-anchor' olarak kaydedilir; böylece görsel stüdyosu ('image') ve motion video listelerine karışmaz
     db.prepare(
