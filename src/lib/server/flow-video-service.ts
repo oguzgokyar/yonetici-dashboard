@@ -180,7 +180,12 @@ export async function createFlowVideoJob(params: {
   sourceAssetId?: string;
 }): Promise<FlowVideoJob> {
   const config = getFlowConfig();
-  if (!config.apiKey && !process.env.FLOW_MOCK) {
+  const isLocal =
+    config.baseUrl.includes("127.0.0.1") ||
+    config.baseUrl.includes("localhost") ||
+    config.baseUrl.includes(":8001");
+
+  if (!config.apiKey && !isLocal && !process.env.FLOW_MOCK) {
     throw new Error(
       "Flow Video REST API yapılandırılmamış. Lütfen Sistem Ayarları bölümünden Flow API anahtarınızı (token) tanımlayın."
     );
@@ -213,42 +218,118 @@ export async function createFlowVideoJob(params: {
   let initialPhase = "queued";
 
   // Dispatch REST request to Flow endpoint if not in mock test mode
-  if (!process.env.FLOW_MOCK && config.apiKey) {
-    const isStandardEndpoint = config.baseUrl.includes("/api/v1");
-    const videoEndpoint = isStandardEndpoint ? `${config.baseUrl}/video` : `${config.baseUrl}/videos`;
+  if (!process.env.FLOW_MOCK && (config.apiKey || isLocal)) {
+    const isLocalFlowAgent = config.baseUrl.includes(":8001") || config.baseUrl.includes("/api/v1");
+    const videoEndpoint = isLocalFlowAgent ? `${config.baseUrl}/api/v1/video` : `${config.baseUrl}/videos`;
 
     const requestPayload: Record<string, unknown> = {
       prompt: cleanPrompt,
       model,
       aspectRatio: apiRatio,
-      duration: durationSeconds,
+      aspect: aspectRatio,
+      duration: `${durationSeconds}s`,
+      quality: "720p",
     };
 
     if (sourceImageData) {
       requestPayload.imageUrl = sourceImageData;
       requestPayload.referenceImage = sourceImageData;
+      requestPayload.start_image = sourceImageData;
     }
 
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (config.apiKey) headers["Authorization"] = `Bearer ${config.apiKey}`;
+
       const response = await fetch(videoEndpoint, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify(requestPayload),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(60_000),
       });
 
       const responseBody = await response.json().catch(() => null);
 
       if (!response.ok) {
         const errorMsg =
+          responseBody?.detail ||
           responseBody?.error?.message ||
           responseBody?.error ||
           responseBody?.message ||
           `Flow API ${response.status} hatası döndürdü.`;
         throw new Error(errorMsg);
+      }
+
+      // If local flow-agent returned completed files directly
+      const directFiles = responseBody?.files || [];
+      if (Array.isArray(directFiles) && directFiles.length > 0 && directFiles[0].path) {
+        const sourcePath = directFiles[0].path;
+        const videoRendersDir = path.join(process.cwd(), ".data", "video-renders");
+        fs.mkdirSync(videoRendersDir, { recursive: true });
+        const destPath = path.join(videoRendersDir, `${jobId}.mp4`);
+        const thumbPath = path.join(videoRendersDir, `${jobId}_thumb.webp`);
+
+        if (fs.existsSync(sourcePath)) {
+          fs.copyFileSync(sourcePath, destPath);
+        }
+
+        try {
+          execSync(
+            `ffmpeg -y -ss 00:00:00.5 -i "${destPath}" -vframes 1 -vf "scale=360:-1" -c:v libwebp -quality 75 "${thumbPath}"`,
+            { timeout: 8000, stdio: "ignore" }
+          );
+        } catch {}
+
+        const now = new Date().toISOString();
+        const responseData = {
+          videoUrl: `/api/videos/${jobId}`,
+          thumbnailUrl: `/api/videos/${jobId}?thumb=1`,
+          model,
+          aspectRatio,
+          durationSeconds,
+        };
+
+        const progressData = {
+          phase: "complete",
+          percent: 100,
+          detail: "Video üretimi başarıyla tamamlandı",
+          updatedAt: now,
+        };
+
+        database
+          .prepare(`
+            INSERT INTO generation_jobs (
+              id, project_id, type, provider, model, status, prompt, request_json, response_json, progress_json, created_at, completed_at
+            ) VALUES (?, ?, 'flow-video', 'flow-rest', ?, 'complete', ?, ?, ?, ?, ?, ?)
+          `)
+          .run(
+            jobId,
+            params.projectId,
+            model,
+            cleanPrompt,
+            JSON.stringify({ prompt: cleanPrompt, model, aspectRatio, durationSeconds, sourceAssetId: params.sourceAssetId, remoteJobId: jobId }),
+            JSON.stringify(responseData),
+            JSON.stringify(progressData),
+            now,
+            now
+          );
+
+        return {
+          id: jobId,
+          projectId: params.projectId,
+          status: "complete",
+          prompt: cleanPrompt,
+          model,
+          aspectRatio,
+          durationSeconds,
+          sourceAssetId: params.sourceAssetId,
+          videoUrl: `/api/videos/${jobId}`,
+          thumbnailUrl: `/api/videos/${jobId}?thumb=1`,
+          progressPercent: 100,
+          progressDetail: "Tamamlandı",
+          createdAt: now,
+          completedAt: now,
+        };
       }
 
       remoteJobId =
@@ -373,24 +454,28 @@ export async function syncFlowJobStatus(jobId: string): Promise<FlowVideoJob | n
   }
 
   const config = getFlowConfig();
+  const isLocal =
+    config.baseUrl.includes("127.0.0.1") ||
+    config.baseUrl.includes("localhost") ||
+    config.baseUrl.includes(":8001");
   const remoteJobId = (req.remoteJobId as string) || row.id;
 
-  if (!config.apiKey && !process.env.FLOW_MOCK) {
+  if (!config.apiKey && !isLocal && !process.env.FLOW_MOCK) {
     return currentJob;
   }
 
   // Remote Poll
   try {
-    const isStandardEndpoint = config.baseUrl.includes("/api/v1");
+    const isStandardEndpoint = config.baseUrl.includes(":8001") || config.baseUrl.includes("/api/v1");
     const checkEndpoint = isStandardEndpoint
-      ? `${config.baseUrl}/video/${encodeURIComponent(remoteJobId)}`
+      ? `${config.baseUrl}/api/v1/video/${encodeURIComponent(remoteJobId)}`
       : `${config.baseUrl}/videos/${encodeURIComponent(remoteJobId)}`;
 
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (config.apiKey) headers["Authorization"] = `Bearer ${config.apiKey}`;
+
     const response = await fetch(checkEndpoint, {
-      headers: {
-        Authorization: `Bearer ${config.apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers,
       signal: AbortSignal.timeout(20_000),
     });
 
@@ -427,7 +512,10 @@ export async function syncFlowJobStatus(jobId: string): Promise<FlowVideoJob | n
       const videoFilePath = path.join(videoRendersDir, `${row.id}.mp4`);
       const thumbFilePath = path.join(videoRendersDir, `${row.id}_thumb.webp`);
 
-      const videoRes = await fetch(downloadUrl, { signal: AbortSignal.timeout(60_000) });
+      const resolvedUrl = downloadUrl.startsWith("http")
+        ? downloadUrl
+        : `${config.baseUrl.replace(/\/+$/, "")}/${downloadUrl.replace(/^\/+/, "")}`;
+      const videoRes = await fetch(resolvedUrl, { signal: AbortSignal.timeout(60_000) });
       if (videoRes.ok) {
         const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
         fs.writeFileSync(videoFilePath, videoBuffer);

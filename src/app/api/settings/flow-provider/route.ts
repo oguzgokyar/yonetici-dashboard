@@ -29,8 +29,9 @@ export async function POST(request: Request) {
       const config = getFlowConfig();
       const testApiKey = apiKey?.trim() || config.apiKey;
       const testBaseUrl = (baseUrl?.trim() || config.baseUrl).replace(/\/+$/, "");
+      const isLocal = testBaseUrl.includes("127.0.0.1") || testBaseUrl.includes("localhost") || testBaseUrl.includes(":8001");
 
-      if (!testApiKey) {
+      if (!testApiKey && !isLocal) {
         return Response.json(
           { ok: false, message: "Test için bir API anahtarı girilmiş olmalıdır." },
           { status: 400 }
@@ -38,14 +39,17 @@ export async function POST(request: Request) {
       }
 
       try {
-        const isStandard = testBaseUrl.includes("/api/v1");
-        const pingUrl = isStandard ? `${testBaseUrl}/projects` : `${testBaseUrl}/videos`;
+        const pingUrl = isLocal
+          ? `${testBaseUrl}/health`
+          : testBaseUrl.includes("/api/v1")
+          ? `${testBaseUrl}/projects`
+          : `${testBaseUrl}/videos`;
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (testApiKey) headers["Authorization"] = `Bearer ${testApiKey}`;
+
         const testRes = await fetch(pingUrl, {
           method: "GET",
-          headers: {
-            Authorization: `Bearer ${testApiKey}`,
-            "Content-Type": "application/json",
-          },
+          headers,
           signal: AbortSignal.timeout(10_000),
         });
 
@@ -58,7 +62,7 @@ export async function POST(request: Request) {
 
         return Response.json({
           ok: true,
-          message: "Flow REST API bağlantısı başarılı.",
+          message: isLocal ? "Yerel Flow Agent bağlantısı başarılı (Motor aktif)." : "Flow REST API bağlantısı başarılı.",
           status: testRes.status,
         });
       } catch (err: unknown) {
