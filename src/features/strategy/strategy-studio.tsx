@@ -690,6 +690,9 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
       };
       localStorage.setItem(`canva_form_${projectId}`, JSON.stringify(formPayload));
       localStorage.setItem(`canva_prefill_${projectId}`, JSON.stringify(formPayload));
+      if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+        window.dispatchEvent(new CustomEvent("canva-prefill", { detail: formPayload }));
+      }
 
       router.push(`/projects/${projectId}/image-generation?studio=canva`);
     } catch {

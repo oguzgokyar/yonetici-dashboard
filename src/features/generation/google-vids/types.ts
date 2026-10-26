@@ -144,6 +144,23 @@ export function ensureVisualAnchors(
     };
   }
 
+  // Backfill any missing anchor images from referenceChips across scenes
+  if (sb.scenes && Array.isArray(sb.scenes)) {
+    for (const sc of sb.scenes) {
+      const chips = (sc as { referenceChips?: Array<{ kind?: string; url?: string; name?: string }> }).referenceChips || [];
+      for (const chip of chips) {
+        if (!chip.url) continue;
+        if (chip.kind === "person" && !anchors.person?.imageUrl) {
+          anchors.person = { ...(anchors.person || {}), name: anchors.person?.name || chip.name || "Kişi", imageUrl: chip.url };
+        } else if (chip.kind === "location" && !anchors.location?.imageUrl) {
+          anchors.location = { ...(anchors.location || {}), name: anchors.location?.name || chip.name || "Mekan", imageUrl: chip.url };
+        } else if (chip.kind === "object" && !anchors.object?.imageUrl) {
+          anchors.object = { ...(anchors.object || {}), name: anchors.object?.name || chip.name || "Maket/Obje", imageUrl: chip.url };
+        }
+      }
+    }
+  }
+
   return {
     ...sb,
     visualAnchors: anchors,

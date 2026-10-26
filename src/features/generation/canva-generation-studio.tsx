@@ -195,7 +195,7 @@ export function CanvaGenerationStudio({
     }).catch(() => {});
   }
 
-  // Form persistence in localStorage & Pre-fill from Strategy Studio
+  // Form persistence in localStorage & Pre-fill from Strategy Studio / Quick Ideas Drawer
   useEffect(() => {
     try {
       // Check for incoming prefill first
@@ -210,7 +210,14 @@ export function CanvaGenerationStudio({
         if (parsedPrefill.isPrefilledFromIdea) {
           setShowPrefillRefineTip(true);
         }
-        setMessage("✓ Strateji sayfasından aktarılan kreatif fikir prompt alanına yerleştirildi.");
+        setMessage("✓ Aktarılan kreatif fikir prompt alanına yerleştirildi.");
+        try {
+          const el = document.getElementById("canva-prompt");
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+            el.focus();
+          }
+        } catch {}
         return;
       }
 
@@ -225,7 +232,44 @@ export function CanvaGenerationStudio({
     } catch {}
   }, [projectId]);
 
+  // Listen for live canva-prefill events (when Canva studio is already mounted)
   useEffect(() => {
+    function handlePrefillEvent(e: Event) {
+      const customEvent = e as CustomEvent<{
+        prompt?: string;
+        contentType?: CanvaContentType;
+        slideCount?: number;
+        style?: string;
+        isPrefilledFromIdea?: boolean;
+      }>;
+      const detail = customEvent.detail;
+      if (!detail) return;
+      if (detail.prompt) setPrompt(detail.prompt);
+      if (detail.contentType) setContentType(detail.contentType);
+      if (detail.slideCount) setSlideCount(detail.slideCount);
+      if (detail.style) setStyle(detail.style);
+      if (detail.isPrefilledFromIdea) {
+        setShowPrefillRefineTip(true);
+      }
+      try {
+        localStorage.removeItem(`canva_prefill_${projectId}`);
+      } catch {}
+      setMessage("✓ Aktarılan kreatif fikir prompt alanına yerleştirildi.");
+      try {
+        const el = document.getElementById("canva-prompt");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.focus();
+        }
+      } catch {}
+    }
+
+    window.addEventListener("canva-prefill", handlePrefillEvent);
+    return () => window.removeEventListener("canva-prefill", handlePrefillEvent);
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!prompt) return; // Prevent overwriting stored form with empty initial state
     try {
       localStorage.setItem(
         `canva_form_${projectId}`,

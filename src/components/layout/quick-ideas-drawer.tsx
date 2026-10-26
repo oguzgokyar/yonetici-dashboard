@@ -215,7 +215,7 @@ export function QuickIdeasDrawer({
         : "";
 
     if (idea.id && idea.status !== "hidden") {
-      await handleToggleHide(idea.id);
+      void handleToggleHide(idea.id);
     }
 
     let fullPrompt = "";
@@ -276,6 +276,9 @@ export function QuickIdeasDrawer({
       };
       localStorage.setItem(`canva_form_${projectId}`, JSON.stringify(formPayload));
       localStorage.setItem(`canva_prefill_${projectId}`, JSON.stringify(formPayload));
+      if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+        window.dispatchEvent(new CustomEvent("canva-prefill", { detail: formPayload }));
+      }
       onClose();
       router.push(`/projects/${projectId}/image-generation?studio=canva`);
     } catch {}

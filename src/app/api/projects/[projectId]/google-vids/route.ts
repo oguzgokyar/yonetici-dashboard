@@ -79,6 +79,7 @@ export async function GET(request: Request, context: Context) {
             aspectRatio: requestPayload.aspectRatio,
             narrativeTr: requestPayload.narrativeTr,
             characterAnchor: requestPayload.characterAnchor,
+            visualAnchors: requestPayload.visualAnchors,
             scenes: requestPayload.scenes,
             origin: requestPayload.origin || "marka_motoru",
           }

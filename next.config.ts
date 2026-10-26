@@ -10,7 +10,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/projects/:projectId/canva-generation",
-        destination: "/projects/:projectId/image-generation",
+        destination: "/projects/:projectId/image-generation?studio=canva",
         permanent: false,
       },
       {

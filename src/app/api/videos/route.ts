@@ -104,6 +104,33 @@ export async function GET(request: Request) {
         const req = JSON.parse(row.request_json || "{}");
         vidsTopic = req.topic || req.title;
         if (req.scenes && Array.isArray(req.scenes)) {
+          const visualAnchors: Record<string, unknown> = req.visualAnchors ? { ...req.visualAnchors } : {};
+          if (req.characterAnchor && !visualAnchors.person) {
+            visualAnchors.person = {
+              name: req.characterAnchor.name,
+              descriptionTr: req.characterAnchor.archetypeTr,
+              visualPromptEn: req.characterAnchor.masterVisualPromptEn || req.characterAnchor.fixedTraitsEn,
+              imageUrl: req.characterAnchor.referenceImageUrl,
+            };
+          } else if (req.characterAnchor?.referenceImageUrl && visualAnchors.person && !(visualAnchors.person as { imageUrl?: string }).imageUrl) {
+            (visualAnchors.person as { imageUrl?: string }).imageUrl = req.characterAnchor.referenceImageUrl;
+          }
+
+          // Backfill any missing anchor images from referenceChips across scenes
+          for (const sc of req.scenes) {
+            const chips = (sc as { referenceChips?: Array<{ kind?: string; url?: string; name?: string }> }).referenceChips || [];
+            for (const chip of chips) {
+              if (!chip.url) continue;
+              if (chip.kind === "person" && !(visualAnchors.person as { imageUrl?: string } | undefined)?.imageUrl) {
+                visualAnchors.person = { ...(visualAnchors.person as object || {}), name: (visualAnchors.person as { name?: string } | undefined)?.name || chip.name, imageUrl: chip.url };
+              } else if (chip.kind === "location" && !(visualAnchors.location as { imageUrl?: string } | undefined)?.imageUrl) {
+                visualAnchors.location = { ...(visualAnchors.location as object || {}), name: (visualAnchors.location as { name?: string } | undefined)?.name || chip.name, imageUrl: chip.url };
+              } else if (chip.kind === "object" && !(visualAnchors.object as { imageUrl?: string } | undefined)?.imageUrl) {
+                visualAnchors.object = { ...(visualAnchors.object as object || {}), name: (visualAnchors.object as { name?: string } | undefined)?.name || chip.name, imageUrl: chip.url };
+              }
+            }
+          }
+
           storyboard = {
             title: req.title || responseState.title || "Google Vids Video",
             narrativeTr: req.narrativeTr || "",
@@ -112,6 +139,7 @@ export async function GET(request: Request) {
             visualMood: req.visualMood || "cinematic_photoreal",
             aspectRatio: req.aspectRatio || "9:16",
             characterAnchor: req.characterAnchor,
+            visualAnchors,
             musicSpec: req.musicSpec,
             scenes: req.scenes,
           };

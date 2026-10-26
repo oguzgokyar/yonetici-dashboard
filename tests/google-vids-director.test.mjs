@@ -206,7 +206,9 @@ test("Google Vids UI, character anchor visual harmony, tabbed scene navigation a
   assert.ok(combinedUiSource.includes("handleEditVideo"), "must have handleEditVideo for restoring storyboard");
   assert.ok(combinedUiSource.includes("Düzenle"), "must have Düzenle button on video cards");
   assert.ok(videosRouteSource.includes("storyboard = {"), "api/videos must include storyboard in response for google-vids");
+  assert.ok(videosRouteSource.includes("visualAnchors,"), "api/videos must preserve visualAnchors in storyboard response");
   assert.ok(googleVidsRouteSource.includes("characterAnchor: storyboard.characterAnchor"), "google-vids route must store characterAnchor in request_json");
+  assert.ok(googleVidsRouteSource.includes("visualAnchors: storyboard.visualAnchors"), "google-vids route must store visualAnchors in request_json");
 
   // 5. Senaryo içerik kutularında hızlı kopyala ve Omni prompt düzenleme
   assert.ok(combinedUiSource.includes("handleCopy"), "must have handleCopy function");
@@ -374,25 +376,26 @@ test("Reference chips tagging (@slug), clean ASCII filenames, and direct inserti
   assert.equal(chips[2].tag, "@kahve_masasi");
   assert.equal(chips[2].filename, "kahve_masasi.png");
 
-  // 3. bindReferenceChipsToPrompt injects missing @slug tags into prompt
+  // 3. bindReferenceChipsToPrompt injects clean descriptive entities into prompt without @ watermark tags
   const rawPrompt = "A close-up shot of hands pouring hot latte into cup on wooden table.";
   const bound = director.bindReferenceChipsToPrompt(rawPrompt, chips);
-  assert.ok(bound.includes("@zanaatkar_usta"), "prompt must contain @zanaatkar_usta tag");
-  assert.ok(bound.includes("@kalpli_bardak"), "prompt must contain @kalpli_bardak tag");
-  assert.ok(bound.includes("@kahve_masasi"), "prompt must contain @kahve_masasi tag");
+  assert.ok(bound.toLowerCase().includes("zanaatkar") || bound.toLowerCase().includes("artisan") || bound.toLowerCase().includes("craft"), "prompt must contain character craft entity");
+  assert.ok(bound.toLowerCase().includes("kalpli") || bound.toLowerCase().includes("cup") || bound.toLowerCase().includes("latte"), "prompt must contain object entity");
+  assert.ok(!bound.includes("@"), "prompt must not contain @ tags to prevent Veo in-frame watermark hallucination");
+  assert.ok(bound.includes("zero watermarks") || bound.includes("no text overlays"), "prompt must include clean-frame directive");
 
   // 4. Fallback planCinematicStoryboard populates referenceChips on all scenes and binds to promptEn
   const fallbackSb = await director.planCinematicStoryboard({
     topic: "Kalpli Bardak ile Latte Art",
     targetDuration: "15s",
-    visualMood: "diy_craft_macro",
+    visualMood: "cinematic_narrative",
   });
   assert.ok(fallbackSb.scenes.length >= 3);
   assert.equal(fallbackSb.visualAnchors.person.name, "Genç Maker Can", "default character must be child maker kid (Genç Maker Can)");
   assert.ok(fallbackSb.visualAnchors.person.descriptionTr.includes("7-14"), "character must target 7-14 child demographic");
   for (const sc of fallbackSb.scenes) {
     assert.ok(sc.referenceChips && sc.referenceChips.length > 0, "every scene must carry referenceChips");
-    assert.ok(sc.promptEn.includes("@"), "promptEn must contain @ tags");
+    assert.ok(!sc.promptEn.includes("@"), "promptEn must not contain @ tags");
   }
 
   // 5. Automation script must NOT click '+' (Yeni sahne) to prevent 5s empty scene gaps

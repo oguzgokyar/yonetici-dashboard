@@ -66,17 +66,33 @@ export function ImageGenerationStudio({ projectId }: { projectId: string }) {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const requestedStudio = urlParams.get("studio");
+    const hasPrefill = typeof window !== "undefined" && Boolean(localStorage.getItem(`canva_prefill_${projectId}`));
+    if (requestedStudio === "canva" || hasPrefill) {
+      setCanvaAvailable(true);
+      setActiveTab("canva");
+    }
+
     fetch(`/api/projects/${encodeURIComponent(projectId)}/canva/jobs`, { cache: "no-store" })
       .then((res) => {
         if (res.status !== 404) {
           setCanvaAvailable(true);
-          if (requestedStudio === "canva") {
+          if (requestedStudio === "canva" || hasPrefill) {
             setActiveTab("canva");
           }
         }
       })
       .catch(() => undefined);
   }, [projectId]);
+
+  // Live listener: if an idea is dispatched to Canva while on this page, switch tab immediately
+  useEffect(() => {
+    function handleCanvaPrefill() {
+      setCanvaAvailable(true);
+      setActiveTab("canva");
+    }
+    window.addEventListener("canva-prefill", handleCanvaPrefill);
+    return () => window.removeEventListener("canva-prefill", handleCanvaPrefill);
+  }, []);
 
   function handleTabChange(tab: "ai" | "canva") {
     setActiveTab(tab);

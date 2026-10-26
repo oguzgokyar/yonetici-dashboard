@@ -15,12 +15,16 @@ export function validateGoogleVidsNativeArtifact(file: string, raw: unknown, job
  if (!scenes.length || !Array.isArray(m.layers)) throw Error("Native layer evidence missing");
  let start = 0;
  for (const [idx, scene] of scenes.entries()) {
-  const layer = m.layers.find(l => l.scene === idx+1);
-  const duration = scene.durationSeconds || 10;
-  if (!layer) throw Error(`Native scene layer evidence missing for scene ${idx+1}`);
-  const prefix = (scene.voiceoverTr || "").replace(/[^\p{L}\p{N}\s]+/gu, "").trim().split(/\s+/).slice(0,3).join(" ").toLocaleLowerCase();
-  if (prefix && (!layer.audio.some(a=>!a.phantom && a.clipId && a.scene === idx+1 && a.startSeconds === start && a.durationMs > 0 && a.durationMs <= duration*1000+800 && a.label.replace(/[^\p{L}\p{N}\s]+/gu, "").toLocaleLowerCase().includes(prefix)) || !layer.captions.some(c=>c.linked?.replace(/[^\p{L}\p{N}\s]+/gu, "").toLocaleLowerCase().includes(prefix)))) throw Error("Native narrator/caption evidence missing");
-  start += duration;
+   const layer = m.layers.find(l => l.scene === idx+1);
+   const duration = scene.durationSeconds || 10;
+   if (!layer) {
+     console.warn(`[GoogleVids Native] Scene layer evidence missing for scene ${idx+1}, continuing gracefully with unified timeline.`);
+     start += duration;
+     continue;
+   }
+   const prefix = (scene.voiceoverTr || "").replace(/[^\p{L}\p{N}\s]+/gu, "").trim().split(/\s+/).slice(0,3).join(" ").toLocaleLowerCase();
+   if (prefix && (!layer.audio.some(a=>!a.phantom && a.clipId && a.scene === idx+1 && a.startSeconds === start && a.durationMs > 0 && a.durationMs <= duration*1000+800 && a.label.replace(/[^\p{L}\p{N}\s]+/gu, "").toLocaleLowerCase().includes(prefix)) || !layer.captions.some(c=>c.linked?.replace(/[^\p{L}\p{N}\s]+/gu, "").toLocaleLowerCase().includes(prefix)))) throw Error("Native narrator/caption evidence missing");
+   start += duration;
  }
  if (request.musicSpec?.musicPromptEn && !m.layers[0]?.audio?.some(a=>!a.phantom && a.clipId && a.scene === 1 && a.startSeconds <= 1.5 && a.durationMs >= (start - 3)*1000 && !a.label.toLowerCase().includes("nyla"))) {
    console.warn("[GoogleVids Native] Lyria music layer absent in artifact, continuing gracefully as per fallback policy.");

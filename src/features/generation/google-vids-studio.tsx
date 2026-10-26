@@ -536,10 +536,11 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
       setMessage("Bu videonun senaryo detayları bulunamadı.");
       return;
     }
-    const sb = video.storyboard;
+    const topicText = video.topic || video.sourceTopic || video.storyboard.title || "";
+    const sb = ensureVisualAnchors(video.storyboard, topicText);
     setStoryboard(sb);
-    if (video.topic || video.sourceTopic || sb.title) {
-      setTopic(video.topic || video.sourceTopic || sb.title || "");
+    if (topicText) {
+      setTopic(topicText);
     }
     if (sb.visualMood) setVisualMood(sb.visualMood);
     if (sb.aspectRatio) setAspectRatio(sb.aspectRatio);

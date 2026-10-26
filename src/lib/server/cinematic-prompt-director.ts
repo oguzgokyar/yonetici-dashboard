@@ -245,12 +245,28 @@ export function bindReferenceChipsToPrompt(
     }
 
     if (kind === "person") {
-      res = res.trim() + ` Featuring ${tag} in character performance.`;
+      // Use clean descriptive phrase without '@' to prevent Veo from rendering watermarks
+      const cleanDesc = name || "artisan young woman maker";
+      if (!res.toLowerCase().includes(cleanDesc.toLowerCase())) {
+        res = res.trim() + ` Focused craft performance by ${cleanDesc}.`;
+      }
     } else if (kind === "object") {
-      res = res.trim() + ` Central focus on ${tag} as the main featured prop.`;
+      const cleanObj = name || "assembled maker prototype";
+      if (!res.toLowerCase().includes(cleanObj.toLowerCase())) {
+        res = res.trim() + ` Central focus on ${cleanObj} as the featured craft project.`;
+      }
     } else if (kind === "location") {
-      res = `Set at ${tag}, ` + res.trim();
+      const cleanLoc = name || "artisan maker workbench";
+      if (!res.toLowerCase().includes(cleanLoc.toLowerCase())) {
+        res = `Set at ${cleanLoc}, ` + res.trim();
+      }
     }
+  }
+
+  // Strip any accidental @ symbols from final prompt to guarantee clean frame
+  res = res.replace(/@([a-z0-9_]+)/gi, "$1");
+  if (!res.toLowerCase().includes("zero watermarks") && !res.toLowerCase().includes("no text overlays")) {
+    res += " Clean photographic frame, strictly no text overlays, zero watermarks, zero handles, zero subtitles.";
   }
 
   return res;
@@ -338,11 +354,16 @@ MANDATORY LAWS FROM THE VISUAL-SKILLS REPOSITORY:
    - Provide evocative Turkish 'moodTr' and 'instrumentationTr'.
    - Provide an English instrumental music generation prompt 'musicPromptEn' tailored for Google Vids Audio (e.g. "Playful Anatolian folklore acoustic track, light rhythmic qanun and wooden flute, gentle comedic cadence, no vocals").
 
-7. "Character Anchor Law (universal-rules.md U7 - Target Demographic: School-Age Junior Maker & Visual Style Harmony)":
-   - TARGET DEMOGRAPHIC INVARIANT (CRITICAL): By default, the protagonist/craftsperson MUST be in our core target audience: a 7–14 age range school-age junior maker child / student inventor (e.g. "Genç Maker Can" or "Çocuk Mucit Maya").
-   - AVOID ADULT / ELDERLY MASTERS: Do NOT default to middle-aged adults, elderly craftsmen ("yaşlı bilge usta"), or 40+ year-old masters unless the topic explicitly demands a historical figure (like Nasreddin Hodja). The story is about an energetic, curious kid exploring and building maker projects!
-   - Character Traits: A bright, curious, energetic school-age child with expressive eyes, casual colorful workshop hoodie or t-shirt with rolled-up sleeves, nimble young hands eager to measure, cut, assemble, and test mechanisms.
-   - GOOGLE AI SAFETY COMPLIANCE: Express youthfulness visually and stylistically ("school-age junior maker apprentice Can", "young student inventor", "curious youthful gaze", "nimble young hands"), NEVER through numerical or spelled-out ages ("8-year-old") to avoid triggering Google AI safety blocks.
+7. "Character Anchor Law (universal-rules.md U7 - Target Demographic & Visual Style Harmony)":
+   - DESKTOP DIY SPECIAL RULE (CRITICAL - diy_craft_macro):
+     * If visual style is Desktop DIY ('diy_craft_macro'): The character MUST BE A YOUNG ADULT WOMAN MAKER (e.g. "Genç Kadın Maker Zeynep" or "Genç Zanaatkâr Kadın", 20-25 age range young adult female maker / inventor).
+     * STRICTLY NO CHILDREN / MINORS for Desktop DIY ('diy_craft_macro')! Do NOT use school-age children, kids, or 7-14 age range for diy_craft_macro.
+     * Character Traits: A talented, inspiring young adult woman maker with hair neatly tied in a practical ponytail or bun, modern casual workshop attire (denim apron or cotton work shirt with rolled-up sleeves), intelligent focused gaze, and nimble, dexterous artisan hands.
+   - OTHER VISUAL STYLES:
+     * For other story/educational visual styles: By default, the protagonist/craftsperson is in our target audience: a 7–14 age range school-age junior maker child / student inventor (e.g. "Genç Maker Can" or "Çocuk Mucit Maya").
+     * AVOID ADULT / ELDERLY MASTERS: Do NOT default to middle-aged adults, elderly craftsmen ("yaşlı bilge usta"), or 40+ year-old masters unless the topic explicitly demands a historical figure (like Nasreddin Hodja).
+   - Character Traits: An energetic, curious persona with expressive eyes, casual colorful workshop hoodie or t-shirt with rolled-up sleeves, nimble hands eager to measure, cut, assemble, and test mechanisms.
+   - GOOGLE AI SAFETY COMPLIANCE: Express youthfulness visually and stylistically ("young adult woman maker", "apprentice maker", "curious focused gaze", "nimble artisan hands"), NEVER through numerical or spelled-out ages ("8-year-old") to avoid triggering Google AI safety blocks.
    - STYLE HARMONY MANDATE: The characterAnchor's 'masterVisualPromptEn' and 'fixedTraitsEn' MUST strictly match the selected visual mood ("${mood.label}")!
      * If 'stylized_3d': The character MUST be designed as a 3D animated character (Pixar / Unreal Engine 3D stylized character render, non-photorealistic stylized proportions), NEVER a live-action photo!
      * If 'retro_vintage_80s': 1980s retro vintage film aesthetic with warm analog halation and vintage wardrobe.
@@ -387,10 +408,11 @@ MANDATORY LAWS FROM THE VISUAL-SKILLS REPOSITORY:
       * 'object': Central device, tool, or mechanical prototype anchor (name, descriptionTr, visualPromptEn).
         - 'visualPromptEn': MUST specify a 3-angle technical prototype reference sheet (45° isometric assembly view, orthographic front layout, and macro close-up of moving joints/axles/wires) to lock complete 3D mechanical permanence.
     - Also maintain 'characterAnchor' for legacy compatibility.
-    - MANDATORY REFERENCE CHIP @ TAGGING IN EVERY RELEVANT SECTION OF promptEn:
-      * Every visual anchor maps to a clean lowercase ASCII slug without Turkish characters (e.g. name "Kalpli Bardak" -> slug "kalpli_bardak" -> tag "@kalpli_bardak", name "Zanaatkâr / Usta" -> tag "@zanaatkar_usta", name "Atölye Tezgâhı" -> tag "@atolye_tezgahi").
-      * In EVERY scene's 'promptEn', whenever the person, the object/prop, or the setting/location is framed or interacted with, YOU MUST USE THEIR EXACT CHIP TAG STARTING WITH @ (e.g. "@zanaatkar_usta focuses intently as hands assemble @kalpli_bardak on the surface of @atolye_tezgahi").
-      * NEVER refer to the main character, prototype object, or workstation setting with bare un-tagged words when visual anchors are defined. This instructs Google Veo to bind the uploaded reference image directly to the entity!
+    - STRICT PROHIBITION OF '@' SYMBOLS & SOCIAL MEDIA HANDLES IN promptEn (CRITICAL):
+      * NEVER use '@' symbols or handle names in promptEn (e.g. write 'artisan young woman maker', NOT '@genc_kadin_maker_zeynep'; write 'cardboard vending machine', NOT '@akilli_otomat').
+      * Google Veo's advanced text-rendering engine interprets '@handle' as an explicit social media watermark or creator credit and renders the handle as text directly on top of the video canvas!
+      * ALWAYS use natural, rich descriptive physical English nouns instead of '@' tags.
+      * In EVERY scene prompt, explicitly enforce: 'Clean photographic frame, strictly zero text overlays, zero watermarks, zero @ handles, zero subtitles, no letters or numbers on screen.'
 
 11. "DEDICATED VISUAL PRODUCTION TYPE - DESKTOP DIY & CARDBOARD CRAFT (diy_craft_macro ONLY)":
 ${isDiyCraft ? `    * SPECIAL MULTI-SHOT & MULTI-ACTION DIRECTIVE ACTIVE FOR THIS STORYBOARD:
@@ -398,7 +420,7 @@ ${isDiyCraft ? `    * SPECIAL MULTI-SHOT & MULTI-ACTION DIRECTIVE ACTIVE FOR THI
       - This fast-cut multi-angle structure conceals generative AI morphing flaws and creates fluid, high-retention viral pacing.
       - In EVERY scene:
         * Action 1 + Angle 1 (45° Top-Down Desk Angle): Artisan hands measuring, scoring, or aligning parts on the green cutting mat.
-        * Action 2 + Angle 2 (Rapid Jump Cut to Extreme Macro Close-Up): Craft knife slicing cardboard flutes, hot glue bonding joints, or assembling components with crisp precision.
+        * Action 2 + Angle 2 (Rapid Jump Cut to Extreme Macro Close-Up): Craft shears trimming cleanly, scoring and folding cardboard joints, hot glue bonding, or assembling components with crisp precision.
         * Resolution + Angle 3 (Dynamic Cut to Low-Angle / Action Profile): Mechanism turning, axle spinning, lever pressing, LED glowing, or moving part engaging smoothly.
       - 'cameraSetup': MUST specify "3-shot dynamic jump cuts: 45° overhead desk -> macro tight focus -> low-angle motion profile".
       - 'promptEn': MUST explicitly be structured as a 3-shot sequence:
@@ -443,16 +465,16 @@ Return ONLY a valid JSON object matching this schema (no markdown fences, no con
     "musicPromptEn": "Instrumental music generation prompt for Google Vids Audio in English, no vocals"
   },
   "characterAnchor": {
-    "name": "Genç Maker Can",
-    "archetypeTr": "7-14 yaş grubu meraklı, üretken genç maker çocuk (öğrenci mucit)",
-    "masterVisualPromptEn": "Character design turnaround model sheet of bright school-age junior maker apprentice Can: youthful student maker kid with oversized curious eyes, casual workshop hoodie with rolled-up sleeves, nimble young hands",
-    "fixedTraitsEn": "Youthful school-age junior maker kid, curious expressive brown eyes, casual teal hoodie with rolled-up sleeves, nimble young hands"
+    "name": "${isDiyCraft ? "Genç Kadın Maker Zeynep" : "Genç Maker Can"}",
+    "archetypeTr": "${isDiyCraft ? "20-25 yaş aralığında meraklı, üretken genç kadın maker / mühendis zanaatkâr" : "7-14 yaş grubu meraklı, üretken genç maker çocuk (öğrenci mucit)"}",
+    "masterVisualPromptEn": "${isDiyCraft ? "Professional 3-view character turnaround model sheet of inspiring young adult woman maker: youthful female maker apprentice in her early 20s, hair tied back in practical bun, casual workshop denim apron over rolled-up cotton sleeves, dexterous artisan hands" : "Character design turnaround model sheet of bright school-age junior maker apprentice Can: youthful student maker kid with oversized curious eyes, casual workshop hoodie with rolled-up sleeves, nimble young hands"}",
+    "fixedTraitsEn": "${isDiyCraft ? "Young adult female artisan maker in her early 20s, expressive focused eyes, hair tied back neatly, denim apron over rolled-up sleeves, dexterous artisan hands" : "Youthful school-age junior maker kid, curious expressive brown eyes, casual teal hoodie with rolled-up sleeves, nimble young hands"}"
   },
   "visualAnchors": {
     "person": {
-      "name": "Genç Maker Can",
-      "descriptionTr": "7-14 yaş aralığında meraklı, üretken genç maker çocuk duruşu ve elleri",
-      "visualPromptEn": "Professional 3-view character turnaround model sheet of bright school-age junior maker apprentice Can: 1) front silhouette in casual colorful workshop hoodie with rolled-up sleeves and sneakers, 2) 3/4 crafting posture holding cutter or parts with cheerful focused gaze, 3) macro close-up of nimble young maker hands and precision finger dexterity"
+      "name": "${isDiyCraft ? "Genç Kadın Maker Zeynep" : "Genç Maker Can"}",
+      "descriptionTr": "${isDiyCraft ? "20-25 yaş aralığında üretken, yetenekli genç kadın maker duruşu ve elleri" : "7-14 yaş aralığında meraklı, üretken genç maker çocuk duruşu ve elleri"}",
+      "visualPromptEn": "${isDiyCraft ? "Professional 3-view character turnaround model sheet of inspiring young adult woman maker: 1) front silhouette in modern casual workshop attire with rolled-up sleeves and dark trousers, 2) 3/4 crafting posture holding assembly tools with cheerful focused gaze, 3) macro close-up of dexterous artisan hands showing precise finger dexterity" : "Professional 3-view character turnaround model sheet of bright school-age junior maker apprentice Can: 1) front silhouette in casual colorful workshop hoodie with rolled-up sleeves and sneakers, 2) 3/4 crafting posture holding cutter or parts with cheerful focused gaze, 3) macro close-up of nimble young maker hands and precision finger dexterity"}"
     },
     "location": {
       "name": "Mekan / Atölye",
@@ -500,9 +522,11 @@ CRITICAL: Return valid JSON ONLY. No markdown backticks, no markdown code block 
     const fallbackDuration = defaultDurs.reduce((a, b) => a + b, 0);
     const fallbackAnchors: VisualAnchorsSpec = {
       person: {
-        name: "Genç Maker Can",
-        descriptionTr: "7-14 yaş aralığında meraklı, üretken genç maker çocuk",
-        visualPromptEn: "Professional 3-view character turnaround model sheet of bright school-age junior maker apprentice Can: 1) front silhouette in casual colorful workshop hoodie with rolled-up sleeves and sneakers, 2) 3/4 crafting posture holding cutter or parts with cheerful focused gaze, 3) macro close-up of nimble young maker hands and precision finger dexterity",
+        name: isDiy ? "Genç Kadın Maker Zeynep" : "Genç Maker Can",
+        descriptionTr: isDiy ? "20-25 yaş aralığında üretken, yetenekli genç kadın maker" : "7-14 yaş aralığında meraklı, üretken genç maker çocuk",
+        visualPromptEn: isDiy
+          ? "Professional 3-view character turnaround model sheet of inspiring young adult woman maker: 1) front silhouette in modern casual workshop attire with rolled-up sleeves and dark trousers, 2) 3/4 crafting posture holding assembly tools with cheerful focused gaze, 3) macro close-up of dexterous artisan hands showing precise finger dexterity"
+          : "Professional 3-view character turnaround model sheet of bright school-age junior maker apprentice Can: 1) front silhouette in casual colorful workshop hoodie with rolled-up sleeves and sneakers, 2) 3/4 crafting posture holding cutter or parts with cheerful focused gaze, 3) macro close-up of nimble young maker hands and precision finger dexterity",
       },
       location: {
         name: "Atölye Masası",
@@ -527,7 +551,7 @@ CRITICAL: Return valid JSON ONLY. No markdown backticks, no markdown code block 
       visualAnchors: fallbackAnchors,
       scenes: defaultDurs.map((dur, i) => {
         const rawPrompt = isDiy
-          ? `Three-shot dynamic sequence with rapid jump cuts for ${input.topic}. Shot 1: 45-degree top-down desk view of artisan hands measuring and aligning parts on green cutting mat. Rapid jump cut to Shot 2: extreme macro close-up of precision craft knife cutting cardboard edge with clean precision. Dynamic cut to Shot 3: low-angle side profile showing smooth axle rotation and mechanical engagement. ${mood.lensInstruction}, ${mood.lightingInstruction}, ${mood.colorGrading}. Strict physical realism: rigid body mechanics, zero liquid spillage on dry surfaces, all forces transfer through direct solid-to-solid contact, downward Newtonian gravity, no floating or phantom parts, complete spatial object permanence. Audio: tactile craft workshop sounds, crisp cutter glide. SFX: (mechanical snap at 2s).`
+          ? `Three-shot dynamic sequence with rapid jump cuts for ${input.topic}. Shot 1: 45-degree top-down desk view of artisan hands measuring and aligning parts on green cutting mat. Rapid jump cut to Shot 2: extreme macro close-up of precision craft shears trimming cardboard edge with clean precision. Dynamic cut to Shot 3: low-angle side profile showing smooth axle rotation and mechanical engagement. ${mood.lensInstruction}, ${mood.lightingInstruction}, ${mood.colorGrading}. Strict physical realism: rigid body mechanics, zero liquid spillage on dry surfaces, all forces transfer through direct solid-to-solid contact, downward Newtonian gravity, no floating or phantom parts, complete spatial object permanence. Audio: tactile craft workshop sounds, soft cardboard creasing. SFX: (mechanical snap at 2s).`
           : `A focused scene ${i + 1} of ${input.topic}, ${mood.lensInstruction}, ${mood.lightingInstruction}, smooth cinematic camera movement, ${mood.colorGrading}.`;
         return {
           sceneIndex: i + 1,

@@ -6,5 +6,5 @@ export default async function Page({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = await params;
-  redirect(`/projects/${projectId}/image-generation`);
+  redirect(`/projects/${projectId}/image-generation?studio=canva`);
 }
