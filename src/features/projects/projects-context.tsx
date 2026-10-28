@@ -40,59 +40,34 @@ const STORAGE_KEY = "yonetici-projects-v1";
 const ProjectsContext = createContext<ProjectsContextValue | null>(null);
 
 const emptyBrand: BrandProfile = {
-  brandName: "", website: "", logo: "", phone: "", email: "", address: "",
-  industry: "", description: "", audience: "", tone: "", primaryColor: "#6d5dfc",
-  secondaryColor: "#171826", defaultCta: "Detaylı bilgi alın",
+  brandName: "",
+  website: "",
+  logo: "",
+  phone: "",
+  email: "",
+  address: "",
+  industry: "",
+  description: "",
+  audience: "",
+  tone: "",
+  primaryColor: "#6d5dfc",
+  secondaryColor: "#171826",
+  defaultCta: "Detaylı bilgi alın",
 };
 
 function normalizeProject(project: Project): Project {
-  return { ...project, brand: { ...emptyBrand, ...project.brand }, brandConcept: normalizeBrandConcept(project.brandConcept) };
+  return {
+    ...project,
+    brand: { ...emptyBrand, ...project.brand },
+    brandConcept: normalizeBrandConcept(project.brandConcept),
+  };
 }
 
-const initialProjects: Project[] = [
-  {
-    id: "nova-studio",
-    name: "Nova Studio",
-    createdAt: "2026-09-16T09:00:00.000Z",
-    brand: {
-      brandName: "Nova Studio",
-      website: "novastudio.co",
-      logo: "",
-      phone: "+90 212 555 24 10",
-      email: "hello@novastudio.co",
-      address: "İstanbul, Türkiye",
-      industry: "Tasarım & Kreatif",
-      description: "Dijital markalar için yaratıcı tasarım stüdyosu.",
-      audience: "Büyüme odaklı girişimler ve modern markalar",
-      tone: "Yalın, yaratıcı ve kendinden emin",
-      primaryColor: "#6d5dfc",
-      secondaryColor: "#171826",
-      defaultCta: "Projenizi konuşalım",
-    },
-    brandConcept: { ...emptyBrandConcept, summary: "Yalın, yaratıcı ve kendinden emin; modern dijital markalara uygun ferah kompozisyonlar, güçlü tipografi ve kontrollü mor vurgular.", personality: "Yaratıcı, modern, güven veren", visualStyle: "Minimal, ferah, güçlü tipografik hiyerarşi", photographyStyle: "Doğal ışıklı modern çalışma ve yaşam alanları", updatedAt: "2026-09-17T00:00:00.000Z" },
-  },
-  {
-    id: "atlas-coffee",
-    name: "Atlas Coffee",
-    createdAt: "2026-09-12T09:00:00.000Z",
-    brand: {
-      brandName: "Atlas Coffee",
-      website: "",
-      logo: "",
-      phone: "",
-      email: "",
-      address: "",
-      industry: "Yeme & İçme",
-      description: "",
-      audience: "",
-      tone: "",
-      primaryColor: "#d97744",
-      secondaryColor: "#38271f",
-      defaultCta: "Menüyü keşfet",
-    },
-    brandConcept: emptyBrandConcept,
-  },
-];
+function isMockProject(project: { id?: string; name?: string }): boolean {
+  if (!project || !project.id) return false;
+  const id = project.id.toLowerCase();
+  return id === "nova-studio" || id === "atlas-coffee";
+}
 
 function slugify(value: string) {
   return value
@@ -105,61 +80,131 @@ function slugify(value: string) {
 }
 
 export function ProjectsProvider({ children }: { children: React.ReactNode }) {
-  const [projects, setProjects] = useState<Project[]>(initialProjects);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+
     async function hydrate() {
-      let fallback = initialProjects;
+      // 1. Initial display from localStorage cache if available
       try {
-        const saved = window.localStorage.getItem(STORAGE_KEY);
-        if (saved) fallback = (JSON.parse(saved) as Project[]).map(normalizeProject);
+        const saved = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const cleanList = parsed.filter((p) => !isMockProject(p));
+            if (!cancelled && cleanList.length > 0) {
+              setProjects(cleanList.map(normalizeProject));
+            }
+          }
+        }
+      } catch {}
+
+      // 2. Fetch authoritative data from server
+      try {
         const response = await fetch("/api/projects", { cache: "no-store" });
-        const serverProjects = response.ok ? await response.json() as Project[] : [];
-        if (!cancelled) setProjects(serverProjects.length ? serverProjects.map(normalizeProject) : fallback);
-      } catch { if (!cancelled) setProjects(fallback); }
-      finally { if (!cancelled) setReady(true); }
+        if (response.ok) {
+          const serverProjects = (await response.json()) as Project[];
+          if (!cancelled && Array.isArray(serverProjects)) {
+            const cleanServerList = serverProjects.filter((p) => !isMockProject(p));
+            const normalized = cleanServerList.map(normalizeProject);
+            setProjects(normalized);
+            if (typeof window !== "undefined") {
+              window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[ProjectsContext] Failed to fetch server projects:", err);
+      } finally {
+        if (!cancelled) setReady(true);
+      }
     }
+
     hydrate();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  useEffect(() => {
-    if (ready) {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
-      fetch("/api/projects", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projects }) }).catch(() => undefined);
-    }
-  }, [projects, ready]);
+  const value = useMemo<ProjectsContextValue>(
+    () => ({
+      projects,
+      ready,
+      createProject(name) {
+        const base = slugify(name) || "proje";
+        let id = base;
+        let count = 2;
+        while (projects.some((project) => project.id === id)) id = `${base}-${count++}`;
+        const newProject: Project = {
+          id,
+          name: name.trim(),
+          createdAt: new Date().toISOString(),
+          brand: emptyBrand,
+          brandConcept: emptyBrandConcept,
+        };
+        const nextList = [newProject, ...projects];
+        setProjects(nextList);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextList));
+        }
 
-  const value = useMemo<ProjectsContextValue>(() => ({
-    projects,
-    ready,
-    createProject(name) {
-      const base = slugify(name) || "proje";
-      let id = base;
-      let count = 2;
-      while (projects.some((project) => project.id === id)) id = `${base}-${count++}`;
-      const project: Project = {
-        id,
-        name: name.trim(),
-        createdAt: new Date().toISOString(),
-        brand: emptyBrand,
-        brandConcept: emptyBrandConcept,
-      };
-      setProjects((current) => [project, ...current]);
-      return project;
-    },
-    updateProject(id, updates) {
-      setProjects((current) => current.map((project) => project.id === id ? { ...project, ...updates } : project));
-    },
-    deleteProject(id) {
-      setProjects((current) => current.filter((project) => project.id !== id));
-    },
-    getProject(id) {
-      return projects.find((project) => project.id === id);
-    },
-  }), [projects, ready]);
+        // Persist to server
+        fetch("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project: newProject }),
+        }).catch((err) => {
+          console.error("[ProjectsContext] Failed to persist new project:", err);
+        });
+
+        return newProject;
+      },
+      updateProject(id, updates) {
+        let updatedTarget: Project | null = null;
+        const nextList = projects.map((project) => {
+          if (project.id === id) {
+            updatedTarget = { ...project, ...updates };
+            return updatedTarget;
+          }
+          return project;
+        });
+
+        setProjects(nextList);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextList));
+        }
+
+        if (updatedTarget) {
+          fetch("/api/projects", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ project: updatedTarget }),
+          }).catch((err) => {
+            console.error("[ProjectsContext] Failed to persist updated project:", err);
+          });
+        }
+      },
+      deleteProject(id) {
+        const nextList = projects.filter((project) => project.id !== id);
+        setProjects(nextList);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextList));
+        }
+
+        fetch(`/api/projects?id=${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        }).catch((err) => {
+          console.error("[ProjectsContext] Failed to delete project on server:", err);
+        });
+      },
+      getProject(id) {
+        return projects.find((project) => project.id === id);
+      },
+    }),
+    [projects, ready]
+  );
 
   return <ProjectsContext.Provider value={value}>{children}</ProjectsContext.Provider>;
 }
