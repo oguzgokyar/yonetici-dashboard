@@ -147,8 +147,12 @@ export function CanvaGenerationStudio({
   // Canva API Quota / Status State
   const [quotaInfo, setQuotaInfo] = useState<{
     ok: boolean;
-    status: "normal" | "quota_exceeded";
+    status: "normal" | "quota_exceeded" | "auth_required";
     statusLabel: string;
+    hasAuthOutage?: boolean;
+    authStatus?: string;
+    reconnectUrl?: string;
+    authMessage?: string | null;
     dailyExportsCount: number;
     totalDailyCapacity?: number;
     availableAccounts?: number;
@@ -448,6 +452,11 @@ export function CanvaGenerationStudio({
       return;
     }
 
+    if (quotaInfo && (quotaInfo.status === "auth_required" || quotaInfo.hasAuthOutage)) {
+      setMessage("⚠️ Canva oturumunun süresi dolmuş veya bağlı hesap yok. Lütfen Sistem Ayarları'ndan hesabı yeniden bağlayın.");
+      return;
+    }
+
     setProducing(true);
     setMessage("");
 
@@ -717,9 +726,18 @@ export function CanvaGenerationStudio({
                       borderRadius: "12px",
                       fontSize: "11px",
                       fontWeight: 600,
-                      border: quotaInfo.status === "quota_exceeded" ? "1px solid #fca5a5" : "1px solid #86efac",
-                      background: quotaInfo.status === "quota_exceeded" ? "#fef2f2" : "#f0fdf4",
-                      color: quotaInfo.status === "quota_exceeded" ? "#b91c1c" : "#15803d",
+                      border:
+                        quotaInfo.status === "quota_exceeded" || quotaInfo.status === "auth_required" || quotaInfo.hasAuthOutage
+                          ? "1px solid #fca5a5"
+                          : "1px solid #86efac",
+                      background:
+                        quotaInfo.status === "quota_exceeded" || quotaInfo.status === "auth_required" || quotaInfo.hasAuthOutage
+                          ? "#fef2f2"
+                          : "#f0fdf4",
+                      color:
+                        quotaInfo.status === "quota_exceeded" || quotaInfo.status === "auth_required" || quotaInfo.hasAuthOutage
+                          ? "#b91c1c"
+                          : "#15803d",
                       cursor: "pointer",
                       lineHeight: 1.2,
                     }}
@@ -730,11 +748,18 @@ export function CanvaGenerationStudio({
                         width: "6px",
                         height: "6px",
                         borderRadius: "50%",
-                        background: quotaInfo.status === "quota_exceeded" ? "#dc2626" : "#16a34a",
+                        background:
+                          quotaInfo.status === "quota_exceeded" || quotaInfo.status === "auth_required" || quotaInfo.hasAuthOutage
+                            ? "#dc2626"
+                            : "#16a34a",
                         display: "inline-block",
                       }}
                     />
-                    {quotaInfo.status === "quota_exceeded" ? "Kota Doldu" : quotaInfo.statusLabel || "API Aktif"}
+                    {quotaInfo.status === "auth_required" || quotaInfo.hasAuthOutage
+                      ? "Oturum Düştü"
+                      : quotaInfo.status === "quota_exceeded"
+                      ? "Kota Doldu"
+                      : quotaInfo.statusLabel || "API Aktif"}
                   </button>
 
                   {/* Dropdown Popover */}
@@ -843,6 +868,73 @@ export function CanvaGenerationStudio({
           </div>
           <WandSparkles size={21} />
         </div>
+
+        {/* Canva Kesinti / Oturum Uyarısı Bandı */}
+        {quotaInfo && (quotaInfo.status === "auth_required" || quotaInfo.hasAuthOutage) && (
+          <div
+            style={{
+              margin: "10px 0 14px 0",
+              padding: "10px 14px",
+              background: "#fef2f2",
+              border: "1px solid #f87171",
+              borderRadius: "10px",
+              fontSize: "12px",
+              color: "#991b1b",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "10px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <AlertCircle size={16} color="#dc2626" />
+              <span>
+                <strong>Canva Oturumu Kapalı:</strong> Yeni görsel üretimi için hesabınızı yeniden bağlayın.
+              </span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              {quotaInfo.reconnectUrl && (
+                <a
+                  href={quotaInfo.reconnectUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    padding: "4px 10px",
+                    background: "#dc2626",
+                    color: "white",
+                    borderRadius: "6px",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    textDecoration: "none",
+                    whiteSpace: "nowrap",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                  }}
+                >
+                  <ExternalLink size={11} />
+                  Yeniden Yetkilendir
+                </a>
+              )}
+              <Link
+                href="/settings"
+                style={{
+                  padding: "4px 10px",
+                  background: "#fee2e2",
+                  color: "#991b1b",
+                  border: "1px solid #fca5a5",
+                  borderRadius: "6px",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  textDecoration: "none",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Ayarlar →
+              </Link>
+            </div>
+          </div>
+        )}
 
         <div className="brand-concept-status">
           <span style={{ background: project.brand?.primaryColor || "#7a6deb" }}>

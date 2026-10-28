@@ -13,7 +13,7 @@ export async function GET() {
   try {
     const accounts = listCanvaAccounts();
     const summary = getCanvaPoolSummary();
-    return NextResponse.json({ ok: true, accounts, summary });
+    return NextResponse.json({ ok: true, accounts, summary, reconnectUrl: summary.reconnectUrl });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Hesap havuzu okunamadı.";
     return NextResponse.json({ ok: false, message }, { status: 500 });

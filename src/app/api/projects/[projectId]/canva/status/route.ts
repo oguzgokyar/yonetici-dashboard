@@ -57,10 +57,15 @@ export async function GET(
 
   const cached = getCachedQuotaState(todayIso);
 
-  let status: "normal" | "quota_exceeded" = pool.status === "all_exhausted" ? "quota_exceeded" : "normal";
-  let lastError: string | null = null;
+  let status: "normal" | "quota_exceeded" | "auth_required" =
+    pool.hasAuthOutage || pool.totalAccounts === 0
+      ? "auth_required"
+      : pool.status === "all_exhausted"
+      ? "quota_exceeded"
+      : "normal";
+  let lastError: string | null = pool.authMessage || (pool.totalAccounts === 0 ? "Canva havuzunda bağlı hesap bulunmuyor." : null);
 
-  if (cached) {
+  if (cached && status === "normal") {
     if (cached.status === "quota_exceeded" && pool.availableAccounts === 0) {
       status = "quota_exceeded";
       lastError = cached.lastError || null;
@@ -68,7 +73,9 @@ export async function GET(
   }
 
   const statusLabel =
-    status === "quota_exceeded"
+    status === "auth_required"
+      ? (pool.totalAccounts === 0 ? "Hesap Bağlı Değil" : "Oturum Düştü (Yetkilendirme Gerekli)")
+      : status === "quota_exceeded"
       ? "Günlük Kota Doldu"
       : pool.totalAccounts > 1
       ? `${pool.availableAccounts}/${pool.activeAccounts} Hesap Aktif`
@@ -78,6 +85,10 @@ export async function GET(
     ok: true,
     status,
     statusLabel,
+    hasAuthOutage: pool.hasAuthOutage,
+    authStatus: pool.hasAuthOutage ? "auth_required" : "ok",
+    reconnectUrl: pool.reconnectUrl,
+    authMessage: pool.authMessage,
     dailyExportsCount: pool.usedToday,
     totalDailyCapacity: pool.totalDailyCapacity,
     availableAccounts: pool.availableAccounts,
@@ -88,7 +99,7 @@ export async function GET(
     resetTimeFormatted: pool.resetTimeFormatted,
     hoursUntilReset: pool.hoursUntilReset,
     minutesUntilReset: pool.minutesUntilReset,
-    lastError,
+    lastError: lastError || pool.authMessage || null,
     lastCheckedAt: cached?.checkedAt || now.toISOString(),
   });
 }

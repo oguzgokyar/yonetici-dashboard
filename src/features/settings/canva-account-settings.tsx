@@ -12,6 +12,8 @@ import {
   RotateCcw,
   Sparkles,
   Info,
+  Key,
+  ExternalLink,
 } from "lucide-react";
 import type { CanvaAccount, CanvaPoolSummary } from "@/lib/server/canva-account-pool";
 
@@ -29,6 +31,67 @@ export function CanvaAccountSettings() {
   const [newTokenJson, setNewTokenJson] = useState("");
   const [adding, setAdding] = useState(false);
   const [copiedCommand, setCopiedCommand] = useState(false);
+
+  // Edit account token modal state
+  const [editingAccount, setEditingAccount] = useState<CanvaAccount | null>(null);
+  const [editTokenJson, setEditTokenJson] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // Live validator for pasted token JSON in edit modal
+  const editTokenValidation = (() => {
+    const trimmed = editTokenJson.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed !== "object" || parsed === null) {
+        return { valid: false, text: "✕ Geçersiz veri (JSON nesnesi bekleniyor)", color: "#ef4444" };
+      }
+      const hasAccess = Boolean(parsed.access_token);
+      const hasRefresh = Boolean(parsed.refresh_token);
+      if (hasAccess && hasRefresh) {
+        return { valid: true, text: "✓ Geçerli Canva Belirteci (access_token & refresh_token doğrulandı)", color: "#16a34a" };
+      }
+      if (hasAccess) {
+        return { valid: true, text: "✓ Geçerli Belirteç (access_token doğrulandı)", color: "#16a34a" };
+      }
+      if (hasRefresh) {
+        return { valid: true, text: "✓ Geçerli Belirteç (refresh_token doğrulandı)", color: "#16a34a" };
+      }
+      return { valid: false, text: "⚠️ JSON geçerli ancak access_token veya refresh_token anahtarı eksik", color: "#f59e0b" };
+    } catch {
+      return { valid: false, text: "✕ Geçersiz JSON sözdizimi. Lütfen tırnak ve parantezleri kontrol edin.", color: "#ef4444" };
+    }
+  })();
+
+  async function handleUpdateToken(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingAccount || !editTokenJson.trim()) return;
+    setSavingEdit(true);
+    setActionMessage(null);
+    try {
+      const res = await fetch("/api/system/canva/accounts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingAccount.id,
+          tokenJson: editTokenJson.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.message || "Belirteç güncellenemedi.");
+      setActionMessage({ type: "success", text: `"${editingAccount.displayName}" belirteci başarıyla güncellendi!` });
+      setEditingAccount(null);
+      setEditTokenJson("");
+      await loadData();
+    } catch (err) {
+      setActionMessage({
+        type: "error",
+        text: err instanceof Error ? err.message : "Belirteç güncellenirken hata oluştu.",
+      });
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   // Live validator for pasted token JSON
   const tokenValidation = (() => {
@@ -258,6 +321,31 @@ export function CanvaAccountSettings() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {summary?.reconnectUrl && (
+            <a
+              href={summary.reconnectUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="button"
+              style={{
+                height: "34px",
+                fontSize: "12px",
+                padding: "0 12px",
+                background: summary?.hasAuthOutage ? "#dc2626" : "#475569",
+                color: "white",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                textDecoration: "none",
+                borderRadius: "6px",
+                fontWeight: 600,
+              }}
+              title="Nous Portal üzerinden Canva OAuth oturumunu başlat veya yenile"
+            >
+              <ExternalLink size={13} />
+              Yeniden Yetkilendir (OAuth)
+            </a>
+          )}
           <button
             type="button"
             onClick={() => void loadData()}
@@ -296,6 +384,66 @@ export function CanvaAccountSettings() {
           </button>
         </div>
       </div>
+
+      {/* Top Outage Alert Banner */}
+      {summary?.hasAuthOutage && (
+        <div
+          style={{
+            padding: "14px 18px",
+            borderRadius: "10px",
+            background: "#fef2f2",
+            border: "1px solid #fca5a5",
+            color: "#991b1b",
+            marginBottom: "16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "12px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <AlertCircle size={22} color="#dc2626" />
+            <div>
+              <strong style={{ fontSize: "13px", display: "block" }}>Canva Bağlantı Kesintisi (Oturum Süresi Doldu)</strong>
+              <span style={{ fontSize: "12px", color: "#7f1d1d" }}>
+                {summary.authMessage || "Canva MCP erişim belirtecinin süresi dolmuş. Üretim yapılabilmesi için oturumun yenilenmesi gerekir."}
+              </span>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <a
+              href={summary.reconnectUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="button primary"
+              style={{
+                fontSize: "12px",
+                padding: "6px 14px",
+                background: "#dc2626",
+                color: "white",
+                textDecoration: "none",
+                borderRadius: "6px",
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "5px",
+              }}
+            >
+              <ExternalLink size={12} />
+              Yeniden Yetkilendir
+            </a>
+            <button
+              type="button"
+              onClick={() => void loadData()}
+              className="button secondary"
+              style={{ fontSize: "12px", padding: "6px 12px" }}
+            >
+              Yenile
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Action Notification */}
       {actionMessage && (
@@ -443,28 +591,67 @@ export function CanvaAccountSettings() {
                       </div>
                     </div>
 
-                    <span
-                      style={{
-                        padding: "3px 8px",
-                        borderRadius: "12px",
-                        fontSize: "10px",
-                        fontWeight: 600,
-                        border: isInactive
-                          ? "1px solid #cbd5e1"
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+                      <span
+                        style={{
+                          padding: "2px 7px",
+                          borderRadius: "10px",
+                          fontSize: "10px",
+                          fontWeight: 600,
+                          border: isInactive
+                            ? "1px solid #cbd5e1"
+                            : isExhausted
+                            ? "1px solid #fca5a5"
+                            : "1px solid #86efac",
+                          background: isInactive ? "#f1f5f9" : isExhausted ? "#fef2f2" : "#f0fdf4",
+                          color: isInactive ? "#64748b" : isExhausted ? "#b91c1c" : "#15803d",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {isInactive
+                          ? "⚪ Pasif"
                           : isExhausted
-                          ? "1px solid #fca5a5"
-                          : "1px solid #86efac",
-                        background: isInactive ? "#f1f5f9" : isExhausted ? "#fef2f2" : "#f0fdf4",
-                        color: isInactive ? "#64748b" : isExhausted ? "#b91c1c" : "#15803d",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {isInactive
-                        ? "⚪ Pasif"
-                        : isExhausted
-                        ? "🔴 Günlük Kota Doldu"
-                        : "🟢 Kota Müsait"}
-                    </span>
+                          ? "🔴 Günlük Kota Doldu"
+                          : "🟢 Kota Müsait"}
+                      </span>
+
+                      <span
+                        style={{
+                          padding: "2px 7px",
+                          borderRadius: "10px",
+                          fontSize: "10px",
+                          fontWeight: 600,
+                          border: acc.authStatus === "expired"
+                            ? "1px solid #fca5a5"
+                            : acc.authStatus === "no_token"
+                            ? "1px solid #e2e8f0"
+                            : "1px solid #bae6fd",
+                          background: acc.authStatus === "expired"
+                            ? "#fef2f2"
+                            : acc.authStatus === "no_token"
+                            ? "#f8fafc"
+                            : "#f0f9ff",
+                          color: acc.authStatus === "expired"
+                            ? "#b91c1c"
+                            : acc.authStatus === "no_token"
+                            ? "#64748b"
+                            : "#0369a1",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {acc.authStatus === "expired"
+                          ? "🔴 Oturum Süresi Doldu"
+                          : acc.authStatus === "no_token"
+                          ? "⚪ Belirteç Yok"
+                          : "🟢 Oturum Aktif"}
+                      </span>
+                      {acc.expiresAt && (
+                        <span style={{ fontSize: "10px", color: acc.authStatus === "expired" ? "#b91c1c" : "#64748b" }}>
+                          {acc.authStatus === "expired" ? "Süre bitti: " : "Bitiş: "}
+                          {new Date(acc.expiresAt).toLocaleDateString("tr-TR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Quota Progress */}
@@ -550,6 +737,31 @@ export function CanvaAccountSettings() {
                       {isTesting ? "Test Ediliyor..." : "Test Et"}
                     </button>
 
+                    {acc.authStatus === "expired" && (
+                      <a
+                        href={summary?.reconnectUrl || "https://portal.nousresearch.com/connect/EpqFrkrwTMAC"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          padding: "4px 8px",
+                          fontSize: "11px",
+                          borderRadius: "6px",
+                          border: "1px solid #f87171",
+                          background: "#dc2626",
+                          color: "#ffffff",
+                          textDecoration: "none",
+                          fontWeight: 600,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                        title="Canva OAuth oturumunu doğrudan açıp yetkilendirin"
+                      >
+                        <ExternalLink size={11} />
+                        Yeniden Bağla
+                      </a>
+                    )}
+
                     {isExhausted && (
                       <button
                         type="button"
@@ -572,6 +784,30 @@ export function CanvaAccountSettings() {
                         Sıfırla
                       </button>
                     )}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingAccount(acc);
+                        setEditTokenJson("");
+                      }}
+                      style={{
+                        padding: "4px 8px",
+                        fontSize: "11px",
+                        borderRadius: "6px",
+                        border: "1px solid #e2e8f0",
+                        background: "#ffffff",
+                        color: "#0f172a",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                      }}
+                      title="Bu hesabın Canva OAuth token JSON verisini doğrudan güncelle"
+                    >
+                      <Key size={11} />
+                      Belirteci Güncelle
+                    </button>
                   </div>
 
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -855,6 +1091,127 @@ export function CanvaAccountSettings() {
                   }}
                 >
                   {adding ? "Kaydediliyor..." : "Hesabı Havuza Ekle"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Edit Account Token Modal */}
+      {editingAccount && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.6)",
+            backdropFilter: "blur(4px)",
+            display: "grid",
+            placeItems: "center",
+            zIndex: 1000,
+            padding: "16px",
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setEditingAccount(null);
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "14px",
+              padding: "24px",
+              maxWidth: "520px",
+              width: "100%",
+              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.2)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
+              <div
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "8px",
+                  background: "linear-gradient(135deg, #0284c7, #6366f1)",
+                  display: "grid",
+                  placeItems: "center",
+                  color: "white",
+                }}
+              >
+                <Key size={18} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: "16px", fontWeight: 700, margin: 0, color: "#0f172a" }}>
+                  Canva Belirtecini Güncelle
+                </h3>
+                <p style={{ fontSize: "12px", color: "#64748b", margin: "2px 0 0 0" }}>
+                  <strong>{editingAccount.displayName}</strong> hesabı için taze OAuth token JSON verisini kaydedin.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleUpdateToken} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div>
+                <label style={{ fontSize: "12px", fontWeight: 600, color: "#334155", display: "block", marginBottom: "4px" }}>
+                  Yeni Canva OAuth Token JSON *
+                </label>
+                <textarea
+                  required
+                  rows={8}
+                  placeholder='{"access_token": "...", "refresh_token": "...", "expires_at": ...}'
+                  value={editTokenJson}
+                  onChange={(e) => setEditTokenJson(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    borderRadius: "6px",
+                    border: "1px solid #cbd5e1",
+                    fontSize: "11px",
+                    fontFamily: "monospace",
+                  }}
+                />
+
+                {editTokenValidation ? (
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      color: editTokenValidation.color,
+                      fontWeight: 600,
+                      marginTop: "5px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                  >
+                    {editTokenValidation.text}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px" }}>
+                    <Sparkles size={11} style={{ display: "inline", marginRight: "4px", color: "#8b5cf6" }} />
+                    Yeni access_token veya refresh_token içeren JSON nesnesini yapıştırın.
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "12px" }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingAccount(null)}
+                  className="button secondary"
+                  style={{ fontSize: "12px" }}
+                >
+                  İptal
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit || !editTokenJson.trim()}
+                  className="button primary"
+                  style={{
+                    fontSize: "12px",
+                    background: "linear-gradient(135deg, #0284c7, #6366f1)",
+                    color: "white",
+                    border: "none",
+                  }}
+                >
+                  {savingEdit ? "Kaydediliyor..." : "Belirteci Kaydet"}
                 </button>
               </div>
             </form>

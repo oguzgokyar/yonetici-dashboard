@@ -1,5 +1,6 @@
 import { createJobCallbackToken, getCanvaConfig, isCanvaStudioEnabled } from "@/lib/server/canva-config";
 import { getDatabase } from "@/lib/server/database";
+import { getCanvaPoolSummary } from "@/lib/server/canva-account-pool";
 import { triggerProductionWorker, runCanvaLifetime } from "@/lib/server/production-worker";
 import {
   HERMES_CANVA_PIPELINE_VERSION,
@@ -108,6 +109,25 @@ export async function POST(request: Request, context: Context) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Geçersiz istek.";
     return Response.json({ ok: false, message: msg }, { status: 400 });
+  }
+
+  // Pre-flight check: Canva auth outage guard
+  const pool = getCanvaPoolSummary();
+  if (pool.hasAuthOutage || pool.totalAccounts === 0) {
+    return Response.json({
+      ok: false,
+      message: "Canva API erişim belirtecinin süresi dolmuş veya bağlı hesap bulunmuyor. Lütfen Sistem Ayarları > Canva bölümünden hesabı yeniden yetkilendirin.",
+      authRequired: true,
+      reconnectUrl: pool.reconnectUrl,
+    }, { status: 401 });
+  }
+
+  if (pool.availableAccounts === 0) {
+    return Response.json({
+      ok: false,
+      message: "Canva günlük dışa aktarım kotanız dolmuştur. Gece 03:00 TSİ'de yenilenir.",
+      quotaExceeded: true,
+    }, { status: 429 });
   }
 
   // Idempotency check if idempotencyKey is supplied

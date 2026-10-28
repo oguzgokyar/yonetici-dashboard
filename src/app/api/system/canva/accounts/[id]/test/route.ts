@@ -5,6 +5,7 @@ import {
   getCanvaAccountWithToken,
   markCanvaAccountExhausted,
   updateCanvaAccount,
+  getAccountAuthInfo,
 } from "@/lib/server/canva-account-pool";
 
 export const runtime = "nodejs";
@@ -19,6 +20,24 @@ export async function POST(
 
     if (!account) {
       return NextResponse.json({ ok: false, message: "Hesap bulunamadı." }, { status: 404 });
+    }
+
+    // Fast zero-load local validation first
+    const auth = getAccountAuthInfo(account.tokenJson);
+    if (auth.authStatus === "expired") {
+      updateCanvaAccount(id, { quotaStatus: "auth_required" as any });
+      return NextResponse.json({
+        ok: false,
+        accountStatus: "auth_required",
+        message: "Canva oturum süresi dolmuş. Lütfen 'Yeniden Bağla' butonunu kullanarak oturumu tazeleyin.",
+      });
+    }
+    if (auth.authStatus === "no_token") {
+      return NextResponse.json({
+        ok: false,
+        accountStatus: "auth_required",
+        message: "Hesapta geçerli bir Canva belirteci bulunmuyor. Lütfen hesabı bağlayın.",
+      });
     }
 
     const db = getDatabase();
@@ -70,6 +89,24 @@ export async function POST(
       req.write(payload);
       req.end();
     });
+
+    const isAuthError =
+      bridgeRes?.error &&
+      (bridgeRes.error.includes("invalid_grant") ||
+       bridgeRes.error.includes("Token refresh failed") ||
+       bridgeRes.error.includes("OAuthNonInteractiveError") ||
+       bridgeRes.error.includes("401") ||
+       bridgeRes.error.toLowerCase().includes("unauthorized"));
+
+    if (isAuthError) {
+      updateCanvaAccount(id, { quotaStatus: "auth_required" as any });
+      return NextResponse.json({
+        ok: false,
+        accountStatus: "auth_required",
+        message: "Canva oturumu kapandı veya yenileme belirteci geçersiz. Lütfen 'Yeniden Bağla' butonunu kullanın.",
+        details: bridgeRes?.error,
+      });
+    }
 
     const isQuotaError =
       bridgeRes?.is_quota_fallback ||
