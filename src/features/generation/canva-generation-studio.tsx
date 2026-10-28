@@ -2004,13 +2004,14 @@ function CanvaPackageCard({
             <CalendarPlus size={13} />
           </Link>
 
-          {/* 6. ✈️ Telegram'a Gönder (Tek Kağıt Uçak Simgesi) */}
-          {pkg.coverUrl && (
+          {/* 6. ✈️ Telegram'a Gönder (Karosel ise tüm slaytları albüm olarak gönderir) */}
+          {(pkg.coverUrl || (pkg.items && pkg.items.length > 0)) && (
             <TelegramSendButton
-              mediaUrl={pkg.coverUrl}
+              mediaUrls={isCarousel && pkg.items?.length ? pkg.items.map((i) => i.url) : undefined}
+              mediaUrl={pkg.coverUrl || pkg.items?.[0]?.url || ""}
               mediaType="image"
-              caption={`📸 ${pkg.title || "Canva Tasarımı"}`}
-              title="✈️ Telegram'a Gönder"
+              caption={`📸 ${pkg.title || "Canva Tasarımı"}${isCarousel && pkg.items?.length ? ` (${pkg.items.length} Slayt)` : ""}`}
+              title={isCarousel && pkg.items?.length ? `✈️ Telegram'a Gönder (${pkg.items.length} Görsel)` : "✈️ Telegram'a Gönder"}
               size={13}
             />
           )}
@@ -2190,6 +2191,17 @@ function CanvaGalleryModal({
               {syncing ? <LoaderCircle className="spin" size={13} /> : <RefreshCw size={13} />}
               {syncing ? "Eşitleniyor..." : "Canva'dan Güncelle"}
             </button>
+          )}
+          {(pkg.coverUrl || (pkg.items && pkg.items.length > 0)) && (
+            <TelegramSendButton
+              mediaUrls={pkg.items?.length ? pkg.items.map((i) => i.url) : undefined}
+              mediaUrl={pkg.coverUrl || pkg.items?.[0]?.url || ""}
+              mediaType="image"
+              caption={`📸 ${pkg.title || "Canva Karosel"}${pkg.items?.length ? ` (${pkg.items.length} Slayt)` : ""}`}
+              variant="button"
+              label="Telegram"
+              size={13}
+            />
           )}
           <Link
             href={`/projects/${projectId}/publishing?packageId=${pkg.id}`}

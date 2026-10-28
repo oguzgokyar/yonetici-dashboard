@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Send, LoaderCircle, Check, AlertCircle } from "lucide-react";
 
 interface TelegramSendButtonProps {
-  mediaUrl: string;
+  mediaUrl?: string;
+  mediaUrls?: string[];
   mediaType?: "image" | "video" | "auto";
   caption?: string;
   title?: string;
@@ -16,9 +17,10 @@ interface TelegramSendButtonProps {
 
 export function TelegramSendButton({
   mediaUrl,
+  mediaUrls,
   mediaType = "auto",
   caption,
-  title = "Telegram'a Gönder",
+  title,
   className = "",
   size = 14,
   variant = "icon",
@@ -27,10 +29,21 @@ export function TelegramSendButton({
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const isMultiple = Array.isArray(mediaUrls) && mediaUrls.length > 1;
+  const defaultTitle = isMultiple
+    ? `Telegram'a Gönder (${mediaUrls.length} Görsel)`
+    : "Telegram'a Gönder";
+  const computedTitle = title || defaultTitle;
+
   async function handleSend(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
 
+    const targetUrls = Array.isArray(mediaUrls) && mediaUrls.length > 0
+      ? mediaUrls.filter((u) => typeof u === "string" && u.trim().length > 0)
+      : (mediaUrl && typeof mediaUrl === "string" && mediaUrl.trim().length > 0 ? [mediaUrl.trim()] : []);
+
+    if (targetUrls.length === 0) return;
     if (status === "sending") return;
 
     setStatus("sending");
@@ -41,7 +54,7 @@ export function TelegramSendButton({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mediaUrl,
+          ...(targetUrls.length > 1 ? { mediaUrls: targetUrls } : { mediaUrl: targetUrls[0] }),
           mediaType,
           caption: caption || undefined,
         }),
@@ -75,7 +88,7 @@ export function TelegramSendButton({
         onClick={handleSend}
         disabled={status === "sending"}
         className={`tg-send-btn tg-variant-button ${status} ${className}`}
-        title={errorMessage || title}
+        title={errorMessage || computedTitle}
         style={{
           display: "inline-flex",
           alignItems: "center",
@@ -112,7 +125,7 @@ export function TelegramSendButton({
       onClick={handleSend}
       disabled={status === "sending"}
       className={`tg-send-icon-btn ${status} ${className}`}
-      title={errorMessage ? `Hata: ${errorMessage}` : status === "success" ? "Telegram'a İletildi!" : title}
+      title={errorMessage ? `Hata: ${errorMessage}` : status === "success" ? "Telegram'a İletildi!" : computedTitle}
       style={{
         display: "inline-flex",
         alignItems: "center",

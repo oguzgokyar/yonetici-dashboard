@@ -126,15 +126,162 @@ export function resolveLocalMediaPath(mediaUrl: string): { filePath: string; mim
   return null;
 }
 
-/**
- * Medyayı Telegram Bot API üzerinden hedefe gönderir.
- */
-export async function sendMediaToTelegram(options: {
-  mediaUrl: string;
+export interface SendMediaOptions {
+  mediaUrl?: string;
+  mediaUrls?: string[];
   mediaType?: "image" | "video" | "auto";
   caption?: string;
   config?: TelegramConfig;
-}): Promise<{ ok: boolean; messageId?: number; error?: string }> {
+}
+
+export interface SendMediaResult {
+  ok: boolean;
+  messageId?: number;
+  messageIds?: number[];
+  error?: string;
+}
+
+/**
+ * Tekil medyayı (görsel veya video) Telegram Bot API üzerinden gönderir.
+ */
+async function sendSingleMedia(
+  mediaUrl: string,
+  mediaType: "image" | "video" | "auto",
+  caption: string | undefined,
+  config: TelegramConfig
+): Promise<{ ok: boolean; messageId?: number; error?: string }> {
+  const { botToken, chatId, threadId } = config;
+  const resolved = resolveLocalMediaPath(mediaUrl);
+
+  let inferredType = mediaType;
+  if (inferredType === "auto") {
+    if (resolved?.mimeType.startsWith("video/") || mediaUrl.endsWith(".mp4") || mediaUrl.includes("/videos/")) {
+      inferredType = "video";
+    } else {
+      inferredType = "image";
+    }
+  }
+
+  const method = inferredType === "video" ? "sendVideo" : "sendPhoto";
+
+  if (resolved) {
+    const fileBytes = fs.readFileSync(resolved.filePath);
+    const blob = new Blob([fileBytes], { type: resolved.mimeType });
+    const formData = new FormData();
+    formData.append("chat_id", chatId);
+    if (threadId) formData.append("message_thread_id", threadId);
+    if (caption) {
+      formData.append("caption", caption);
+      formData.append("parse_mode", "HTML");
+    }
+    formData.append(inferredType === "video" ? "video" : "photo", blob, resolved.filename);
+
+    const resp = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await resp.json();
+    if (!data.ok) {
+      return { ok: false, error: data.description || "Telegram API hatası" };
+    }
+    return { ok: true, messageId: data.result?.message_id };
+  } else {
+    const payload: Record<string, unknown> = {
+      chat_id: chatId,
+      [inferredType === "video" ? "video" : "photo"]: mediaUrl,
+    };
+    if (threadId) payload.message_thread_id = threadId;
+    if (caption) {
+      payload.caption = caption;
+      payload.parse_mode = "HTML";
+    }
+
+    const resp = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+    if (!data.ok) {
+      return { ok: false, error: data.description || "Telegram API hatası" };
+    }
+    return { ok: true, messageId: data.result?.message_id };
+  }
+}
+
+/**
+ * 2-10 arası medyayı Telegram sendMediaGroup (albüm) olarak gönderir.
+ */
+async function sendMediaGroupBatch(
+  urls: string[],
+  caption: string | undefined,
+  config: TelegramConfig
+): Promise<{ ok: boolean; messageIds?: number[]; error?: string }> {
+  const { botToken, chatId, threadId } = config;
+  const formData = new FormData();
+  formData.append("chat_id", chatId);
+  if (threadId) formData.append("message_thread_id", threadId);
+
+  const mediaArray: Array<{
+    type: "photo" | "video";
+    media: string;
+    caption?: string;
+    parse_mode?: string;
+  }> = [];
+
+  for (let i = 0; i < urls.length; i++) {
+    const itemUrl = urls[i];
+    const resolved = resolveLocalMediaPath(itemUrl);
+    const inferredType = (resolved?.mimeType.startsWith("video/") || itemUrl.endsWith(".mp4") || itemUrl.includes("/videos/"))
+      ? "video"
+      : "photo";
+
+    const entry: { type: "photo" | "video"; media: string; caption?: string; parse_mode?: string } = {
+      type: inferredType,
+      media: "",
+    };
+
+    if (resolved) {
+      const attachKey = `file_${i}`;
+      const fileBytes = fs.readFileSync(resolved.filePath);
+      const blob = new Blob([fileBytes], { type: resolved.mimeType });
+      formData.append(attachKey, blob, resolved.filename);
+      entry.media = `attach://${attachKey}`;
+    } else {
+      entry.media = itemUrl;
+    }
+
+    if (i === 0 && caption) {
+      entry.caption = caption.slice(0, 1024);
+      entry.parse_mode = "HTML";
+    }
+
+    mediaArray.push(entry);
+  }
+
+  formData.append("media", JSON.stringify(mediaArray));
+
+  const resp = await fetch(`https://api.telegram.org/bot${botToken}/sendMediaGroup`, {
+    method: "POST",
+    body: formData,
+  });
+
+  const data = await resp.json();
+  if (!data.ok) {
+    return { ok: false, error: data.description || "Telegram sendMediaGroup hatası" };
+  }
+
+  const messageIds = Array.isArray(data.result)
+    ? data.result.map((m: { message_id: number }) => m.message_id)
+    : [];
+
+  return { ok: true, messageIds };
+}
+
+/**
+ * Medyayı veya medya grubunu (albüm/karosel) Telegram Bot API üzerinden hedefe gönderir.
+ */
+export async function sendMediaToTelegram(options: SendMediaOptions): Promise<SendMediaResult> {
   const config = options.config || getTelegramConfig();
   if (!config || !config.botToken || !config.chatId) {
     return {
@@ -143,68 +290,51 @@ export async function sendMediaToTelegram(options: {
     };
   }
 
-  const { botToken, chatId, threadId } = config;
-  const resolved = resolveLocalMediaPath(options.mediaUrl);
-  const caption = options.caption ? options.caption.slice(0, 1024) : undefined;
+  const urls = Array.isArray(options.mediaUrls) && options.mediaUrls.length > 0
+    ? options.mediaUrls.filter((u) => typeof u === "string" && u.trim().length > 0)
+    : (options.mediaUrl && typeof options.mediaUrl === "string" && options.mediaUrl.trim().length > 0 ? [options.mediaUrl.trim()] : []);
 
-  let inferredType = options.mediaType || "auto";
-  if (inferredType === "auto") {
-    if (resolved?.mimeType.startsWith("video/") || options.mediaUrl.endsWith(".mp4") || options.mediaUrl.includes("/videos/")) {
-      inferredType = "video";
-    } else {
-      inferredType = "image";
-    }
+  if (urls.length === 0) {
+    return { ok: false, error: "Gönderilecek medya URL'si bulunamadı." };
   }
 
+  const caption = options.caption ? options.caption.slice(0, 1024) : undefined;
+  const inferredType = options.mediaType || "auto";
+
   try {
-    if (resolved) {
-      // Yerel dosya: multipart/form-data ile gönderim (En hızlı ve güvenilir)
-      const fileBytes = fs.readFileSync(resolved.filePath);
-      const blob = new Blob([fileBytes], { type: resolved.mimeType });
-      const formData = new FormData();
-      formData.append("chat_id", chatId);
-      if (threadId) formData.append("message_thread_id", threadId);
-      if (caption) {
-        formData.append("caption", caption);
-        formData.append("parse_mode", "HTML");
-      }
-
-      const method = inferredType === "video" ? "sendVideo" : "sendPhoto";
-      formData.append(inferredType === "video" ? "video" : "photo", blob, resolved.filename);
-
-      const resp = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await resp.json();
-      if (!data.ok) {
-        return { ok: false, error: data.description || "Telegram API hatası" };
-      }
-      return { ok: true, messageId: data.result?.message_id };
-    } else {
-      // Uzak URL: JSON veya direct form-data ile iletim
-      const method = inferredType === "video" ? "sendVideo" : "sendPhoto";
-      const payload: Record<string, unknown> = {
-        chat_id: chatId,
-        [inferredType === "video" ? "video" : "photo"]: options.mediaUrl,
+    if (urls.length === 1) {
+      const res = await sendSingleMedia(urls[0], inferredType, caption, config);
+      return {
+        ok: res.ok,
+        messageId: res.messageId,
+        messageIds: res.messageId ? [res.messageId] : undefined,
+        error: res.error,
       };
-      if (threadId) payload.message_thread_id = threadId;
-      if (caption) {
-        payload.caption = caption;
-        payload.parse_mode = "HTML";
-      }
-
-      const resp = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await resp.json();
-      if (!data.ok) {
-        return { ok: false, error: data.description || "Telegram API hatası" };
-      }
-      return { ok: true, messageId: data.result?.message_id };
     }
+
+    // Çoklu gönderim: Telegram sendMediaGroup kuralı (2-10 arası eleman)
+    // 10'dan fazla eleman varsa 10'arlı gruplara bölerek sırayla gönderilir.
+    const allMessageIds: number[] = [];
+    for (let i = 0; i < urls.length; i += 10) {
+      const chunk = urls.slice(i, i + 10);
+      const chunkCaption = i === 0 ? caption : undefined;
+
+      if (chunk.length === 1) {
+        const res = await sendSingleMedia(chunk[0], inferredType, chunkCaption, config);
+        if (!res.ok) return { ok: false, error: res.error };
+        if (res.messageId) allMessageIds.push(res.messageId);
+      } else {
+        const res = await sendMediaGroupBatch(chunk, chunkCaption, config);
+        if (!res.ok) return { ok: false, error: res.error };
+        if (res.messageIds) allMessageIds.push(...res.messageIds);
+      }
+    }
+
+    return {
+      ok: true,
+      messageId: allMessageIds[0],
+      messageIds: allMessageIds,
+    };
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     return { ok: false, error: errorMsg };
