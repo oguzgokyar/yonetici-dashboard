@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { getDatabase } from "@/lib/server/database";
 
-export const DEFAULT_CANVA_RECONNECT_URL = "https://portal.nousresearch.com/connect/EpqFrkrwTMAC";
+export const DEFAULT_CANVA_RECONNECT_URL = "https://www.canva.com/settings/your-account";
 const MCP_TOKEN_PATH = "/opt/data/mcp-tokens/canva.json";
 const HERMES_CONFIG_PATH = "/opt/data/config.yaml";
 
