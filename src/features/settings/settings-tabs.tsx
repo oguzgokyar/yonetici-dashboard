@@ -7,6 +7,7 @@ import { CanvaAccountSettings } from "@/features/settings/canva-account-settings
 import { GoogleVidsAccountSettings } from "@/features/settings/google-vids-account-settings";
 import { MusicProviderSettings } from "@/features/settings/music-provider-settings";
 import { SystemUpdates } from "@/features/settings/system-updates";
+import { AccessSecuritySettings } from "@/features/settings/access-security-settings";
 
 import { ServerMonitor } from "@/features/settings/server-monitor";
 
@@ -184,7 +185,10 @@ export function SettingsTabs() {
         ) : activeTab === "server" ? (
           <ServerMonitor />
         ) : (
-          <SystemUpdates />
+          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            <SystemUpdates />
+            <AccessSecuritySettings />
+          </div>
         )}
       </div>
     </div>

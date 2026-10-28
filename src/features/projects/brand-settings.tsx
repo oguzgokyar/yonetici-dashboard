@@ -17,6 +17,8 @@ import {
   X,
   CheckCircle2,
   SlidersHorizontal,
+  Building2,
+  Link2,
 } from "lucide-react";
 import { BrandConcept, normalizeBrandConcept } from "@/lib/brand-concept";
 import { BrandProfile, useProjects } from "./projects-context";
@@ -35,6 +37,12 @@ export function BrandSettings({ projectId }: { projectId: string }) {
   const [wizardLoading, setWizardLoading] = useState(false);
   const [wizardAlternatives, setWizardAlternatives] = useState<BrandConcept[]>([]);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  // Logo Studio States
+  const [logoContrast, setLogoContrast] = useState<"light" | "dark" | "checker">("light");
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [urlInputValue, setUrlInputValue] = useState("");
+  const [fetchingLogo, setFetchingLogo] = useState(false);
 
   const [form, setForm] = useState<BrandProfile>({
     brandName: "",
@@ -91,8 +99,38 @@ export function BrandSettings({ projectId }: { projectId: string }) {
     reader.readAsDataURL(file);
   }
 
+  async function handleFetchLogoFromWebsite() {
+    if (!form.website?.trim()) {
+      alert("Lütfen önce web sitesi adresini girin.");
+      return;
+    }
+    setFetchingLogo(true);
+    try {
+      const res = await fetch("/api/brand/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ website: form.website.trim() }),
+      });
+      const data = await res.json();
+      if (data.ok && data.brand?.logo) {
+        field("logo", data.brand.logo);
+        alert("✓ Logo web sitesinden başarıyla çekildi!");
+      } else {
+        alert(data.message || "Siteden logo tespit edilemedi. Lütfen manuel dosya yükleyin veya URL girin.");
+      }
+    } catch (e: any) {
+      alert("Logo çekilirken hata oluştu: " + e.message);
+    } finally {
+      setFetchingLogo(false);
+    }
+  }
+
   function saveBrand() {
-    updateProject(projectId, { brand: form });
+    const cleanName = form.brandName.trim() || project?.name || "Proje";
+    updateProject(projectId, {
+      name: cleanName,
+      brand: form,
+    });
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2000);
   }
@@ -390,37 +428,316 @@ export function BrandSettings({ projectId }: { projectId: string }) {
             </div>
           </div>
 
-          <div className="form-grid">
-            <label className="field-label full">
-              Marka logosu
-              <div className="logo-upload">
-                {form.logo ? (
-                  <>
-                    <Image src={form.logo} alt="Marka logosu" width={180} height={68} unoptimized />
+          {/* TEMEL PROJE VE MARKA KİMLİĞİ KARTI */}
+          <div
+            style={{
+              padding: "20px",
+              background: "#ffffff",
+              border: "1px solid #e2e8f0",
+              borderRadius: "14px",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+              marginBottom: "20px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "18px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "rgba(99, 102, 241, 0.1)", display: "flex", alignItems: "center", justifyContent: "center", color: "#6366f1" }}>
+                  <Building2 size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "700", color: "#0f172a" }}>
+                    Temel Proje Kimliği & Logo Yönetimi
+                  </h3>
+                  <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "#64748b" }}>
+                    Proje adı, resmi logo ve web sitesi adresini senkronize yönetin
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ fontSize: "11px", color: "#64748b", background: "#f1f5f9", padding: "4px 10px", borderRadius: "6px" }}>
+                Proje ID: <strong style={{ color: "#334155" }}>{projectId}</strong>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 320px) 1fr", gap: "24px", alignItems: "start" }}>
+              {/* LOGO STUDIO COLUMN */}
+              <div>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "8px" }}>
+                  Resmi Marka Logosu
+                </label>
+
+                {/* LOGO PREVIEW BOX */}
+                <div
+                  style={{
+                    width: "100%",
+                    height: "150px",
+                    borderRadius: "12px",
+                    border: "2px dashed #cbd5e1",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    position: "relative",
+                    overflow: "hidden",
+                    padding: "16px",
+                    boxSizing: "border-box",
+                    background:
+                      logoContrast === "dark"
+                        ? "#0f172a"
+                        : logoContrast === "checker"
+                        ? "repeating-conic-gradient(#e2e8f0 0% 25%, #ffffff 0% 50%) 50% / 16px 16px"
+                        : "#f8fafc",
+                    transition: "background 0.2s ease",
+                  }}
+                >
+                  {form.logo ? (
+                    <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Image
+                        src={form.logo}
+                        alt="Marka logosu"
+                        width={240}
+                        height={110}
+                        unoptimized
+                        style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+                      />
+                      <button
+                        type="button"
+                        className="icon-button"
+                        onClick={() => field("logo", "")}
+                        aria-label="Logoyu kaldır"
+                        title="Logoyu kaldır"
+                        style={{
+                          position: "absolute",
+                          top: "8px",
+                          right: "8px",
+                          background: "rgba(255, 255, 255, 0.9)",
+                          boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                          width: "26px",
+                          height: "26px",
+                        }}
+                      >
+                        <X size={15} color="#ef4444" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: "center", color: "#94a3b8" }}>
+                      <ImagePlus size={32} style={{ margin: "0 auto 6px auto", opacity: 0.7 }} />
+                      <div style={{ fontSize: "12px", fontWeight: "600" }}>Logo Tanımlanmadı</div>
+                      <div style={{ fontSize: "10.5px" }}>PNG, SVG, JPG veya WebP</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* CONTRAST CONTROLS */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "8px" }}>
+                  <span style={{ fontSize: "11px", color: "#64748b", fontWeight: "600" }}>Zemin Kontrastı:</span>
+                  <div style={{ display: "flex", gap: "4px" }}>
                     <button
                       type="button"
-                      className="icon-button"
-                      onClick={() => field("logo", "")}
-                      aria-label="Logoyu kaldır"
+                      onClick={() => setLogoContrast("light")}
+                      style={{
+                        padding: "3px 8px",
+                        fontSize: "11px",
+                        borderRadius: "5px",
+                        border: logoContrast === "light" ? "1px solid #6366f1" : "1px solid #e2e8f0",
+                        background: "#ffffff",
+                        color: logoContrast === "light" ? "#4338ca" : "#64748b",
+                        fontWeight: logoContrast === "light" ? "700" : "500",
+                        cursor: "pointer",
+                      }}
                     >
-                      <X size={16} />
+                      ⚪ Açık
                     </button>
-                  </>
-                ) : (
-                  <>
-                    <ImagePlus size={22} />
-                    <span>PNG, JPG veya SVG yükleyin</span>
-                  </>
-                )}
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                  onChange={(e) => uploadLogo(e.target.files?.[0])}
-                />
+                    <button
+                      type="button"
+                      onClick={() => setLogoContrast("dark")}
+                      style={{
+                        padding: "3px 8px",
+                        fontSize: "11px",
+                        borderRadius: "5px",
+                        border: logoContrast === "dark" ? "1px solid #6366f1" : "1px solid #e2e8f0",
+                        background: "#1e293b",
+                        color: "#ffffff",
+                        fontWeight: logoContrast === "dark" ? "700" : "500",
+                        cursor: "pointer",
+                      }}
+                    >
+                      ⚫ Koyu
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLogoContrast("checker")}
+                      style={{
+                        padding: "3px 8px",
+                        fontSize: "11px",
+                        borderRadius: "5px",
+                        border: logoContrast === "checker" ? "1px solid #6366f1" : "1px solid #e2e8f0",
+                        background: "#f1f5f9",
+                        color: logoContrast === "checker" ? "#4338ca" : "#64748b",
+                        fontWeight: logoContrast === "checker" ? "700" : "500",
+                        cursor: "pointer",
+                      }}
+                    >
+                      🏁 Grid
+                    </button>
+                  </div>
+                </div>
+
+                {/* LOGO ACTION BUTTONS (3 KANAL) */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "12px" }}>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <label
+                      className="button secondary text-xs"
+                      style={{ flex: 1, height: "32px", padding: "0 10px", justifyContent: "center", cursor: "pointer", fontWeight: "600" }}
+                    >
+                      <Upload size={13} />
+                      <span>Dosya Yükle</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                        style={{ display: "none" }}
+                        onChange={(e) => uploadLogo(e.target.files?.[0])}
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowUrlInput(!showUrlInput)}
+                      className={`button ${showUrlInput ? "primary" : "secondary"} text-xs`}
+                      style={{ flex: 1, height: "32px", padding: "0 10px", justifyContent: "center", fontWeight: "600" }}
+                      title="Görsel bağlantı linki yapıştır"
+                    >
+                      <Globe2 size={13} />
+                      <span>URL Gir</span>
+                    </button>
+                  </div>
+
+                  {form.website && (
+                    <button
+                      type="button"
+                      onClick={handleFetchLogoFromWebsite}
+                      disabled={fetchingLogo}
+                      className="button ghost text-xs"
+                      style={{ height: "30px", border: "1px dashed #cbd5e1", color: "#4f46e5", justifyContent: "center", fontWeight: "600" }}
+                    >
+                      {fetchingLogo ? <LoaderCircle className="spin" size={13} /> : <Wand2 size={13} />}
+                      <span>{fetchingLogo ? "Siteden Taranıyor..." : "Web Sitesinden Otomatik Çek"}</span>
+                    </button>
+                  )}
+
+                  {showUrlInput && (
+                    <div style={{ display: "flex", gap: "4px", marginTop: "4px" }}>
+                      <input
+                        type="url"
+                        placeholder="https://.../logo.png"
+                        value={urlInputValue}
+                        onChange={(e) => setUrlInputValue(e.target.value)}
+                        style={{
+                          flex: 1,
+                          fontSize: "12px",
+                          padding: "6px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid #cbd5e1",
+                          outline: "none",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (urlInputValue.trim()) {
+                            field("logo", urlInputValue.trim());
+                            setShowUrlInput(false);
+                            setUrlInputValue("");
+                          }
+                        }}
+                        className="button primary text-xs"
+                        style={{ height: "30px", padding: "0 10px" }}
+                      >
+                        Uygula
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </label>
-            <TextField label="Marka adı" value={form.brandName} onChange={(v) => field("brandName", v)} />
-            <TextField label="Web sitesi" value={form.website} onChange={(v) => field("website", v)} />
+
+              {/* NAME & GENERAL INFO COLUMN */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                    Proje & Marka Adı *
+                  </label>
+                  <input
+                    type="text"
+                    value={form.brandName}
+                    onChange={(e) => field("brandName", e.target.value)}
+                    placeholder="Örn: Betonax"
+                    style={{
+                      width: "100%",
+                      fontSize: "14px",
+                      fontWeight: "600",
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      border: "1px solid #cbd5e1",
+                      outline: "none",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                  <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px" }}>
+                    💡 Bu isim kaydedildiğinde sol menüdeki proje listesi, üst bardaki başlık ve içerik stüdyosuyla otomatik senkronize olur.
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                    Resmi Web Sitesi
+                  </label>
+                  <input
+                    type="url"
+                    value={form.website}
+                    onChange={(e) => field("website", e.target.value)}
+                    placeholder="https://www.ornek.com"
+                    style={{
+                      width: "100%",
+                      fontSize: "13px",
+                      padding: "9px 14px",
+                      borderRadius: "8px",
+                      border: "1px solid #cbd5e1",
+                      outline: "none",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                  <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px" }}>
+                    Logo çekme ve AI pazar analizi için baz alınır.
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: "8px", borderTop: "1px solid #f1f5f9" }}>
+                  <div style={{ fontSize: "12px", color: "#64748b" }}>
+                    {saved ? (
+                      <span style={{ color: "#16a34a", fontWeight: "700", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                        <Check size={14} /> Değişiklikler kaydedildi
+                      </span>
+                    ) : (
+                      "Değişiklikleri uygulamak için kaydedin"
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={saveBrand}
+                    className="button primary text-xs"
+                    style={{ height: "36px", padding: "0 16px", fontWeight: "700" }}
+                  >
+                    <Save size={14} />
+                    <span>Kimlik Bilgilerini Kaydet</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="form-grid">
             <TextField label="Telefon" value={form.phone} onChange={(v) => field("phone", v)} />
             <TextField label="E-posta" value={form.email} onChange={(v) => field("email", v)} />
             <TextField label="Adres" value={form.address} onChange={(v) => field("address", v)} full />

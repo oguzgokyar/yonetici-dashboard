@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import {
   Bell, ChevronDown, Clapperboard, Compass, Film, FolderKanban, Image, LayoutDashboard, PanelsTopLeft,
   Menu, Palette, PanelLeftClose, PanelLeftOpen, Pin, Plus, Search, Send, Settings, Share2, Sparkles, X,
-  Layers, Bot, PhoneCall, Video,
+  Layers, Bot, PhoneCall, Video, LogOut,
 } from "lucide-react";
  import { useProjects } from "@/features/projects/projects-context";
  import { ProductionQueueDrawer } from "./production-queue-drawer";
@@ -43,6 +43,14 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
   const [ideasDrawerOpen, setIdeasDrawerOpen] = useState(false);
   const [totalIdeasCount, setTotalIdeasCount] = useState(0);
   const [assistantOpen, setAssistantOpen] = useState(false);
+
+  async function handleLogout() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {}
+    router.push("/login");
+    router.refresh();
+  }
 
   useEffect(() => {
     function handleQueueUpdate(e: Event) {
@@ -136,9 +144,23 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
 
       <div className="sidebar-footer">
         <Link href="/settings" className={`nav-item ${pathname === "/settings" ? "active" : ""}`} title="Sistem Ayarları"><Settings size={19} /><span>Sistem Ayarları</span></Link>
-        <div className="profile-chip">
-          <div className="avatar">OG</div>
-          {!collapsed && <div><strong>Oğuz G.</strong><span>Yönetici</span></div>}
+        <div className="profile-chip" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div className="avatar">OG</div>
+            {!collapsed && <div><strong>Oğuz G.</strong><span>Yönetici</span></div>}
+          </div>
+          {!collapsed && (
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="icon-button"
+              title="Çıkış Yap"
+              style={{ color: "#94a3b8", width: "28px", height: "28px" }}
+              aria-label="Çıkış Yap"
+            >
+              <LogOut size={16} />
+            </button>
+          )}
         </div>
       </div>
     </>
