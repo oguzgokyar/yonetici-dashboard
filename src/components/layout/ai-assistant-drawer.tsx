@@ -55,6 +55,161 @@ type AiAssistantDrawerProps = {
   onClose: () => void;
 };
 
+function cleanInlineText(text: string): string {
+  if (!text) return "";
+  let t = text.trim();
+  t = t.replace(/\*+["'](.*?)["']\*+/g, '"$1"');
+  t = t.replace(/^\*+["']?|["']?\*+$/g, (m) => m.replace(/\*/g, ""));
+  t = t.replace(/\*\*+/g, "");
+  t = t.replace(/^\*+\s*/, "").replace(/\s*\*+$/, "");
+  return t.trim();
+}
+
+function AssistantMessageFlow({ content }: { content: string }) {
+  const lines = content.split("\n");
+  const blocks: Array<{
+    type: "heading" | "subheading" | "kv" | "list-kv" | "timeline" | "list-item" | "p" | "space";
+    label?: string;
+    time?: string;
+    text?: string;
+  }> = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i];
+    const trimmed = rawLine.trim();
+
+    if (!trimmed) {
+      if (blocks.length > 0 && blocks[blocks.length - 1].type !== "space") {
+        blocks.push({ type: "space" });
+      }
+      continue;
+    }
+
+    const headingMatch = trimmed.match(/^#{1,6}\s+(.*)$/);
+    if (headingMatch) {
+      blocks.push({ type: "heading", text: cleanInlineText(headingMatch[1]) });
+      continue;
+    }
+
+    const isIndented = /^\s{2,}|\t/.test(rawLine);
+    const hasBullet = /^\s*[\*\-\•]\s+/.test(rawLine);
+    const noBulletLine = trimmed.replace(/^[\*\-\•]\s+/, "").trim();
+
+    const colonIdx = noBulletLine.indexOf(":");
+    if (colonIdx > 0 && colonIdx < 55) {
+      const rawKey = noBulletLine.substring(0, colonIdx);
+      const rawVal = noBulletLine.substring(colonIdx + 1);
+
+      const cleanKey = rawKey.replace(/^[\*\s\-\•_]+|[\*\s\-\•_]+$/g, "").trim();
+      const cleanVal = cleanInlineText(rawVal);
+
+      if (/^\d+[\–\-]\d+\s*sn/i.test(cleanKey)) {
+        blocks.push({
+          type: "timeline",
+          time: cleanKey,
+          text: cleanVal,
+        });
+        continue;
+      }
+
+      if (!cleanVal) {
+        blocks.push({
+          type: "subheading",
+          text: cleanKey,
+        });
+        continue;
+      }
+
+      if (isIndented) {
+        blocks.push({
+          type: "list-kv",
+          label: cleanKey,
+          text: cleanVal,
+        });
+        continue;
+      }
+
+      blocks.push({
+        type: "kv",
+        label: cleanKey,
+        text: cleanVal,
+      });
+      continue;
+    }
+
+    if (trimmed.startsWith("**") && trimmed.endsWith("**") && trimmed.length > 4) {
+      blocks.push({
+        type: "subheading",
+        text: cleanInlineText(trimmed),
+      });
+      continue;
+    }
+
+    if (hasBullet || isIndented) {
+      blocks.push({
+        type: "list-item",
+        text: cleanInlineText(noBulletLine),
+      });
+    } else {
+      blocks.push({
+        type: "p",
+        text: cleanInlineText(trimmed),
+      });
+    }
+  }
+
+  return (
+    <div className="ai-assistant-bubble-flow">
+      {blocks.map((block, idx) => {
+        if (block.type === "heading") {
+          return <div key={idx} className="ai-bubble-heading">{block.text}</div>;
+        }
+        if (block.type === "subheading") {
+          return <div key={idx} className="ai-bubble-subheading">{block.text}:</div>;
+        }
+        if (block.type === "kv") {
+          return (
+            <div key={idx} className="ai-bubble-kv">
+              <span className="ai-bubble-kv-label">{block.label}:</span>
+              <span>{block.text}</span>
+            </div>
+          );
+        }
+        if (block.type === "list-kv") {
+          return (
+            <div key={idx} className="ai-bubble-list-item">
+              <span className="ai-bubble-bullet">•</span>
+              <span className="ai-bubble-kv-label">{block.label}:</span>
+              <span>{block.text}</span>
+            </div>
+          );
+        }
+        if (block.type === "timeline") {
+          return (
+            <div key={idx} className="ai-bubble-list-item">
+              <span className="ai-bubble-bullet">•</span>
+              <span className="ai-bubble-time-chip">{block.time}:</span>
+              <span>{block.text}</span>
+            </div>
+          );
+        }
+        if (block.type === "list-item") {
+          return (
+            <div key={idx} className="ai-bubble-list-item">
+              <span className="ai-bubble-bullet">•</span>
+              <span>{block.text}</span>
+            </div>
+          );
+        }
+        if (block.type === "space") {
+          return <div key={idx} className="ai-bubble-space" />;
+        }
+        return <div key={idx} className="ai-bubble-p">{block.text}</div>;
+      })}
+    </div>
+  );
+}
+
 export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDrawerProps) {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -339,9 +494,13 @@ export function AiAssistantDrawer({ projectId, isOpen, onClose }: AiAssistantDra
                   {m.specialistBadge}
                 </div>
               )}
-              <div className="ai-assistant-bubble-text" style={{ whiteSpace: "pre-wrap" }}>
-                {m.content}
-              </div>
+              {m.role === "assistant" ? (
+                <AssistantMessageFlow content={m.content} />
+              ) : (
+                <div className="ai-assistant-bubble-text" style={{ whiteSpace: "pre-wrap" }}>
+                  {m.content}
+                </div>
+              )}
               <small className="ai-assistant-time">
                 {new Date(m.createdAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
               </small>
