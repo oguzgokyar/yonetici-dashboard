@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Bot, Settings2, Server, Palette, Music2, Video } from "lucide-react";
+import { Bot, Settings2, Server, Palette, Music2, Video, Activity, Zap } from "lucide-react";
 import { AiProviders } from "@/features/settings/ai-providers";
 import { CanvaAccountSettings } from "@/features/settings/canva-account-settings";
 import { GoogleVidsAccountSettings } from "@/features/settings/google-vids-account-settings";
@@ -10,13 +10,16 @@ import { SystemUpdates } from "@/features/settings/system-updates";
 import { AccessSecuritySettings } from "@/features/settings/access-security-settings";
 
 import { ServerMonitor } from "@/features/settings/server-monitor";
+import { ServerImprovements } from "@/features/settings/server-improvements";
 
 type SettingsTab = "api" | "system" | "server";
 type ApiSubTab = "ai_postiz" | "canva" | "google_vids" | "music";
+type ServerSubTab = "monitor" | "improvements";
 
 export function SettingsTabs() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("api");
   const [apiSubTab, setApiSubTab] = useState<ApiSubTab>("ai_postiz");
+  const [serverSubTab, setServerSubTab] = useState<ServerSubTab>("monitor");
 
   return (
     <div className="system-settings">
@@ -183,7 +186,71 @@ export function SettingsTabs() {
             {apiSubTab === "music" && <MusicProviderSettings />}
           </div>
         ) : activeTab === "server" ? (
-          <ServerMonitor />
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            {/* Sunucu Alt Sekmeler */}
+            <div
+              style={{
+                display: "flex",
+                gap: "8px",
+                borderBottom: "1px solid #e2e8f0",
+                paddingBottom: "12px",
+                overflowX: "auto",
+              }}
+              role="tablist"
+              aria-label="Sunucu Alt Bölümleri"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={serverSubTab === "monitor"}
+                onClick={() => setServerSubTab("monitor")}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "7px",
+                  padding: "7px 14px",
+                  borderRadius: "8px",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                  border: serverSubTab === "monitor" ? "1px solid #6366f1" : "1px solid #e2e8f0",
+                  background: serverSubTab === "monitor" ? "#eef2ff" : "white",
+                  color: serverSubTab === "monitor" ? "#4338ca" : "#64748b",
+                }}
+              >
+                <Activity size={15} />
+                Canlı İzleme &amp; Kuyruk
+              </button>
+
+              <button
+                type="button"
+                role="tab"
+                aria-selected={serverSubTab === "improvements"}
+                onClick={() => setServerSubTab("improvements")}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "7px",
+                  padding: "7px 14px",
+                  borderRadius: "8px",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                  border: serverSubTab === "improvements" ? "1px solid #059669" : "1px solid #e2e8f0",
+                  background: serverSubTab === "improvements" ? "#ecfdf5" : "white",
+                  color: serverSubTab === "improvements" ? "#047857" : "#64748b",
+                }}
+              >
+                <Zap size={15} />
+                Geliştirmeler
+              </button>
+            </div>
+
+            {/* Alt Sekme İçeriği */}
+            {serverSubTab === "monitor" ? <ServerMonitor /> : <ServerImprovements />}
+          </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             <SystemUpdates />
