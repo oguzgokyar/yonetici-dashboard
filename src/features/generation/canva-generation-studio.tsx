@@ -1070,6 +1070,7 @@ export function CanvaGenerationStudio({
           <textarea
             id="canva-prompt"
             className="prompt-area"
+            style={{ minHeight: "250px", resize: "vertical" }}
             value={prompt}
             onChange={(e) => {
               setPrompt(e.target.value);

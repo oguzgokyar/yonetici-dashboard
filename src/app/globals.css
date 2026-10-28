@@ -2720,6 +2720,11 @@ button { cursor:pointer; }
   color: #1e293b !important;
 }
 
+#canva-prompt {
+  min-height: 250px !important;
+  resize: vertical !important;
+}
+
 .prompt-clear-btn {
   border: 0;
   background: transparent;
