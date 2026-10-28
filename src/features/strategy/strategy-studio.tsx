@@ -133,6 +133,7 @@ type CockpitTabId = "brand_input" | "brand_identity" | "competitor_analysis" | "
 export function StrategyStudio({ projectId }: { projectId: string }) {
   const router = useRouter();
   const [generating, setGenerating] = useState(false);
+  const [generationPhase, setGenerationPhase] = useState<number>(1);
   const [savingBrand, setSavingBrand] = useState(false);
   const [data, setData] = useState<StrategyResponse | null>(null);
 
@@ -201,13 +202,20 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
         setBrandDescription(json.strategy.brandDescription || "");
         setSocialChannels(json.strategy.socialChannels || ["Instagram", "TikTok", "YouTube"]);
         setCompetitorsText((json.strategy.competitors || []).join(", "));
+        if (json.strategy.generationStatus === "generating") {
+          setGenerating(true);
+        } else if (json.strategy.generationStatus === "completed" || json.strategy.generationStatus === "failed") {
+          setGenerating(false);
+        }
       } else if (json.initialData) {
         setBrandName(json.initialData.brandName || "");
         setBrandDescription(json.initialData.brandDescription || "");
         setSocialChannels(json.initialData.socialChannels || ["Instagram", "TikTok", "YouTube"]);
       }
+      return json;
     } catch (e) {
       console.error("Load strategy error:", e);
+      return null;
     }
   }
 
@@ -223,6 +231,9 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
           setBrandDescription(json.strategy.brandDescription || "");
           setSocialChannels(json.strategy.socialChannels || ["Instagram", "TikTok", "YouTube"]);
           setCompetitorsText((json.strategy.competitors || []).join(", "));
+          if (json.strategy.generationStatus === "generating") {
+            setGenerating(true);
+          }
         } else if (json.initialData) {
           setBrandName(json.initialData.brandName || "");
           setBrandDescription(json.initialData.brandDescription || "");
@@ -262,6 +273,29 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
     };
   }, [projectId]);
 
+  // Polling loop when generation is in-flight (survives page refresh)
+  useEffect(() => {
+    if (!generating) return;
+    const interval = setInterval(async () => {
+      const json = await loadStrategy();
+      if (json?.strategy?.generationStatus === "completed") {
+        setGenerating(false);
+        setActiveTab("brand_identity");
+      } else if (json?.strategy?.generationStatus === "failed") {
+        setGenerating(false);
+      }
+    }, 3500);
+
+    const phaseTimer = setInterval(() => {
+      setGenerationPhase((p) => (p % 3) + 1);
+    }, 7000);
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(phaseTimer);
+    };
+  }, [generating, projectId]);
+
   async function handleGenerateFullStrategy(e?: React.FormEvent) {
     if (e) e.preventDefault();
     if (generating) return;
@@ -271,6 +305,7 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
     }
 
     setGenerating(true);
+    setGenerationPhase(1);
     try {
       const competitors = competitorsText
         .split(",")
@@ -292,15 +327,16 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
       if (json.success) {
         await loadStrategy();
         setActiveTab("brand_identity");
+      } else if (res.status === 409) {
+        // Zaten üretim devam ediyor, arka plan polling'e devam etsin
+        await loadStrategy();
       } else {
         alert("Hata: " + (json.error || "Strateji üretilemedi."));
         await loadStrategy();
       }
     } catch (e: unknown) {
-      alert("Hata: " + (e instanceof Error ? e.message : String(e)));
+      console.warn("Strateji isteği askıda kaldı veya koptu, arka plan kontrolü devrede:", e);
       await loadStrategy();
-    } finally {
-      setGenerating(false);
     }
   }
 
@@ -737,6 +773,10 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
   }
 
   const overview = data?.strategy;
+  const hasCompletedStrategy = Boolean(
+    overview?.brandIdentity?.valueProposition ||
+    (data?.hasStrategy && overview?.generationStatus === "completed")
+  );
   const columns = data?.columns;
 
   // Total count of active suggested ideas across all 4 columns
@@ -948,12 +988,80 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
                     ) : (
                       <>
                         <Sparkles size={13} />
-                        <span>{overview ? "Stratejiyi Yeniden Üret" : "Stratejiyi Başlat"}</span>
+                        <span>{hasCompletedStrategy ? "Stratejiyi Yeniden Üret" : "Stratejiyi Başlat"}</span>
                       </>
                     )}
                   </button>
                 </div>
               </div>
+
+              {generating && (
+                <div style={{
+                  margin: "0 0 16px 0",
+                  padding: "16px 18px",
+                  background: "linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(168, 85, 247, 0.08) 100%)",
+                  border: "1px solid rgba(99, 102, 241, 0.25)",
+                  borderRadius: "12px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <RefreshCw className="spin" size={17} style={{ color: "#6366f1" }} />
+                      <span style={{ fontWeight: "700", fontSize: "14px", color: "#1e1b4b" }}>
+                        Hermes Agent Strateji & Pazar Araştırması Yürütüyor...
+                      </span>
+                    </div>
+                    <span style={{ fontSize: "12px", color: "#6366f1", fontWeight: "700", background: "rgba(99, 102, 241, 0.12)", padding: "2px 8px", borderRadius: "6px" }}>
+                      Aşama {generationPhase} / 3
+                    </span>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                    <div style={{
+                      padding: "8px 10px",
+                      borderRadius: "8px",
+                      background: generationPhase >= 1 ? "rgba(99, 102, 241, 0.14)" : "rgba(0,0,0,0.03)",
+                      border: generationPhase === 1 ? "1px solid #6366f1" : "1px solid transparent",
+                      fontSize: "11px",
+                      color: generationPhase >= 1 ? "#312e81" : "#94a3b8",
+                      fontWeight: generationPhase === 1 ? "700" : "500"
+                    }}>
+                      1. Pazar & Rakip Taraması
+                    </div>
+                    <div style={{
+                      padding: "8px 10px",
+                      borderRadius: "8px",
+                      background: generationPhase >= 2 ? "rgba(99, 102, 241, 0.14)" : "rgba(0,0,0,0.03)",
+                      border: generationPhase === 2 ? "1px solid #6366f1" : "1px solid transparent",
+                      fontSize: "11px",
+                      color: generationPhase >= 2 ? "#312e81" : "#94a3b8",
+                      fontWeight: generationPhase === 2 ? "700" : "500"
+                    }}>
+                      2. Değer Vaadi & Kitle (VOC)
+                    </div>
+                    <div style={{
+                      padding: "8px 10px",
+                      borderRadius: "8px",
+                      background: generationPhase >= 3 ? "rgba(99, 102, 241, 0.14)" : "rgba(0,0,0,0.03)",
+                      border: generationPhase === 3 ? "1px solid #6366f1" : "1px solid transparent",
+                      fontSize: "11px",
+                      color: generationPhase >= 3 ? "#312e81" : "#94a3b8",
+                      fontWeight: generationPhase === 3 ? "700" : "500"
+                    }}>
+                      3. 4 Formatta 12 Viral Fikir
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <Sparkles size={13} style={{ color: "#6366f1", flexShrink: 0 }} />
+                    <span>
+                      İşlem arka planda kesintisiz çalışmaktadır. Sayfayı yenileseniz dahi devam eder ve tamamlandığında paneller otomatik güncellenir.
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <form onSubmit={handleGenerateFullStrategy}>
                 <div className="strategy-form-grid">

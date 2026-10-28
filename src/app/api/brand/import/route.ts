@@ -22,13 +22,76 @@ function cleanHtml(html: string) {
   return html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<svg[\s\S]*?<\/svg>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/\s+/g, " ").trim().slice(0, 24000);
 }
 
+function extractLogo(html: string, base: URL): string {
+  // 1. Elementor / CMS site-logo container or wrapper containing <img src="...">
+  const containerMatch = html.match(/(?:class|id)=["'][^"']*(?:theme-site-logo|site-logo|custom-logo-link|navbar-brand|header-logo)[^"']*["'][^>]*>[\s\S]{0,600}?<img[^>]+src=["']([^"']+)["']/i);
+  if (containerMatch?.[1]) {
+    try { return new URL(containerMatch[1], base).toString(); } catch {}
+  }
+
+  // 2. Schema.org JSON-LD scripts (<script type="application/ld+json">)
+  const jsonLdMatches = html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+  for (const m of jsonLdMatches) {
+    try {
+      const data = JSON.parse(m[1]);
+      const findLogoInObj = (obj: any): string | null => {
+        if (!obj || typeof obj !== "object") return null;
+        if (obj.logo) {
+          if (typeof obj.logo === "string") return obj.logo;
+          if (typeof obj.logo?.url === "string") return obj.logo.url;
+          if (typeof obj.logo?.contentUrl === "string") return obj.logo.contentUrl;
+        }
+        if (Array.isArray(obj["@graph"])) {
+          for (const item of obj["@graph"]) {
+            const res = findLogoInObj(item);
+            if (res) return res;
+          }
+        }
+        return null;
+      };
+      const found = findLogoInObj(data);
+      if (found) {
+        try { return new URL(found, base).toString(); } catch {}
+      }
+    } catch {}
+  }
+
+  // 3. Direct <img ...> with class or id containing logo
+  const directImgMatch = html.match(/<img[^>]+(?:class|id)=["'][^"']*logo[^"']*["'][^>]+src=["']([^"']+)["']/i) ||
+    html.match(/<img[^>]+src=["']([^"']+)["'][^>]+(?:class|id)=["'][^"']*logo[^"']*["']/i);
+  if (directImgMatch?.[1]) {
+    try { return new URL(directImgMatch[1], base).toString(); } catch {}
+  }
+
+  // 4. <img ...> with alt attribute mentioning logo
+  const altImgMatch = html.match(/<img[^>]+alt=["'][^"']*logo[^"']*["'][^>]+src=["']([^"']+)["']/i) ||
+    html.match(/<img[^>]+src=["']([^"']+)["'][^>]+alt=["'][^"']*logo[^"']*["']/i);
+  if (altImgMatch?.[1]) {
+    try { return new URL(altImgMatch[1], base).toString(); } catch {}
+  }
+
+  // 5. OpenGraph Image (<meta property="og:image" content="...">)
+  const ogMatch = html.match(/<meta[^>]+(?:property|name)=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']og:image["']/i);
+  if (ogMatch?.[1]) {
+    try { return new URL(ogMatch[1], base).toString(); } catch {}
+  }
+
+  // 6. Apple touch icon (<link rel="apple-touch-icon" href="...">)
+  const touchIconMatch = html.match(/<link[^>]+rel=["']apple-touch-icon(?:-precomposed)?["'][^>]+href=["']([^"']+)["']/i) ||
+    html.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["']apple-touch-icon(?:-precomposed)?["']/i);
+  if (touchIconMatch?.[1]) {
+    try { return new URL(touchIconMatch[1], base).toString(); } catch {}
+  }
+
+  return "";
+}
+
 function metadata(html: string, base: URL) {
   const pick = (pattern: RegExp) => html.match(pattern)?.[1]?.trim() || "";
   const title = pick(/<title[^>]*>([\s\S]*?)<\/title>/i);
   const description = pick(/<meta[^>]+(?:name|property)=["'](?:description|og:description)["'][^>]+content=["']([^"']+)["']/i) || pick(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:name|property)=["'](?:description|og:description)["']/i);
-  const logoCandidate = pick(/<img[^>]+(?:class|id)=["'][^"']*logo[^"']*["'][^>]+src=["']([^"']+)["']/i) || pick(/<img[^>]+src=["']([^"']+)["'][^>]+(?:class|id)=["'][^"']*logo[^"']*["']/i);
-  let logo = "";
-  try { if (logoCandidate) logo = new URL(logoCandidate, base).toString(); } catch { /* ignore invalid candidate */ }
+  const logo = extractLogo(html, base);
   return { title, description, logo };
 }
 

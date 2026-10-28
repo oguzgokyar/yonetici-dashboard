@@ -4,6 +4,7 @@ import { getDatabase } from "@/lib/server/database";
 import { GrowthStore } from "@/lib/server/platform-growth-store";
 import {
   generateFullStrategyAndIdeas,
+  checkAndFinalizeHermesRun,
   COLUMN_AGENCY_SPECS,
   ColumnType,
   StrategyIdea,
@@ -19,9 +20,100 @@ export async function GET(
   const { projectId } = await params;
   const db = getDatabase()!;
 
-  const strategyRow = db
+  let strategyRow = db
     .prepare("SELECT * FROM project_brand_strategies WHERE project_id = ?")
     .get(projectId) as any;
+
+  // If in-flight generation exists, attempt background check/finalization
+  if (strategyRow?.generation_status === "generating" && strategyRow?.current_run_id) {
+    try {
+      const checkRes = await checkAndFinalizeHermesRun(
+        strategyRow.current_run_id,
+        JSON.parse(strategyRow.competitors_json || "[]")
+      );
+      if (checkRes.status === "completed" && checkRes.result) {
+        const fullResult = checkRes.result;
+        const now = new Date().toISOString();
+        db.prepare(`
+          UPDATE project_brand_strategies SET
+            brand_identity_json = ?,
+            competitor_analysis_json = ?,
+            audience_voc_json = ?,
+            growth_strategy_json = ?,
+            generation_status = 'completed',
+            engine_type = ?,
+            skills_used_json = ?,
+            updated_at = ?
+          WHERE project_id = ?
+        `).run(
+          JSON.stringify(fullResult.overview.brandIdentity),
+          JSON.stringify(fullResult.overview.competitorAnalysis),
+          JSON.stringify(fullResult.overview.audienceVoc),
+          JSON.stringify(fullResult.overview.growthStrategy),
+          fullResult.engineType,
+          JSON.stringify(fullResult.skillsUsed),
+          now,
+          projectId
+        );
+
+        // Also update project's brand_json valueProposition
+        try {
+          const proj = db.prepare("SELECT brand_json FROM projects WHERE id = ?").get(projectId) as any;
+          if (proj?.brand_json) {
+            const brandObj = JSON.parse(proj.brand_json || "{}");
+            if (fullResult.overview.brandIdentity.valueProposition) {
+              brandObj.valueProposition = fullResult.overview.brandIdentity.valueProposition;
+            }
+            db.prepare("UPDATE projects SET brand_json = ? WHERE id = ?").run(JSON.stringify(brandObj), projectId);
+          }
+        } catch {}
+
+        // Insert ideas
+        const insertIdeaStmt = db.prepare(`
+          INSERT INTO project_strategy_ideas (
+            id, project_id, column_type, title, hook, description, structure_json, target_channel, idea_type, skill_source, status, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'suggested', ?, ?)
+        `);
+
+        db.prepare("DELETE FROM project_strategy_ideas WHERE project_id = ?").run(projectId);
+        for (const [colType, items] of Object.entries(fullResult.ideas)) {
+          for (const item of items) {
+            insertIdeaStmt.run(
+              crypto.randomUUID(),
+              projectId,
+              colType,
+              item.title,
+              item.hook || "",
+              item.description || "",
+              JSON.stringify(item.structure || []),
+              item.targetChannel || "",
+              item.ideaType || "problem_solution",
+              item.skillSource || (COLUMN_AGENCY_SPECS as any)?.[colType]?.agentSlug || "outlier-post-finder",
+              now,
+              now
+            );
+          }
+        }
+
+        // Reload row
+        strategyRow = db.prepare("SELECT * FROM project_brand_strategies WHERE project_id = ?").get(projectId) as any;
+      } else if (checkRes.status === "failed") {
+        db.prepare("UPDATE project_brand_strategies SET generation_status = 'failed', updated_at = ? WHERE project_id = ?")
+          .run(new Date().toISOString(), projectId);
+        strategyRow.generation_status = "failed";
+      } else {
+        // Check timeout (10 mins without update)
+        const updatedTime = new Date(strategyRow.updated_at || strategyRow.created_at || 0).getTime();
+        if (Date.now() - updatedTime > 10 * 60 * 1000) {
+          db.prepare("UPDATE project_brand_strategies SET generation_status = 'failed', updated_at = ? WHERE project_id = ?")
+            .run(new Date().toISOString(), projectId);
+          strategyRow.generation_status = "failed";
+        }
+      }
+    } catch (e) {
+      console.warn("[Strategy GET Hermes Sync Warning]", e);
+    }
+  }
 
   const ideasRows = db
     .prepare(
@@ -209,6 +301,14 @@ export async function POST(
       brandDescription,
       socialChannels,
       competitors,
+      onDispatched: (runId) => {
+        try {
+          db.prepare("UPDATE project_brand_strategies SET current_run_id = ?, updated_at = ? WHERE project_id = ?")
+            .run(runId, new Date().toISOString(), projectId);
+        } catch (err) {
+          console.warn("[Strategy onDispatched Error]", err);
+        }
+      },
     });
 
     const now = new Date().toISOString();

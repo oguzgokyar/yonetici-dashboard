@@ -83,7 +83,7 @@ export const COLUMN_AGENCY_SPECS: Record<
   },
 };
 
-const DEFAULT_SKILLS = [
+export const DEFAULT_SKILLS = [
   { skill: "specialized/business-strategist", role: "Değer Vaadi Kanvası & Pazar Konumlandırması" },
   { skill: "design-brand-guardian", role: "Marka Arketipi & Görsel Dil Direktifleri" },
   { skill: "sales-offer-lead-gen-strategist", role: "Grand Slam Lead Magnet & Dönüşüm Teklifi" },
@@ -132,6 +132,7 @@ export async function generateFullStrategyAndIdeas(input: {
   brandDescription: string;
   socialChannels: string[];
   competitors: string[];
+  onDispatched?: (runId: string) => void;
 }): Promise<FullStrategyResult> {
   // Faz 2: Canlı kazıyıcı havuzundan (scraped_media) gerçek outlier/viral rakip verilerini topla
   const liveInsights = getCompetitorOutlierInsights(input.competitors);
@@ -218,8 +219,15 @@ Output MUST be strictly valid JSON matching this schema (no markdown formatting,
 
     if (dispatchRes.dispatched && dispatchRes.runId) {
       console.log(`[Hermes Strategy] Task dispatched to Hermes Agent (runId: ${dispatchRes.runId})`);
-      // Poll Hermes for completion up to 120s
-      const pollDeadline = Date.now() + 120000;
+      if (input.onDispatched) {
+        try {
+          input.onDispatched(dispatchRes.runId);
+        } catch (e) {
+          console.warn("[Hermes Strategy] onDispatched callback error:", e);
+        }
+      }
+      // Poll Hermes for completion up to 360s (6 minutes)
+      const pollDeadline = Date.now() + 360000;
       while (Date.now() < pollDeadline) {
         await new Promise((r) => setTimeout(r, 4000));
         const statusRes = await fetch(`${baseUrl}/v1/runs/${dispatchRes.runId}`, {
@@ -553,4 +561,82 @@ Lütfen 4 kolon için 2'şer fikir içeren JSON nesnesini üret.`;
   }
 
   return result;
+}
+
+export async function checkAndFinalizeHermesRun(
+  runId: string,
+  competitors: string[] = []
+): Promise<{ status: "running" | "completed" | "failed"; result?: FullStrategyResult }> {
+  try {
+    const config = getCanvaConfig();
+    const baseUrl = config.baseUrl.replace(/\/+$/, "");
+    const apiKey = config.apiKey;
+
+    const statusRes = await fetch(`${baseUrl}/v1/runs/${runId}`, {
+      headers: {
+        Accept: "application/json",
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      signal: AbortSignal.timeout(8000),
+    }).catch(() => null);
+
+    if (!statusRes || !statusRes.ok) {
+      return { status: "running" };
+    }
+
+    const runData = (await statusRes.json().catch(() => ({}))) as {
+      status?: string;
+      output?: string;
+      result?: string;
+    };
+
+    if (runData.status === "completed") {
+      const rawText = runData.output || runData.result || "";
+      if (rawText) {
+        const parsed = parseJsonResponse<any>(rawText);
+        if (parsed?.overview && parsed?.ideas) {
+          const liveInsights = getCompetitorOutlierInsights(competitors);
+          const ideasWithSkills: Record<ColumnType, StrategyIdea[]> = {
+            vertical_video: [],
+            carousel: [],
+            single_post: [],
+            engagement: [],
+          };
+          for (const col of ["vertical_video", "carousel", "single_post", "engagement"] as ColumnType[]) {
+            const rawList = parsed.ideas?.[col] || [];
+            ideasWithSkills[col] = rawList.map((item: any) => ({
+              ...item,
+              columnType: col,
+              skillSource: COLUMN_AGENCY_SPECS[col].agentSlug,
+            }));
+          }
+
+          return {
+            status: "completed",
+            result: {
+              overview: {
+                ...parsed.overview,
+                competitorAnalysis: {
+                  ...parsed.overview?.competitorAnalysis,
+                  liveOutlierCount: liveInsights.activeOutliers.length,
+                  liveOutlierSummary: liveInsights.summaryNote,
+                },
+              },
+              ideas: ideasWithSkills,
+              engineType: "Hermes Agent (v1/runs)",
+              runId,
+              skillsUsed: DEFAULT_SKILLS,
+            },
+          };
+        }
+      }
+    } else if (runData.status === "failed") {
+      return { status: "failed" };
+    }
+
+    return { status: "running" };
+  } catch (e) {
+    console.error("[Check Hermes Run Error]", e);
+    return { status: "running" };
+  }
 }
