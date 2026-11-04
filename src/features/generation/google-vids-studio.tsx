@@ -33,6 +33,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
 
   // Senaryo & İş Akışı
   const [storyboard, setStoryboard] = useState<StoryboardResponse | null>(null);
+  const [engine, setEngine] = useState<"vids" | "flow">("vids");
   const [revisionNote, setRevisionNote] = useState("");
   const [message, setMessage] = useState("");
 
@@ -501,7 +502,11 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
     }
 
     setEnqueueing(true);
-    setMessage("Google Vids video üretimi merkezi FIFO sırasına ekleniyor...");
+    setMessage(
+      engine === "flow"
+        ? "Google Flow (Veo/Omni) video üretimi merkezi FIFO sırasına ekleniyor..."
+        : "Google Vids video üretimi merkezi FIFO sırasına ekleniyor..."
+    );
 
     try {
       const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/google-vids`, {
@@ -510,6 +515,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         body: JSON.stringify({
           origin: "marka_motoru",
           topic: topic.trim(),
+          engine,
           storyboard,
           preferredAccountId: selectedAccountId === "auto" ? undefined : selectedAccountId,
         }),
@@ -642,6 +648,8 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
           setAspectRatio={setAspectRatio}
           narrativeMode={narrativeMode}
           setNarrativeMode={setNarrativeMode}
+          engine={engine}
+          setEngine={setEngine}
           includeMusic={includeMusic}
           setIncludeMusic={setIncludeMusic}
           selectedAccountId={selectedAccountId}
@@ -682,6 +690,8 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         onGenerateRevision={() => void handleGenerateStoryboard(true)}
         onConfirmAndEnqueue={() => void handleConfirmAndEnqueue()}
         onClearStoryboard={handleClearStoryboard}
+        projectId={projectId}
+        activeJob={activeJob}
       />
 
       {/* Alt Bölüm: Tamamlanan Videolar Galerisi */}

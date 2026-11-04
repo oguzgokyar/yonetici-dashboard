@@ -457,7 +457,7 @@ export function CanvaAccountSettings() {
             const isTesting = testingId === acc.id;
             const isExhausted = acc.quotaStatus === "exhausted";
             const isInactive = !acc.isActive;
-            const isExpired = acc.authStatus === "expired" || acc.quotaStatus === "auth_required";
+            const isExpired = acc.authStatus === "expired" || (acc.quotaStatus as string) === "auth_required";
 
             return (
               <div

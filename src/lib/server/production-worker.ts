@@ -7,6 +7,7 @@ import { getCanvaConfig, createJobCallbackToken } from "@/lib/server/canva-confi
 import { buildHermesCanvaTaskPrompt } from "@/lib/server/hermes-canva-task";
 import { dispatchHermesCanvaTask } from "@/lib/server/hermes-agent-client";
 import { processGoogleVidsJob } from "@/lib/server/google-vids-service";
+import { processFlowEngineJob } from "@/lib/server/flow-engine/flow-engine-job";
 
 /**
  * Process-local FIFO plus mandatory shared host coordinator admission.
@@ -151,7 +152,16 @@ export function triggerProductionWorker(): void {
         if (nextJob.type === "video") {
           await withHeavyJob(`production:${nextJob.id}`, `dashboard:${randomUUID()}`, () => processStockVideoJob(nextJob));
         } else if (nextJob.type === "google-vids") {
-          await withHeavyJob(`google-vids:${nextJob.id}`, `dashboard:${randomUUID()}`, () => processGoogleVidsJob(nextJob));
+          let isFlow = false;
+          try {
+            const req = JSON.parse(nextJob.request_json || "{}");
+            isFlow = req.engine === "flow";
+          } catch {}
+          if (isFlow) {
+            await withHeavyJob(`google-vids:${nextJob.id}`, `dashboard:${randomUUID()}`, () => processFlowEngineJob(nextJob));
+          } else {
+            await withHeavyJob(`google-vids:${nextJob.id}`, `dashboard:${randomUUID()}`, () => processGoogleVidsJob(nextJob));
+          }
         } else if (nextJob.type === "canva") {
           await runCanvaLifetime(nextJob);
         }

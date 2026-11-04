@@ -26,6 +26,7 @@ import {
   type StoryboardResponse,
   type VisualMoodOption,
   type NarrativeModeOption,
+  type ActiveJob,
 } from "../types";
 
 interface VidsStoryboardDeckProps {
@@ -55,6 +56,8 @@ interface VidsStoryboardDeckProps {
   onGenerateRevision: () => void;
   onConfirmAndEnqueue: () => void;
   onClearStoryboard: () => void;
+  projectId?: string;
+  activeJob?: ActiveJob | null;
 }
 
 export function VidsStoryboardDeck({
@@ -63,6 +66,7 @@ export function VidsStoryboardDeck({
   narrativeMode,
   message,
   activeAnchorGenerations,
+  onGenerateAllVisualAnchors,
   rerollingIndex,
   revising,
   enqueueing,
@@ -71,7 +75,6 @@ export function VidsStoryboardDeck({
   setRevisionNote,
   onGenerateCharacterImage,
   onGenerateVisualAnchor,
-  onGenerateAllVisualAnchors,
   onUploadVisualAnchor,
   onRerollScene,
   onUpdateScenePrompt,
@@ -80,6 +83,8 @@ export function VidsStoryboardDeck({
   onGenerateRevision,
   onConfirmAndEnqueue,
   onClearStoryboard,
+  projectId,
+  activeJob,
 }: VidsStoryboardDeckProps) {
   const [activeSceneTabIdx, setActiveSceneTabIdx] = useState(0);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -842,6 +847,77 @@ export function VidsStoryboardDeck({
                     </div>
                   )}
                 </div>
+
+                {/* 5. Google Flow Sahne Klibi Önizleme & Oynatıcı */}
+                {activeJob && activeJob.request?.engine === "flow" && (
+                  <div
+                    style={{
+                      marginTop: "4px",
+                      padding: "12px",
+                      borderRadius: "10px",
+                      background: "#fbfbfe",
+                      border: "1px solid #e0e7ff",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: "12.5px", fontWeight: 700, color: "#6d28d9", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                        <span>🌌</span>
+                        <span>Flow Sahne {currentScene.sceneIndex} Klibi</span>
+                      </span>
+                      {activeJob.status === "running" ? (
+                        <span style={{ fontSize: "11px", color: "#6366f1", display: "inline-flex", alignItems: "center", gap: "4px", background: "#eef2ff", padding: "2px 8px", borderRadius: "12px", fontWeight: 600 }}>
+                          <LoaderCircle size={11} className="spin" />
+                          {activeJob.progress?.detail || "Üretim devam ediyor..."}
+                        </span>
+                      ) : activeJob.status === "complete" ? (
+                        <span style={{ fontSize: "11px", color: "#166534", background: "#dcfce7", padding: "2px 8px", borderRadius: "12px", fontWeight: 600 }}>
+                          ✓ Sahne Hazır
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {projectId && (
+                      <div style={{ position: "relative", width: "100%", borderRadius: "8px", overflow: "hidden", background: "#090d16" }}>
+                        <video
+                          key={`${activeJob.id}-${currentScene.sceneIndex}`}
+                          controls
+                          playsInline
+                          preload="metadata"
+                          src={`/api/projects/${encodeURIComponent(projectId)}/flow-engine/scenes/${activeJob.id}/${currentScene.sceneIndex}`}
+                          poster={`/api/projects/${encodeURIComponent(projectId)}/flow-engine/scenes/${activeJob.id}/${currentScene.sceneIndex}?thumb=1`}
+                          style={{ width: "100%", maxHeight: "260px", display: "block" }}
+                        />
+                      </div>
+                    )}
+
+                    {projectId && (
+                      <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "2px" }}>
+                        <a
+                          href={`/api/projects/${encodeURIComponent(projectId)}/flow-engine/scenes/${activeJob.id}/${currentScene.sceneIndex}`}
+                          download={`flow_sahne_${currentScene.sceneIndex}.mp4`}
+                          style={{
+                            fontSize: "11px",
+                            color: "#4f46e5",
+                            fontWeight: 600,
+                            textDecoration: "none",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            background: "#ffffff",
+                            border: "1px solid #c7d2fe",
+                            padding: "4px 10px",
+                            borderRadius: "6px",
+                          }}
+                        >
+                          ⬇️ Sahne Klibini İndir (.mp4)
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Sahneler Arası Gezinme Alt Butonları */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "4px" }}>

@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import path from "node:path";
 import { getDatabase } from "@/lib/server/database";
 import { getGoogleOAuthClientConfig } from "@/lib/google-drive-oauth";
 import { getGoogleUserProfile, type TokenData } from "@/lib/server/google-drive";
@@ -62,8 +63,6 @@ export async function GET(request: Request) {
         const tokenResult = await tokenResponse.json() as TokenResponse;
         if (tokenResponse.ok && tokenResult.access_token) {
           const profile = await getGoogleUserProfile(tokenResult.access_token);
-          const fs = await import("node:fs");
-          const scraperTokenPath = "/opt/data/google_token.json";
           const scraperTokenData = {
             ...tokenResult,
             client_id: clientId,
@@ -72,7 +71,22 @@ export async function GET(request: Request) {
             email: profile.email,
             display_name: profile.displayName
           };
-          fs.writeFileSync(scraperTokenPath, JSON.stringify(scraperTokenData, null, 2), "utf-8");
+          // Also sync token to scraper's google_token.json if accessible
+          try {
+            const fs = await import("node:fs");
+            const possiblePaths = [
+              "/opt/data/google_token.json",
+              path.join(process.cwd(), ".data", "google_token.json"),
+            ];
+            for (const sp of possiblePaths) {
+              try {
+                fs.mkdirSync(path.dirname(sp), { recursive: true });
+                fs.writeFileSync(sp, JSON.stringify(scraperTokenData, null, 2), "utf-8");
+              } catch {}
+            }
+          } catch (e) {
+            console.error("[Direct OAuth Token Save Warning]", e);
+          }
 
           // Also save to database
           const normalizedEmail = profile.email.trim().toLocaleLowerCase("en-US");
@@ -170,7 +184,6 @@ export async function GET(request: Request) {
     // Also sync token to scraper's google_token.json so both tools share the authenticated Drive!
     try {
       const fs = await import("node:fs");
-      const scraperTokenPath = "/opt/data/google_token.json";
       const scraperTokenData = {
         ...tokenResult,
         client_id: clientId,
@@ -179,7 +192,16 @@ export async function GET(request: Request) {
         email: normalizedEmail,
         display_name: profile.displayName
       };
-      fs.writeFileSync(scraperTokenPath, JSON.stringify(scraperTokenData, null, 2), "utf-8");
+      const possiblePaths = [
+        "/opt/data/google_token.json",
+        path.join(process.cwd(), ".data", "google_token.json"),
+      ];
+      for (const sp of possiblePaths) {
+        try {
+          fs.mkdirSync(path.dirname(sp), { recursive: true });
+          fs.writeFileSync(sp, JSON.stringify(scraperTokenData, null, 2), "utf-8");
+        } catch {}
+      }
     } catch (e) {
       console.error("[OAuth Callback Sync to Scraper Error]", e);
     }

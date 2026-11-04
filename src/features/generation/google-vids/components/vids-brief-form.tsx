@@ -22,6 +22,8 @@ interface VidsBriefFormProps {
   setAspectRatio: (ratio: "9:16" | "16:9" | "1:1") => void;
   narrativeMode: NarrativeModeOption;
   setNarrativeMode: (mode: NarrativeModeOption) => void;
+  engine?: "vids" | "flow";
+  setEngine?: (engine: "vids" | "flow") => void;
   includeMusic: boolean;
   setIncludeMusic: (inc: boolean) => void;
   selectedAccountId: string;
@@ -48,6 +50,8 @@ export function VidsBriefForm({
   setAspectRatio,
   narrativeMode,
   setNarrativeMode,
+  engine = "vids",
+  setEngine,
   includeMusic,
   setIncludeMusic,
   selectedAccountId,
@@ -212,6 +216,67 @@ export function VidsBriefForm({
             <ChevronDown size={14} />
           </div>
         </label>
+
+        {/* Üretim Motoru Seçimi (Vids vs Flow) */}
+        {setEngine && (
+          <div className="select-field" style={{ marginBottom: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+              <span style={{ fontSize: "12px", fontWeight: 600, color: "#475569" }}>🚀 Video Üretim Motoru</span>
+              <span style={{ fontSize: "11px", color: engine === "flow" ? "#7c3aed" : "#2563eb", fontWeight: 600 }}>
+                {engine === "flow" ? "🌌 Google Flow (Veo/Omni)" : "🎬 Google Vids (Native Omni)"}
+              </span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "4px" }}>
+              <button
+                type="button"
+                onClick={() => setEngine("vids")}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: "8px",
+                  border: engine === "vids" ? "2px solid #2563eb" : "1px solid #e2e8f0",
+                  backgroundColor: engine === "vids" ? "#eff6ff" : "#ffffff",
+                  color: engine === "vids" ? "#1e40af" : "#475569",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "6px",
+                  cursor: "pointer",
+                }}
+              >
+                <span>🎬</span>
+                <span>Google Vids</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setEngine("flow")}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: "8px",
+                  border: engine === "flow" ? "2px solid #7c3aed" : "1px solid #e2e8f0",
+                  backgroundColor: engine === "flow" ? "#f5f3ff" : "#ffffff",
+                  color: engine === "flow" ? "#6d28d9" : "#475569",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "6px",
+                  cursor: "pointer",
+                }}
+              >
+                <span>🌌</span>
+                <span>Google Flow</span>
+              </button>
+            </div>
+            {engine === "flow" && (
+              <small style={{ display: "block", marginTop: "4px", fontSize: "11px", color: "#6b7280" }}>
+                💡 Flow motorunda sahneler tek tek üretilir; kart üzerinde önizlenebilir.
+              </small>
+            )}
+          </div>
+        )}
 
         <div className="select-field">
           <div

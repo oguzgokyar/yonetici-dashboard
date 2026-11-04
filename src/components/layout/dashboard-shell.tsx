@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import {
   Bell, ChevronDown, Clapperboard, Compass, Film, FolderKanban, Image, LayoutDashboard, PanelsTopLeft,
   Menu, Palette, PanelLeftClose, PanelLeftOpen, Pin, Plus, Search, Send, Settings, Share2, Sparkles, X,
-  Layers, Bot, PhoneCall, Video, LogOut,
+  Layers, Bot, PhoneCall, Video, LogOut, FileText,
 } from "lucide-react";
  import { useProjects } from "@/features/projects/projects-context";
  import { ProductionQueueDrawer } from "./production-queue-drawer";
@@ -125,6 +125,16 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
           title="Toplantı Asistanı & Arşiv Portalı"
         >
           <Video size={19} /><span>Toplantı Asistanı ↗</span>
+        </a>
+
+        <a 
+          href="https://teklif.43.131.47.253.sslip.io/teklif/" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="nav-item" 
+          title="Aysar Teklif Yöneticisi"
+        >
+          <FileText size={19} /><span>Teklif Yöneticisi ↗</span>
         </a>
 
         {projectId && <>

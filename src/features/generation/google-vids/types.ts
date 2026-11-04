@@ -269,6 +269,7 @@ export type ActiveJob = {
     visualAnchors?: VisualAnchorsSpec;
     scenes?: ScriptScenePlan[];
     origin?: string;
+    engine?: "vids" | "flow";
   };
   googleVidsUrl?: string;
 };

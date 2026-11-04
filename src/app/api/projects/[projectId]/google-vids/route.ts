@@ -82,11 +82,13 @@ export async function GET(request: Request, context: Context) {
             visualAnchors: requestPayload.visualAnchors,
             scenes: requestPayload.scenes,
             origin: requestPayload.origin || "marka_motoru",
+            engine: (requestPayload.engine as "vids" | "flow") || "vids",
           }
         : {
             title: requestPayload.title || r.prompt,
             durationSeconds: requestPayload.durationSeconds,
             origin: requestPayload.origin || "marka_motoru",
+            engine: (requestPayload.engine as "vids" | "flow") || "vids",
           };
 
       return {
@@ -133,6 +135,7 @@ export async function POST(request: Request, context: Context) {
     const body = (await request.json().catch(() => ({}))) as {
       storyboard?: StoryboardResponse & { isSceneClip?: boolean };
       topic?: string;
+      engine?: "vids" | "flow";
       captionStyle?: string;
       preferredAuthuser?: number;
       preferredAccountId?: string;
@@ -166,10 +169,14 @@ export async function POST(request: Request, context: Context) {
 
     const origin = isFromSinematik ? "sinematik_studio" : ((body as Record<string, unknown>).origin as string || "marka_motoru");
 
+    const isFlow = body.engine === "flow";
+
     const requestPayload = {
       origin,
       source: origin,
-      title: storyboard.title || body.topic || "Google Vids Video",
+      engine: isFlow ? "flow" : "vids",
+      isDraftScene: isFlow ? true : undefined,
+      title: storyboard.title || body.topic || (isFlow ? "Google Flow Video" : "Google Vids Video"),
       topic: body.topic || storyboard.title,
       aspectRatio: storyboard.aspectRatio || "9:16",
       durationSeconds: storyboard.totalDurationSeconds || 30,
@@ -189,7 +196,9 @@ export async function POST(request: Request, context: Context) {
     const initialProgress = {
       phase: "queued",
       percent: 5,
-      detail: "FIFO kuyruğunda sıraya alındı, önceki render bekleniyor...",
+      detail: isFlow
+        ? "Google Flow (Veo/Omni) FIFO kuyruğunda sıraya alındı..."
+        : "FIFO kuyruğunda sıraya alındı, önceki render bekleniyor...",
       updatedAt: now,
     };
 
@@ -197,11 +206,13 @@ export async function POST(request: Request, context: Context) {
       .prepare(`
         INSERT INTO generation_jobs (
           id, project_id, type, provider, model, status, prompt, request_json, progress_json, created_at
-        ) VALUES (?, ?, 'google-vids', 'google', 'vids-omni-720p', 'queued', ?, ?, ?, ?)
+        ) VALUES (?, ?, 'google-vids', ?, ?, 'queued', ?, ?, ?, ?)
       `)
       .run(
         jobId,
         projectId,
+        isFlow ? "google-flow" : "google",
+        isFlow ? "flow-omni" : "vids-omni-720p",
         requestPayload.title,
         JSON.stringify(requestPayload),
         JSON.stringify(initialProgress),
