@@ -162,6 +162,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
               visualMood: data.activeJob.request.visualMood || "cinematic_photoreal",
               aspectRatio: data.activeJob.request.aspectRatio || "9:16",
               characterAnchor: data.activeJob.request.characterAnchor,
+              visualAnchors: data.activeJob.request.visualAnchors,
               scenes: data.activeJob.request.scenes || [],
             });
             if (data.activeJob.request.topic) setTopic(data.activeJob.request.topic);

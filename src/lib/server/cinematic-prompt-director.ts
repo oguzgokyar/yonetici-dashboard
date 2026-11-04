@@ -28,7 +28,7 @@ export const CINEMATIC_VISUAL_MOODS: Record<CinematicVisualMood, CinematicVisual
     description: "Doğal derinlik, film greni, dengeli kontrast ve gerçekçi doku.",
     lightingInstruction: "Natural diffused daylight or motivated practical key light, soft natural fill, realistic catchlights.",
     lensInstruction: "Shot on 35mm anamorphic or 50mm spherical lens, organic depth of field, subtle film grain.",
-    colorGrading: "Kodak 2383 print film emulation, rich deep blacks, natural skin tones, balanced saturation.",
+    colorGrading: "Subtle clean cinema color grade, rich deep blacks, natural authentic skin tones, balanced saturation. Full-bleed borderless edge-to-edge frame, strictly zero film border, zero frame rebate, zero printed brand text.",
   },
   golden_hour: {
     key: "golden_hour",
