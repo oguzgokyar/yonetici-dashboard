@@ -160,11 +160,10 @@ export async function processFlowEngineJob(job: {
       const callbackBaseUrl = (process.env.CANVA_CALLBACK_BASE_URL || "http://10.0.1.1:3100").trim().replace(/\/+$/, "");
       const callbackUrl = `${callbackBaseUrl}/api/internal/flow/jobs/${job.id}/complete`;
 
-      // 1. Try Host Runner Bridge on :8085 (works from inside Coolify container)
+      // 1. Try Host Runner Bridge via 8080 flow-agent proxy to :8001
       const hostBridgeUrls = [
-        "http://10.0.1.7:8085/run",
-        "http://10.0.1.1:8085/run",
-        "http://127.0.0.1:8085/run",
+        "http://10.0.1.1:8080/api/internal/flow-agent/run",
+        "http://127.0.0.1:8080/api/internal/flow-agent/run",
       ];
       for (const bridgeUrl of hostBridgeUrls) {
         try {
