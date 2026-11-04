@@ -156,40 +156,80 @@ export async function processFlowEngineJob(job: {
     const aspectRatio = req.aspectRatio || "9:16";
 
     try {
-      await new Promise<void>((resolve, reject) => {
-        const args = [
-          driverScript,
-          "generate",
-          "--job-id", job.id,
-          "--scene-index", String(sIndex),
-          "--prompt", scenePrompt,
-          "--aspect-ratio", aspectRatio,
-          "--output", targetMp4,
-          "--timeout", "360",
-        ];
+      let sceneSuccess = false;
+      const callbackBaseUrl = (process.env.CANVA_CALLBACK_BASE_URL || "http://10.0.1.1:3100").trim().replace(/\/+$/, "");
+      const callbackUrl = `${callbackBaseUrl}/api/internal/flow/jobs/${job.id}/complete`;
 
-        const proc = spawn(pythonBin, args, {
-          env: {
-            ...process.env,
-            FLOW_CDP_PORT: "9222",
-          },
-        });
-
-        let stderr = "";
-        proc.stderr.on("data", (data) => {
-          stderr += data.toString();
-        });
-
-        proc.on("close", (code) => {
-          if (code === 0 && fs.existsSync(targetMp4) && fs.statSync(targetMp4).size > 1000) {
-            resolve();
-          } else {
-            reject(new Error(stderr || `Sahne ${sIndex} üretimi başarısız (kod ${code})`));
+      // 1. Try Host Runner Bridge on :8085 (works from inside Coolify container)
+      const hostBridgeUrls = ["http://10.0.1.1:8085/run", "http://127.0.0.1:8085/run"];
+      for (const bridgeUrl of hostBridgeUrls) {
+        try {
+          const resp = await fetch(bridgeUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              job_id: job.id,
+              scene_index: sIndex,
+              prompt: scenePrompt,
+              aspect_ratio: aspectRatio,
+              model: "Omni 1.1 Flash",
+              callback_url: callbackUrl,
+            }),
+            signal: AbortSignal.timeout(400_000),
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.ok) {
+              sceneSuccess = true;
+              break;
+            }
           }
-        });
+        } catch {}
+      }
 
-        proc.on("error", reject);
-      });
+      // 2. Fallback to local process spawn if local python exists
+      if (!sceneSuccess && fs.existsSync(pythonBin) && fs.existsSync(driverScript)) {
+        await new Promise<void>((resolve, reject) => {
+          const args = [
+            driverScript,
+            "generate",
+            "--job-id", job.id,
+            "--scene-index", String(sIndex),
+            "--prompt", scenePrompt,
+            "--aspect-ratio", aspectRatio,
+            "--output", targetMp4,
+            "--timeout", "360",
+          ];
+
+          const proc = spawn(pythonBin, args, {
+            env: {
+              ...process.env,
+              FLOW_CDP_PORT: "9222",
+            },
+          });
+
+          let stderr = "";
+          proc.stderr.on("data", (data) => {
+            stderr += data.toString();
+          });
+
+          proc.on("close", (code) => {
+            if (code === 0 && fs.existsSync(targetMp4) && fs.statSync(targetMp4).size > 1000) {
+              sceneSuccess = true;
+              resolve();
+            } else {
+              reject(new Error(stderr || `Sahne ${sIndex} üretimi başarısız (kod ${code})`));
+            }
+          });
+
+          proc.on("error", reject);
+        });
+      }
+
+      // Check if target file arrived via callback or local run
+      if (!sceneSuccess && (!fs.existsSync(targetMp4) || fs.statSync(targetMp4).size < 1000)) {
+        throw new Error(`Sahne ${sIndex} MP4 dosyası üretilemedi veya teslim edilemedi.`);
+      }
 
       // Scene success
       if (existing) {
