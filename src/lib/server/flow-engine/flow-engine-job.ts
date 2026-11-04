@@ -168,6 +168,7 @@ export async function processFlowEngineJob(job: {
       ];
       for (const bridgeUrl of hostBridgeUrls) {
         try {
+          console.log(`[FlowEngine] Calling runner bridge at ${bridgeUrl} for scene ${sIndex}...`);
           const resp = await fetch(bridgeUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -183,12 +184,18 @@ export async function processFlowEngineJob(job: {
           });
           if (resp.ok) {
             const data = await resp.json();
+            console.log(`[FlowEngine] Bridge responded ${resp.status}:`, data);
             if (data.ok) {
               sceneSuccess = true;
               break;
             }
+          } else {
+            const errTxt = await resp.text().catch(() => "");
+            console.error(`[FlowEngine] Bridge returned HTTP ${resp.status}:`, errTxt);
           }
-        } catch {}
+        } catch (bridgeErr) {
+          console.error(`[FlowEngine] Bridge fetch failed (${bridgeUrl}):`, bridgeErr);
+        }
       }
 
       // 2. Fallback to local process spawn if local python exists
