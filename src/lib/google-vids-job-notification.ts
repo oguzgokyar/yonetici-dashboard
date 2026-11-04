@@ -4,14 +4,18 @@ export function googleVidsFailureNotification(jobs: {
   error?: string | null;
   prompt?: string;
   created_at?: string;
+  createdAt?: string;
 }[]) {
   const latestCompleteJob = jobs.find((j) => j.status === "complete");
   const failed = jobs.find((job) => job.status === "failed" && job.error);
   if (!failed) return null;
 
+  const completeDateStr = latestCompleteJob?.createdAt || latestCompleteJob?.created_at;
+  const failedDateStr = failed.createdAt || failed.created_at;
+
   // Yeni tamamlanan bir video varsa geçmiş başarısızlık bildirimini gösterme
-  if (latestCompleteJob?.created_at && failed.created_at) {
-    if (new Date(latestCompleteJob.created_at).getTime() >= new Date(failed.created_at).getTime()) {
+  if (completeDateStr && failedDateStr) {
+    if (new Date(completeDateStr).getTime() >= new Date(failedDateStr).getTime()) {
       return null;
     }
   }

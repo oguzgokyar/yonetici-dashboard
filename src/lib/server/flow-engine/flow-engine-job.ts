@@ -155,9 +155,21 @@ export async function processFlowEngineJob(job: {
     const scenePrompt = sc.promptEn || sc.summaryTr;
     const aspectRatio = req.aspectRatio || "9:16";
 
+    // Extract reference images (location & object) to keep consistent visual identity
+    const rawRefUrls: string[] = [];
+    if (req.visualAnchors?.location?.imageUrl) {
+      rawRefUrls.push(req.visualAnchors.location.imageUrl);
+    }
+    if (req.visualAnchors?.object?.imageUrl) {
+      rawRefUrls.push(req.visualAnchors.object.imageUrl);
+    }
+    const callbackBaseUrl = (process.env.CANVA_CALLBACK_BASE_URL || "http://10.0.1.1:3100").trim().replace(/\/+$/, "");
+    const referenceImagePublicUrls = rawRefUrls
+      .map((u) => (u.startsWith("http") ? u : `${callbackBaseUrl}${u}`))
+      .slice(0, 2);
+
     try {
       let sceneSuccess = false;
-      const callbackBaseUrl = (process.env.CANVA_CALLBACK_BASE_URL || "http://10.0.1.1:3100").trim().replace(/\/+$/, "");
       const callbackUrl = `${callbackBaseUrl}/api/internal/flow/jobs/${job.id}/complete`;
 
       // 1. Try Host Runner Bridge via 8080 flow-agent proxy to :8001
@@ -178,6 +190,7 @@ export async function processFlowEngineJob(job: {
               aspect_ratio: aspectRatio,
               model: "Omni 1.1 Flash",
               callback_url: callbackUrl,
+              ref_images: referenceImagePublicUrls,
             }),
             signal: AbortSignal.timeout(400_000),
           });
@@ -210,6 +223,18 @@ export async function processFlowEngineJob(job: {
             "--output", targetMp4,
             "--timeout", "360",
           ];
+
+          const localRefPaths: string[] = [];
+          for (const u of rawRefUrls) {
+            const cleanU = u.replace(/^\/+/, "");
+            const possiblePath = path.join(process.cwd(), ".data", cleanU.replace("api/", ""));
+            if (fs.existsSync(possiblePath)) {
+              localRefPaths.push(possiblePath);
+            }
+          }
+          if (localRefPaths.length) {
+            args.push("--ref-images", localRefPaths.join(","));
+          }
 
           const proc = spawn(pythonBin, args, {
             env: {

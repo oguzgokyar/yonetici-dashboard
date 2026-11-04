@@ -132,7 +132,20 @@ export async function processGoogleVidsJob(job: {
     } : undefined
   );
 
-  const referenceChips: ReferenceChipItem[] = rawAnchorChips.map((chip) => {
+  // Google Vids/Veo güvenlik politikaları gereği kişi/yüz görseli iliştirmek politika uyarısını tetikler.
+  // Bu nedenle çip ve görsel eklemeleri yalnızca Obje (object) ve Mekan (location) için yapılır; karakter metinsel tanımlanır.
+  const referenceChips: ReferenceChipItem[] = rawAnchorChips
+    .filter(
+      (chip) =>
+        chip.kind !== "person" &&
+        !chip.slug.includes("person") &&
+        !chip.slug.includes("karakter") &&
+        !chip.slug.includes("genc_maker") &&
+        !chip.slug.includes("mucit") &&
+        !chip.slug.includes("student") &&
+        !chip.slug.includes("usta")
+    )
+    .map((chip) => {
     let fullUrl = chip.url || "";
     if (fullUrl && !fullUrl.startsWith("http")) {
       fullUrl = `${callbackBaseUrl}${fullUrl}`;
@@ -315,13 +328,8 @@ export async function processGoogleVidsJob(job: {
     return;
   }
 
-  // Referans görsel URL'leri (Kişi, Mekan, Obje - maks 3 adet)
+  // Referans görsel URL'leri (Yalnızca Mekan ve Obje - Kişi görseli yüklemek Veo güvenlik politikasını tetikler)
   const rawRefUrls: string[] = [];
-  if (req.visualAnchors?.person?.imageUrl) {
-    rawRefUrls.push(req.visualAnchors.person.imageUrl);
-  } else if (req.characterAnchor?.referenceImageUrl) {
-    rawRefUrls.push(req.characterAnchor.referenceImageUrl);
-  }
   if (req.visualAnchors?.location?.imageUrl) {
     rawRefUrls.push(req.visualAnchors.location.imageUrl);
   }

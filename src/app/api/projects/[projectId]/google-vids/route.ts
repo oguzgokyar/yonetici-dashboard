@@ -69,8 +69,8 @@ export async function GET(request: Request, context: Context) {
       const isJobActive = ["queued", "dispatching", "running", "rendering", "exporting", "uploading"].includes(r.status);
 
       // Payload Trimming: 190 KB'lık devasa ağ yükünü 3-5 KB'a indir.
-      // Yalnızca aktif olan iş için sahne ve karakter detaylarını sakla; geçmiş işlerde sadece özet dön.
-      const trimmedRequest = isJobActive
+      // Yalnızca aktif olan veya Flow motorunda tamamlanan işler için sahne ve karakter detaylarını sakla; geçmiş işlerde sadece özet dön.
+      const trimmedRequest = isJobActive || (r.status === "complete" && requestPayload.engine === "flow")
         ? {
             title: requestPayload.title,
             topic: requestPayload.topic,
@@ -108,9 +108,12 @@ export async function GET(request: Request, context: Context) {
       };
     });
 
-    const activeJob = jobs.find((j) =>
-      ["queued", "dispatching", "running", "rendering", "exporting", "uploading"].includes(j.status)
-    );
+    const activeJob =
+      jobs.find((j) =>
+        ["queued", "dispatching", "running", "rendering", "exporting", "uploading"].includes(j.status)
+      ) ||
+      jobs.find((j) => j.status === "complete" && j.request?.engine === "flow") ||
+      null;
 
     let accounts: unknown[] = [];
     try {

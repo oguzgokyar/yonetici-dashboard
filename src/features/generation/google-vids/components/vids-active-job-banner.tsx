@@ -18,7 +18,7 @@ export function VidsActiveJobBanner({
 
   return (
     <>
-      {activeJob && (
+      {activeJob && activeJob.status !== "complete" && (
         <div
           style={{
             padding: "14px 16px",
@@ -78,6 +78,33 @@ export function VidsActiveJobBanner({
               <ExternalLink size={13} /> Google Vids Projesine Git (Canlı İzle / Düzenle) →
             </a>
           ) : null}
+        </div>
+      )}
+
+      {activeJob && activeJob.status === "complete" && activeJob.request?.engine === "flow" && (
+        <div
+          style={{
+            padding: "12px 16px",
+            borderRadius: "14px",
+            border: "1px solid #bbf7d0",
+            background: "#f0fdf4",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span
+            style={{
+              fontSize: "12.5px",
+              fontWeight: 700,
+              color: "#166534",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            ✓ Google Flow sahneleri başarıyla üretildi! Sağ paneldeki sahne sekmelerinden her klibi izleyebilir ve indirebilirsiniz.
+          </span>
         </div>
       )}
 
