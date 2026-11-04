@@ -152,7 +152,14 @@ export async function processFlowEngineJob(job: {
       fs.writeFileSync(stateFile, JSON.stringify(sceneStates, null, 2), "utf-8");
     }
 
-    const scenePrompt = sc.promptEn || sc.summaryTr;
+    let scenePrompt = sc.promptEn || sc.summaryTr;
+    const isDialogue = req.narrativeMode === "dialogue_only" || (req.narrativeMode === "hybrid" && sc.voiceoverTr && (sc.voiceoverTr.includes('"') || sc.voiceoverTr.includes('“') || sc.voiceoverTr.includes(':')));
+    if (isDialogue && sc.voiceoverTr) {
+      const cleanLine = sc.voiceoverTr.replace(/^[^\w\s"“:önceki]+[:\-]\s*/, '').replace(/["“”]/g, '').trim();
+      if (cleanLine && !scenePrompt.includes("speaks out loud in authentic Turkish")) {
+        scenePrompt += ` A character in the scene looks toward camera and clearly speaks out loud in authentic Turkish: "${cleanLine}". Natural lip sync, clear vocal speech, synchronous facial movements.`;
+      }
+    }
     const aspectRatio = req.aspectRatio || "9:16";
 
     // Extract reference images (location & object) to keep consistent visual identity

@@ -19,7 +19,36 @@ export async function GET(request: Request, context: Context) {
       return new Response("Eksik parametre", { status: 400 });
     }
 
-    const sceneFile = path.join(process.cwd(), ".data", "flow-scenes", jobId, `scene-${sceneIndex}.mp4`);
+    const isMaster = sceneIndex === "master" || sceneIndex === "full";
+    const sceneDir = path.join(process.cwd(), ".data", "flow-scenes", jobId);
+    const sceneFile = isMaster
+      ? path.join(sceneDir, "master_full.mp4")
+      : path.join(sceneDir, `scene-${sceneIndex}.mp4`);
+
+    if (isMaster && !fs.existsSync(sceneFile) && fs.existsSync(sceneDir)) {
+      // Otomatik hızlı sahne birleştirme (0 CPU stream copy)
+      const sceneFiles = fs
+        .readdirSync(sceneDir)
+        .filter((f) => /^scene-\d+\.mp4$/.test(f))
+        .sort((a, b) => {
+          const numA = parseInt(a.replace(/\D/g, ""), 10);
+          const numB = parseInt(b.replace(/\D/g, ""), 10);
+          return numA - numB;
+        });
+
+      if (sceneFiles.length > 0) {
+        const concatListPath = path.join(sceneDir, "concat.txt");
+        const listContent = sceneFiles.map((f) => `file '${path.join(sceneDir, f)}'`).join("\n");
+        fs.writeFileSync(concatListPath, listContent, "utf-8");
+        try {
+          execSync(`ffmpeg -y -f concat -safe 0 -i "${concatListPath}" -c copy "${sceneFile}"`, {
+            timeout: 15000,
+            stdio: "ignore",
+          });
+        } catch {}
+      }
+    }
+
     if (!fs.existsSync(sceneFile)) {
       return new Response("Sahne videosu bulunamadı", { status: 404 });
     }

@@ -111,9 +111,10 @@ export async function GET(request: Request, context: Context) {
     const activeJob =
       jobs.find((j) =>
         ["queued", "dispatching", "running", "rendering", "exporting", "uploading"].includes(j.status)
-      ) ||
-      jobs.find((j) => j.status === "complete" && j.request?.engine === "flow") ||
-      null;
+      ) || null;
+
+    const latestCompletedFlowJob =
+      jobs.find((j) => j.status === "complete" && j.request?.engine === "flow") || null;
 
     let accounts: unknown[] = [];
     try {
@@ -123,6 +124,7 @@ export async function GET(request: Request, context: Context) {
     return Response.json({
       ok: true,
       activeJob: activeJob || null,
+      latestCompletedFlowJob: latestCompletedFlowJob || null,
       accounts,
       jobs,
     });
@@ -140,6 +142,7 @@ export async function POST(request: Request, context: Context) {
       topic?: string;
       engine?: "vids" | "flow";
       captionStyle?: string;
+      audioSettings?: Record<string, unknown>;
       preferredAuthuser?: number;
       preferredAccountId?: string;
       isSceneClip?: boolean;
@@ -189,6 +192,7 @@ export async function POST(request: Request, context: Context) {
       characterAnchor: storyboard.characterAnchor,
       visualAnchors: storyboard.visualAnchors,
       musicSpec: storyboard.musicSpec,
+      audioSettings: body.audioSettings || undefined,
       isSceneClip: Boolean(body.isSceneClip || storyboard.isSceneClip),
       scope: (body.isSceneClip || storyboard.isSceneClip) ? "scene_clip" : undefined,
       preferredAuthuser: typeof body.preferredAuthuser === "number" ? body.preferredAuthuser : undefined,

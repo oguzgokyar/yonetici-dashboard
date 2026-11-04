@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { WandSparkles, Sparkles, Trash2, RefreshCw } from "lucide-react";
+import { WandSparkles, Sparkles, Trash2, RefreshCw, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { googleVidsFailureNotification } from "@/lib/google-vids-job-notification";
 
 // Modüler Tipler ve Alt Bileşenler
@@ -15,6 +15,14 @@ import {
   type RenderedVideo,
   type PoolAccount,
   type ActiveJob,
+  type CaptionStyleOption,
+  type CaptionColorOption,
+  type VoiceActorOption,
+  type VoiceSpeedOption,
+  type VoiceEmotionOption,
+  type MusicDuckingOption,
+  type MusicMoodOption,
+  type AudioProductionSettings,
 } from "./google-vids/types";
 import { VidsBriefForm } from "./google-vids/components/vids-brief-form";
 import { VidsStoryboardDeck } from "./google-vids/components/vids-storyboard-deck";
@@ -33,9 +41,19 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
 
   // Senaryo & İş Akışı
   const [storyboard, setStoryboard] = useState<StoryboardResponse | null>(null);
-  const [engine, setEngine] = useState<"vids" | "flow">("vids");
+  const [engine, setEngine] = useState<"vids" | "flow">("flow");
+  const [isControlsCollapsed, setIsControlsCollapsed] = useState(false);
   const [revisionNote, setRevisionNote] = useState("");
   const [message, setMessage] = useState("");
+
+  // Ses, Müzik & Altyazı Ayarları
+  const [captionStyle, setCaptionStyle] = useState<CaptionStyleOption>("tiktok");
+  const [captionColor, setCaptionColor] = useState<CaptionColorOption>("yellow");
+  const [voiceActor, setVoiceActor] = useState<VoiceActorOption>("gemini_actor");
+  const [voiceSpeed, setVoiceSpeed] = useState<VoiceSpeedOption>(1.0);
+  const [voiceEmotion, setVoiceEmotion] = useState<VoiceEmotionOption>("auto");
+  const [musicDucking, setMusicDucking] = useState<MusicDuckingOption>("-18dB");
+  const [musicMood, setMusicMood] = useState<MusicMoodOption>("dynamic_maker");
 
   // Yükleme & İşlem Durumları
   const [planning, setPlanning] = useState(false);
@@ -213,6 +231,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
   // Form & Sahne Planını Temizle
   function handleClearStoryboard() {
     setStoryboard(null);
+    setActiveJob(null);
     setTopic("");
     setRevisionNote("");
     setMessage("Senaryo taslağı ve tuval başarıyla temizlendi.");
@@ -230,6 +249,11 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
     if (isRevision && !revisionNote.trim()) {
       setMessage("Lütfen güncellemek istediğiniz sahne/kurgu notunu yazın.");
       return;
+    }
+
+    if (!isRevision) {
+      // Yeni senaryo istendiğinde önceki işin videolarını ekrandan temizle
+      setActiveJob(null);
     }
 
     if (isRevision) setRevising(true);
@@ -518,6 +542,15 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
           topic: topic.trim(),
           engine,
           storyboard,
+          audioSettings: {
+            captionStyle,
+            captionColor,
+            voiceActor,
+            voiceSpeed,
+            voiceEmotion,
+            musicDucking,
+            musicMood,
+          },
           preferredAccountId: selectedAccountId === "auto" ? undefined : selectedAccountId,
         }),
       });
@@ -579,47 +612,74 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div className="generation-studio">
+    <div className="generation-studio" style={{ display: "grid", gridTemplateColumns: isControlsCollapsed ? "48px 1fr" : "380px 1fr", gap: "20px", transition: "grid-template-columns 0.2s ease" }}>
       {/* Sol Kontrol Paneli */}
-      <section className="generation-controls">
-        <div className="generation-control-header">
-          <div>
-            <span>GOOGLE VIDS OMNI + VISUAL-SKILLS</span>
-            <h2>AI Sinematik Video</h2>
-          </div>
-          <WandSparkles size={21} />
-        </div>
-
-        {/* Sinematik Yönetmen Rozeti & Havuz Bilgisi */}
-        <div className="brand-concept-status">
-          <span style={{ background: "#612bd3" }}>
-            <Sparkles size={13} />
+      {isControlsCollapsed ? (
+        <aside style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "12px 6px", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+          <button
+            type="button"
+            onClick={() => setIsControlsCollapsed(false)}
+            style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: "8px", padding: "8px", cursor: "pointer", color: "#334155" }}
+            title="Form ve Ayarlar Panelini Aç"
+          >
+            <PanelLeftOpen size={18} />
+          </button>
+          <span style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", fontSize: "11px", fontWeight: 700, color: "#64748b", letterSpacing: "1px" }}>
+            AYARLAR
           </span>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <strong>Sinematik Yönetmen &amp; Hesap Havuzu</strong>
-              <span
-                style={{
-                  fontSize: "11px",
-                  fontWeight: 700,
-                  color: accountsPool.some((a) => a.quota_status === "available" && a.is_active !== 0)
-                    ? "#15803d"
-                    : "#b91c1c",
-                  background: "#f8fafc",
-                  padding: "2px 8px",
-                  borderRadius: "99px",
-                  border: "1px solid #e2e8f0",
-                }}
-              >
-                👥 {accountsPool.filter((a) => a.quota_status === "available" && a.is_active !== 0).length}/
-                {accountsPool.filter((a) => a.is_active !== 0).length || accountsPool.length || 2} Hesap Hazır
-              </span>
+        </aside>
+      ) : (
+        <section className="generation-controls">
+          <div className="generation-control-header">
+            <div>
+              <span>YAPAY ZEKÂ VİDEO STÜDYOSU</span>
+              <h2>AI Sinematik Video</h2>
             </div>
-            <small>
-              Sahne sayısı ve kurgu ritmi visual-skills motoruyla belirlenir. Hesap kotası dolduğunda otomatik failover çalışır.
-            </small>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              {storyboard && (
+                <button
+                  type="button"
+                  onClick={() => setIsControlsCollapsed(true)}
+                  style={{ background: "transparent", border: "none", color: "#64748b", cursor: "pointer", padding: "4px" }}
+                  title="Panelı Daralt (Geniş Ekran Modu)"
+                >
+                  <PanelLeftClose size={18} />
+                </button>
+              )}
+              <WandSparkles size={20} color="#6366f1" />
+            </div>
           </div>
-        </div>
+
+          {/* Sinematik Yönetmen Rozeti & Havuz Bilgisi */}
+          <div className="brand-concept-status">
+            <span style={{ background: "#612bd3" }}>
+              <Sparkles size={13} />
+            </span>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <strong>Sinematik Yönetmen &amp; Hesaplar</strong>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    color: accountsPool.some((a) => a.quota_status === "available" && a.is_active !== 0)
+                      ? "#15803d"
+                      : "#b91c1c",
+                    background: "#f8fafc",
+                    padding: "2px 8px",
+                    borderRadius: "99px",
+                    border: "1px solid #e2e8f0",
+                  }}
+                >
+                  {accountsPool.filter((a) => a.quota_status === "available" && a.is_active !== 0).length}/
+                  {accountsPool.filter((a) => a.is_active !== 0).length || accountsPool.length || 2} Hesap Aktif
+                </span>
+              </div>
+              <small>
+                Sahne sayısı ve kurgu ritmi visual-skills motoruyla belirlenir.
+              </small>
+            </div>
+          </div>
 
         {/* Aktif İş & Hata Bannerı */}
         <VidsActiveJobBanner
@@ -664,8 +724,23 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
           hasStoryboard={Boolean(storyboard)}
           onGenerateStoryboard={() => void handleGenerateStoryboard(false)}
           onClearStoryboard={handleClearStoryboard}
+          captionStyle={captionStyle}
+          setCaptionStyle={setCaptionStyle}
+          captionColor={captionColor}
+          setCaptionColor={setCaptionColor}
+          voiceActor={voiceActor}
+          setVoiceActor={setVoiceActor}
+          voiceSpeed={voiceSpeed}
+          setVoiceSpeed={setVoiceSpeed}
+          voiceEmotion={voiceEmotion}
+          setVoiceEmotion={setVoiceEmotion}
+          musicDucking={musicDucking}
+          setMusicDucking={setMusicDucking}
+          musicMood={musicMood}
+          setMusicMood={setMusicMood}
         />
       </section>
+      )}
 
       {/* Sağ Panel: Senaryo & Sahne Planı */}
       <VidsStoryboardDeck

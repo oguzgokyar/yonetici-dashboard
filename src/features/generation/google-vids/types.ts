@@ -273,3 +273,21 @@ export type ActiveJob = {
   };
   googleVidsUrl?: string;
 };
+
+export type CaptionStyleOption = "tiktok" | "classic" | "off";
+export type CaptionColorOption = "yellow" | "green" | "cyan";
+export type VoiceActorOption = "gemini_actor" | "edge_ahmet" | "edge_emel";
+export type VoiceSpeedOption = 0.9 | 1.0 | 1.15;
+export type VoiceEmotionOption = "auto" | "energetic" | "calm" | "dramatic";
+export type MusicDuckingOption = "-18dB" | "-12dB" | "-24dB";
+export type MusicMoodOption = "dynamic_maker" | "acoustic_warm" | "cinematic_ambient";
+
+export type AudioProductionSettings = {
+  captionStyle: CaptionStyleOption;
+  captionColor: CaptionColorOption;
+  voiceActor: VoiceActorOption;
+  voiceSpeed: VoiceSpeedOption;
+  voiceEmotion: VoiceEmotionOption;
+  musicDucking: MusicDuckingOption;
+  musicMood: MusicMoodOption;
+};

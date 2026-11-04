@@ -20,6 +20,7 @@ import {
   X,
   ExternalLink,
   ZoomIn,
+  Film,
 } from "lucide-react";
 import {
   ensureVisualAnchors,
@@ -664,20 +665,21 @@ export function VidsStoryboardDeck({
               >
                 {/* Sahne Başlık Çubuğu */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    <span style={{ fontSize: "12px", background: "#f1f5f9", color: "#334155", fontWeight: 700, padding: "3px 8px", borderRadius: "6px" }}>
-                      Sahne {currentIdx + 1} / {storyboard.scenes.length}
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "13px", fontWeight: 700, color: "#1e293b" }}>
+                      Sahne {currentIdx + 1}
                     </span>
+                    <span style={{ color: "#cbd5e1" }}>•</span>
                     <div style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                      <Clock size={13} color="#6366f1" />
-                      <span style={{ fontSize: "12px", color: "#475569" }}>Süre:</span>
+                      <Clock size={12} color="#64748b" />
+                      <span style={{ fontSize: "12px", color: "#64748b" }}>Süre:</span>
                       <select
                         value={currentScene.durationSeconds || 5}
                         onChange={(e) => {
                           const val = parseInt(e.target.value, 10);
                           if (onUpdateSceneDuration) onUpdateSceneDuration(currentIdx, val);
                         }}
-                        style={{ padding: "2px 6px", borderRadius: "5px", border: "1px solid #cbd5e1", fontSize: "12px", fontWeight: 700 }}
+                        style={{ padding: "2px 6px", borderRadius: "4px", border: "1px solid #cbd5e1", fontSize: "11.5px", fontWeight: 600, background: "#ffffff" }}
                       >
                         {[3, 4, 5, 6, 7, 8, 9, 10].map((sec) => (
                           <option key={sec} value={sec}>{sec} sn</option>
@@ -691,36 +693,38 @@ export function VidsStoryboardDeck({
                     onClick={() => onRerollScene(currentScene.sceneIndex)}
                     disabled={rerollingIndex === currentScene.sceneIndex}
                     style={{
-                      background: "#f8fafc",
-                      border: "1px solid #cbd5e1",
-                      padding: "4px 10px",
+                      background: "#ffffff",
+                      border: "1px solid #e2e8f0",
+                      padding: "4px 8px",
                       borderRadius: "6px",
                       cursor: "pointer",
-                      fontSize: "12px",
+                      fontSize: "11.5px",
                       fontWeight: 600,
-                      color: "#334155",
+                      color: "#475569",
                       display: "inline-flex",
                       alignItems: "center",
                       gap: "5px",
                     }}
+                    title="Sahneyi yapay zeka ile yeniden kurgula"
                   >
                     {rerollingIndex === currentScene.sceneIndex ? <LoaderCircle size={12} className="spin" /> : <RefreshCw size={12} />}
-                    {rerollingIndex === currentScene.sceneIndex ? "Yenileniyor..." : "Sahneyi Yenile"}
+                    <span>{rerollingIndex === currentScene.sceneIndex ? "Yenileniyor..." : "Sahneyi Yenile"}</span>
                   </button>
                 </div>
 
                 {/* 1. Türkçe Sahne Özeti */}
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-                    <label style={{ fontSize: "12px", fontWeight: 600, color: "#334155" }}>
-                      Sahne Özeti (Türkçe)
+                    <label style={{ fontSize: "11.5px", fontWeight: 600, color: "#475569" }}>
+                      Sahne Özeti
                     </label>
                     <button
                       type="button"
                       onClick={() => handleCopy(currentScene.summaryTr, `scene-${currentIdx}-summary`)}
-                      style={{ background: "transparent", border: "none", color: copiedKey === `scene-${currentIdx}-summary` ? "#059669" : "#64748b", cursor: "pointer", padding: "2px" }}
+                      style={{ background: "transparent", border: "none", color: copiedKey === `scene-${currentIdx}-summary` ? "#059669" : "#94a3b8", cursor: "pointer", padding: "2px" }}
+                      title="Kopyala"
                     >
-                      {copiedKey === `scene-${currentIdx}-summary` ? <Check size={13} /> : <Copy size={13} />}
+                      {copiedKey === `scene-${currentIdx}-summary` ? <Check size={12} /> : <Copy size={12} />}
                     </button>
                   </div>
                   <textarea
@@ -728,56 +732,57 @@ export function VidsStoryboardDeck({
                     value={currentScene.summaryTr}
                     onChange={(e) => onUpdateScenePrompt(currentIdx, "summaryTr", e.target.value)}
                     placeholder="Sahne özeti..."
-                    style={{ width: "100%", padding: "8px 10px", fontSize: "13px", borderRadius: "8px", border: "1px solid #cbd5e1", boxSizing: "border-box", resize: "vertical" }}
+                    style={{ width: "100%", padding: "8px 10px", fontSize: "12.5px", borderRadius: "6px", border: "1px solid #e2e8f0", background: "#f8fafc", boxSizing: "border-box", resize: "vertical" }}
                   />
                 </div>
 
                 {/* 2. Ekranda Görünecek Büyük Metin (On-Screen Hook) */}
                 {(narrativeMode === "silent_captions" || currentScene.onScreenTextTr) && (
                   <div>
-                    <label style={{ fontSize: "12px", fontWeight: 600, color: "#b45309", display: "block", marginBottom: "4px" }}>
-                      📱 Ekran Metni (On-Screen Hook / Adım)
+                    <label style={{ fontSize: "11.5px", fontWeight: 600, color: "#d97706", display: "block", marginBottom: "4px" }}>
+                      Ekran Metni (Kanca / Vurgu)
                     </label>
                     <input
                       type="text"
                       value={currentScene.onScreenTextTr || ""}
                       onChange={(e) => onUpdateScenePrompt(currentIdx, "onScreenTextTr", e.target.value)}
-                      placeholder="Örn: Adım 1: Karton Gövdeyi Kes ✂️"
-                      style={{ width: "100%", padding: "8px 10px", fontSize: "13px", fontWeight: 600, borderRadius: "8px", border: "1px solid #fde68a", background: "#fffbeb", boxSizing: "border-box" }}
+                      placeholder="Örn: 800 YILLIK ŞİFRE ÇÖZÜLDÜ!"
+                      style={{ width: "100%", padding: "7px 10px", fontSize: "12.5px", fontWeight: 600, borderRadius: "6px", border: "1px solid #e2e8f0", borderLeft: "3px solid #f59e0b", background: "#ffffff", boxSizing: "border-box" }}
                     />
                   </div>
                 )}
 
                 {/* 3. Eylem Sesleri (Foley / ASMR) VEYA Dış Ses */}
                 {narrativeMode === "diy_asmr" ? (
-                  <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", padding: "10px", borderRadius: "8px" }}>
-                    <span style={{ fontSize: "11.5px", fontWeight: 700, color: "#166534", display: "block", marginBottom: "3px" }}>
-                      🛠️ Veo Eylem Sesleri (Foley / ASMR • Konuşma Yok)
+                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderLeft: "3px solid #10b981", padding: "8px 10px", borderRadius: "6px" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 700, color: "#047857", display: "block", marginBottom: "2px" }}>
+                      Veo Eylem Sesleri &amp; Foley (Ortam Sesi)
                     </span>
-                    <span style={{ fontSize: "12.5px", color: "#15803d" }}>
-                      {currentScene.audioCueEn || currentScene.sfxCueEn || "Karton sürtünmesi, şırınga kayması ve mekanik eylem sesleri"}
+                    <span style={{ fontSize: "12px", color: "#334155" }}>
+                      {currentScene.audioCueEn || currentScene.sfxCueEn || "Mekanik eylem, parmak dokunuşu ve atölye sesleri"}
                     </span>
                   </div>
                 ) : narrativeMode !== "dialogue_only" && narrativeMode !== "silent_captions" ? (
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-                      <label style={{ fontSize: "12px", fontWeight: 600, color: "#0369a1" }}>
-                        🎙️ Türkçe Dış Ses (Voiceover)
+                      <label style={{ fontSize: "11.5px", fontWeight: 600, color: "#0284c7" }}>
+                        Türkçe Dış Ses / Diyalog
                       </label>
                       <button
                         type="button"
                         onClick={() => handleCopy(currentScene.voiceoverTr, `scene-${currentIdx}-vo`)}
-                        style={{ background: "transparent", border: "none", color: copiedKey === `scene-${currentIdx}-vo` ? "#059669" : "#64748b", cursor: "pointer", padding: "2px" }}
+                        style={{ background: "transparent", border: "none", color: copiedKey === `scene-${currentIdx}-vo` ? "#059669" : "#94a3b8", cursor: "pointer", padding: "2px" }}
+                        title="Kopyala"
                       >
-                        {copiedKey === `scene-${currentIdx}-vo` ? <Check size={13} /> : <Copy size={13} />}
+                        {copiedKey === `scene-${currentIdx}-vo` ? <Check size={12} /> : <Copy size={12} />}
                       </button>
                     </div>
                     <textarea
                       rows={2}
                       value={currentScene.voiceoverTr || ""}
                       onChange={(e) => onUpdateScenePrompt(currentIdx, "voiceoverTr", e.target.value)}
-                      placeholder="Türkçe seslendirme metni..."
-                      style={{ width: "100%", padding: "8px 10px", fontSize: "13px", borderRadius: "8px", border: "1px solid #bae6fd", background: "#f0f9ff", boxSizing: "border-box", resize: "vertical" }}
+                      placeholder="Türkçe seslendirme / diyalog metni..."
+                      style={{ width: "100%", padding: "7px 10px", fontSize: "12.5px", borderRadius: "6px", border: "1px solid #e2e8f0", borderLeft: "3px solid #0284c7", background: "#ffffff", boxSizing: "border-box", resize: "vertical" }}
                     />
                   </div>
                 ) : null}
@@ -849,75 +854,152 @@ export function VidsStoryboardDeck({
                 </div>
 
                 {/* 5. Google Flow Sahne Klibi Önizleme & Oynatıcı */}
-                {activeJob && activeJob.request?.engine === "flow" && (
-                  <div
-                    style={{
-                      marginTop: "4px",
-                      padding: "12px",
-                      borderRadius: "10px",
-                      background: "#fbfbfe",
-                      border: "1px solid #e0e7ff",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "8px",
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontSize: "12.5px", fontWeight: 700, color: "#6d28d9", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                        <span>🌌</span>
-                        <span>Flow Sahne {currentScene.sceneIndex} Klibi</span>
-                      </span>
-                      {activeJob.status === "running" ? (
-                        <span style={{ fontSize: "11px", color: "#6366f1", display: "inline-flex", alignItems: "center", gap: "4px", background: "#eef2ff", padding: "2px 8px", borderRadius: "12px", fontWeight: 600 }}>
-                          <LoaderCircle size={11} className="spin" />
-                          {activeJob.progress?.detail || "Üretim devam ediyor..."}
-                        </span>
-                      ) : activeJob.status === "complete" ? (
-                        <span style={{ fontSize: "11px", color: "#166534", background: "#dcfce7", padding: "2px 8px", borderRadius: "12px", fontWeight: 600 }}>
-                          ✓ Sahne Hazır
-                        </span>
-                      ) : null}
-                    </div>
+                {(() => {
+                  const isJobMatching = Boolean(
+                    activeJob &&
+                    activeJob.request?.engine === "flow" &&
+                    (activeJob.status === "running" ||
+                     activeJob.status === "queued" ||
+                     activeJob.status === "rendering" ||
+                     (activeJob.status === "complete" &&
+                      (activeJob.request?.title === storyboard.title ||
+                       activeJob.request?.topic === storyboard.title)))
+                  );
+                  if (!isJobMatching || !activeJob) return null;
 
-                    {projectId && (
-                      <div style={{ position: "relative", width: "100%", borderRadius: "8px", overflow: "hidden", background: "#090d16" }}>
-                        <video
-                          key={`${activeJob.id}-${currentScene.sceneIndex}`}
-                          controls
-                          playsInline
-                          preload="metadata"
-                          src={`/api/projects/${encodeURIComponent(projectId)}/flow-engine/scenes/${activeJob.id}/${currentScene.sceneIndex}`}
-                          poster={`/api/projects/${encodeURIComponent(projectId)}/flow-engine/scenes/${activeJob.id}/${currentScene.sceneIndex}?thumb=1`}
-                          style={{ width: "100%", maxHeight: "260px", display: "block" }}
-                        />
+                  return (
+                    <div
+                      style={{
+                        marginTop: "4px",
+                        padding: "12px",
+                        borderRadius: "10px",
+                        background: "#fbfbfe",
+                        border: "1px solid #e0e7ff",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "8px",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: "12.5px", fontWeight: 700, color: "#6d28d9", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                          <span>🌌</span>
+                          <span>Flow Sahne {currentScene.sceneIndex} Klibi</span>
+                        </span>
+                        {activeJob.status === "running" ? (
+                          <span style={{ fontSize: "11px", color: "#6366f1", display: "inline-flex", alignItems: "center", gap: "4px", background: "#eef2ff", padding: "2px 8px", borderRadius: "12px", fontWeight: 600 }}>
+                            <LoaderCircle size={11} className="spin" />
+                            {activeJob.progress?.detail || "Üretim devam ediyor..."}
+                          </span>
+                        ) : activeJob.status === "complete" ? (
+                          <span style={{ fontSize: "11px", color: "#166534", background: "#dcfce7", padding: "2px 8px", borderRadius: "12px", fontWeight: 600 }}>
+                            ✓ Sahne Hazır
+                          </span>
+                        ) : null}
                       </div>
-                    )}
 
-                    {projectId && (
-                      <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "2px" }}>
+                      {projectId && (
+                        <div style={{ position: "relative", width: "100%", borderRadius: "8px", overflow: "hidden", background: "#0f172a", display: "flex", justifyContent: "center", alignItems: "center" }}>
+                          <video
+                            key={`${activeJob.id}-${currentScene.sceneIndex}`}
+                            controls
+                            playsInline
+                            preload="metadata"
+                            src={`/api/projects/${encodeURIComponent(projectId)}/flow-engine/scenes/${activeJob.id}/${currentScene.sceneIndex}`}
+                            poster={`/api/projects/${encodeURIComponent(projectId)}/flow-engine/scenes/${activeJob.id}/${currentScene.sceneIndex}?thumb=1`}
+                            style={{ maxHeight: "360px", maxWidth: "100%", height: "auto", display: "block", borderRadius: "6px" }}
+                          />
+                        </div>
+                      )}
+
+                      {projectId && (
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "2px" }}>
+                          <a
+                            href={`/api/projects/${encodeURIComponent(projectId)}/flow-engine/scenes/${activeJob.id}/${currentScene.sceneIndex}`}
+                            download={`flow_sahne_${currentScene.sceneIndex}.mp4`}
+                            style={{
+                              fontSize: "11px",
+                              color: "#4f46e5",
+                              fontWeight: 600,
+                              textDecoration: "none",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              background: "#ffffff",
+                              border: "1px solid #c7d2fe",
+                              padding: "4px 10px",
+                              borderRadius: "6px",
+                            }}
+                          >
+                            ⬇️ Sahne Klibini İndir (.mp4)
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* 6. Birleştirilmiş Master Video (Reels / Shorts) */}
+                {(() => {
+                  const isJobMatching = Boolean(
+                    activeJob &&
+                    activeJob.request?.engine === "flow" &&
+                    activeJob.status === "complete" &&
+                    (activeJob.request?.title === storyboard.title ||
+                     activeJob.request?.topic === storyboard.title)
+                  );
+                  if (!isJobMatching || !activeJob || !projectId) return null;
+
+                  return (
+                    <div
+                      style={{
+                        marginTop: "12px",
+                        padding: "14px",
+                        borderRadius: "10px",
+                        background: "linear-gradient(135deg, #faf5ff 0%, #f5f3ff 100%)",
+                        border: "1px solid #d8b4fe",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "10px",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: "13px", fontWeight: 700, color: "#581c87", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                          <Film size={15} color="#7c3aed" />
+                          <span>Birleştirilmiş Master Video (Reels / Shorts)</span>
+                        </span>
                         <a
-                          href={`/api/projects/${encodeURIComponent(projectId)}/flow-engine/scenes/${activeJob.id}/${currentScene.sceneIndex}`}
-                          download={`flow_sahne_${currentScene.sceneIndex}.mp4`}
+                          href={`/api/projects/${encodeURIComponent(projectId)}/flow-engine/scenes/${activeJob.id}/master`}
+                          download="master_video_tam.mp4"
                           style={{
-                            fontSize: "11px",
-                            color: "#4f46e5",
+                            fontSize: "11.5px",
+                            color: "#ffffff",
+                            background: "#7c3aed",
                             fontWeight: 600,
                             textDecoration: "none",
                             display: "inline-flex",
                             alignItems: "center",
                             gap: "4px",
-                            background: "#ffffff",
-                            border: "1px solid #c7d2fe",
-                            padding: "4px 10px",
+                            padding: "5px 12px",
                             borderRadius: "6px",
+                            boxShadow: "0 1px 3px rgba(124, 58, 237, 0.3)",
                           }}
                         >
-                          ⬇️ Sahne Klibini İndir (.mp4)
+                          Tam Filmi İndir (.mp4)
                         </a>
                       </div>
-                    )}
-                  </div>
-                )}
+                      <div style={{ position: "relative", width: "100%", borderRadius: "8px", overflow: "hidden", background: "#0f172a", display: "flex", justifyContent: "center", alignItems: "center" }}>
+                        <video
+                          key={`${activeJob.id}-master`}
+                          controls
+                          playsInline
+                          preload="metadata"
+                          src={`/api/projects/${encodeURIComponent(projectId)}/flow-engine/scenes/${activeJob.id}/master`}
+                          style={{ maxHeight: "380px", maxWidth: "100%", height: "auto", display: "block", borderRadius: "6px" }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Sahneler Arası Gezinme Alt Butonları */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "4px" }}>
