@@ -336,6 +336,25 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
 
         const jobs = Array.isArray(data.jobs) ? data.jobs : [];
         const latestJob = jobs[0];
+        if (latestJob?.request?.storyboard?.scenes?.length) {
+          const latestSb = latestJob.request.storyboard as RssStoryboard;
+          setStoryboard((prev) => {
+            if (!prev) return latestSb;
+            if (prev.title !== latestSb.title || prev.scenes.length !== latestSb.scenes.length) {
+              return prev;
+            }
+            let changed = false;
+            const mergedScenes = prev.scenes.map((sc, idx) => {
+              const incomingUrl = latestSb.scenes?.[idx]?.previewImageUrl;
+              if (incomingUrl && incomingUrl !== sc.previewImageUrl) {
+                changed = true;
+                return { ...sc, previewImageUrl: incomingUrl };
+              }
+              return sc;
+            });
+            return changed ? { ...prev, scenes: mergedScenes } : prev;
+          });
+        }
         if (
           latestJob &&
           latestJob.status === "failed" &&
@@ -545,6 +564,20 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
       scenes: nextScenes,
       totalDurationSeconds,
     });
+  }
+
+  function handleDeleteScene(sceneIndex: number) {
+    if (!storyboard || storyboard.scenes.length <= 2) return;
+    const filtered = storyboard.scenes
+      .filter((_, idx) => idx !== sceneIndex)
+      .map((sc, idx) => ({ ...sc, sceneIndex: idx + 1 }));
+    const totalDurationSeconds = filtered.reduce((acc, s) => acc + (s.durationSeconds || 5), 0);
+    setStoryboard({
+      ...storyboard,
+      scenes: filtered,
+      totalDurationSeconds,
+    });
+    setMessage(`Sahne ${sceneIndex + 1} senaryodan çıkarıldı (${filtered.length} sahne kaldı).`);
   }
 
   async function handleGenerateSceneImage(sceneIndex: number) {
@@ -893,6 +926,7 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
           onConfirmAndEnqueue={() => void handleConfirmAndEnqueue()}
           onClearStoryboard={handleClearStoryboard}
           onUpdateScene={handleUpdateScene}
+          onDeleteScene={handleDeleteScene}
           generatingSceneImages={generatingSceneImages}
           onGenerateSceneImage={(idx) => void handleGenerateSceneImage(idx)}
           onGenerateAllSceneImages={() => void handleGenerateAllSceneImages()}

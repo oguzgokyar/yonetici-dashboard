@@ -10,7 +10,13 @@ function endpointOrigin(baseUrl: string) { return new URL(baseUrl).origin; }
 
 async function responseMessage(response: Response) {
   const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-  return body?.error?.message || `CliProxyAPI ${response.status} yanıtı verdi.`;
+  const raw = body?.error?.message || `CliProxyAPI ${response.status} yanıtı verdi.`;
+  if (/auth_unavailable|exhausted your capacity|QUOTA_EXHAUSTED|cooldown/i.test(raw)) {
+    const remMatch = raw.match(/remaining=([0-9hms]+)|reset after ([0-9hms]+)/i);
+    const waitInfo = remMatch ? ` (Yenilenme süresi: ${remMatch[1] || remMatch[2]})` : "";
+    return `CliProxyAPI (gemini-3.1-flash-image) görsel üretim kotası doldu${waitInfo}. Önceki sahnelerde üretilen görseller korundu; kota yenilendiğinde veya yeni Antigravity hesabı eklendiğinde kaldığı sahneden devam edebilirsiniz.`;
+  }
+  return raw;
 }
 
 export async function loadMedia(value?: string): Promise<MediaInput | null> {

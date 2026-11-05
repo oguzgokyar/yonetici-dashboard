@@ -62,9 +62,16 @@ interface RssStoryboardDeckProps {
   onConfirmAndEnqueue: () => void;
   onClearStoryboard: () => void;
   onUpdateScene: (sceneIndex: number, updates: Partial<RssScenePlan>) => void;
+  onDeleteScene?: (sceneIndex: number) => void;
   generatingSceneImages?: Record<number, boolean>;
   onGenerateSceneImage?: (sceneIndex: number) => void;
   onGenerateAllSceneImages?: () => void;
+}
+
+function toThumbUrl(url: string): string {
+  if (!url) return "";
+  if (url.includes("thumb=1")) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}thumb=1`;
 }
 
 export function RssStoryboardDeck({
@@ -95,6 +102,7 @@ export function RssStoryboardDeck({
   onConfirmAndEnqueue,
   onClearStoryboard,
   onUpdateScene,
+  onDeleteScene,
   generatingSceneImages = {},
   onGenerateSceneImage,
   onGenerateAllSceneImages,
@@ -808,6 +816,7 @@ export function RssStoryboardDeck({
             >
               {storyboard.scenes.map((sc, idx) => {
                 const isActive = idx === activeSceneTabIdx;
+                const hasImg = Boolean(sc.previewImageUrl);
                 const roleLabel =
                   sc.role === "hook"
                     ? "Kanca"
@@ -831,15 +840,32 @@ export function RssStoryboardDeck({
                       fontWeight: isActive ? 700 : 600,
                       cursor: "pointer",
                       whiteSpace: "nowrap",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px",
                     }}
                   >
-                    {idx + 1}. {roleLabel} ({sc.durationSeconds}sn)
+                    <span>
+                      {idx + 1}. {roleLabel} ({sc.durationSeconds}sn)
+                    </span>
+                    {hasImg && (
+                      <span
+                        title="Sahne görseli hazır"
+                        style={{
+                          width: "7px",
+                          height: "7px",
+                          borderRadius: "99px",
+                          background: "#10b981",
+                          display: "inline-block",
+                        }}
+                      />
+                    )}
                   </button>
                 );
               })}
             </div>
 
-            {/* Seçili Sahne Düzenleme Kartı (Sol: Sahne Kurgu Özeti & Metinler | Sağ: Üretilen Sahne Görseli Önizleme) */}
+            {/* Seçili Sahne Düzenleme Kartı (Sol: Sahne Kurgu Özeti & Metinler | Sağ: Kutu Ölçüsünde Hafif Thumbnail Önizleme) */}
             <div
               style={{
                 padding: "14px",
@@ -847,8 +873,8 @@ export function RssStoryboardDeck({
                 border: "1px solid #cbd5e1",
                 background: "#ffffff",
                 display: "grid",
-                gridTemplateColumns: "1fr 210px",
-                gap: "16px",
+                gridTemplateColumns: "1fr 148px",
+                gap: "14px",
                 alignItems: "start",
               }}
             >
@@ -1113,16 +1139,19 @@ export function RssStoryboardDeck({
                 </div>
               </div>
 
-              {/* Sağ Sütun: Sahne Görseli Önizleme Kutusu */}
+              {/* Sağ Sütun: Kutu Alanı Ölçüsünde Hafif Önizleme (Thumbnail ~10KB WebP, Tıklandığında Tam Boyut) */}
               <div
                 style={{
                   display: "flex",
                   flexDirection: "column",
-                  gap: "8px",
-                  padding: "10px",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "8px",
                   borderRadius: "10px",
                   border: "1px solid #e2e8f0",
                   background: "#f8fafc",
+                  width: "148px",
+                  boxSizing: "border-box",
                 }}
               >
                 <div
@@ -1130,12 +1159,13 @@ export function RssStoryboardDeck({
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
+                    width: "100%",
                   }}
                 >
-                  <span style={{ fontSize: "11px", fontWeight: 700, color: "#334155" }}>
-                    🖼️ Sahne {currentScene.sceneIndex} Görseli
+                  <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#334155" }}>
+                    🖼️ Sahne {currentScene.sceneIndex}
                   </span>
-                  <span style={{ fontSize: "10px", color: "#64748b", fontWeight: 600 }}>
+                  <span style={{ fontSize: "9.5px", color: "#64748b", fontWeight: 600 }}>
                     {storyboard.aspectRatio}
                   </span>
                 </div>
@@ -1143,21 +1173,21 @@ export function RssStoryboardDeck({
                 <div
                   style={{
                     position: "relative",
-                    width: "100%",
-                    aspectRatio:
+                    width: "130px",
+                    height:
                       storyboard.aspectRatio === "16:9"
-                        ? "16 / 9"
+                        ? "82px"
                         : storyboard.aspectRatio === "1:1"
-                        ? "1 / 1"
-                        : "9 / 16",
-                    maxHeight: "240px",
-                    borderRadius: "8px",
+                        ? "130px"
+                        : "156px",
+                    borderRadius: "7px",
                     overflow: "hidden",
                     background: "#e2e8f0",
                     border: "1px solid #cbd5e1",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
+                    flexShrink: 0,
                   }}
                 >
                   {generatingSceneImages[activeSceneTabIdx] ? (
@@ -1166,23 +1196,25 @@ export function RssStoryboardDeck({
                         display: "flex",
                         flexDirection: "column",
                         alignItems: "center",
-                        gap: "6px",
+                        gap: "5px",
                         color: "#4338ca",
-                        padding: "12px",
+                        padding: "8px",
                         textAlign: "center",
                       }}
                     >
-                      <LoaderCircle className="spin" size={22} />
-                      <span style={{ fontSize: "11px", fontWeight: 600 }}>
-                        CliProxy ile üretiliyor...
-                      </span>
+                      <LoaderCircle className="spin" size={18} />
+                      <span style={{ fontSize: "10px", fontWeight: 600 }}>Üretiliyor...</span>
                     </div>
                   ) : currentScene.previewImageUrl ? (
                     <>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={currentScene.previewImageUrl}
+                        src={toThumbUrl(currentScene.previewImageUrl)}
                         alt={`Sahne ${currentScene.sceneIndex}`}
+                        loading="lazy"
+                        decoding="async"
+                        width={130}
+                        height={156}
                         onClick={() =>
                           setLightboxImage({
                             url: currentScene.previewImageUrl!,
@@ -1195,7 +1227,9 @@ export function RssStoryboardDeck({
                           height: "100%",
                           objectFit: "cover",
                           cursor: "zoom-in",
+                          display: "block",
                         }}
+                        title="Tam boyutta görüntülemek için tıklayın"
                       />
                       <button
                         type="button"
@@ -1208,22 +1242,23 @@ export function RssStoryboardDeck({
                         }
                         style={{
                           position: "absolute",
-                          top: "6px",
-                          right: "6px",
-                          background: "rgba(15, 23, 42, 0.72)",
+                          bottom: "5px",
+                          right: "5px",
+                          background: "rgba(15, 23, 42, 0.75)",
                           color: "#ffffff",
                           border: "none",
-                          borderRadius: "6px",
-                          padding: "4px 6px",
+                          borderRadius: "5px",
+                          padding: "3px 5px",
                           cursor: "pointer",
                           display: "inline-flex",
                           alignItems: "center",
                           gap: "3px",
-                          fontSize: "10px",
+                          fontSize: "9.5px",
                         }}
-                        title="Tam ekran büyüt"
+                        title="Tam boyutta görüntüle"
                       >
-                        <ZoomIn size={12} />
+                        <ZoomIn size={11} />
+                        <span>Büyüt</span>
                       </button>
                     </>
                   ) : (
@@ -1232,15 +1267,15 @@ export function RssStoryboardDeck({
                         display: "flex",
                         flexDirection: "column",
                         alignItems: "center",
-                        gap: "6px",
+                        gap: "4px",
                         color: "#64748b",
-                        padding: "12px",
+                        padding: "8px",
                         textAlign: "center",
                       }}
                     >
-                      <ImageIcon size={22} style={{ opacity: 0.55 }} />
-                      <span style={{ fontSize: "11px", lineHeight: 1.3 }}>
-                        İster şimdi önizleyin, ister video üretilirken otomatik oluşturulsun
+                      <ImageIcon size={18} style={{ opacity: 0.55 }} />
+                      <span style={{ fontSize: "10px", lineHeight: 1.25 }}>
+                        Önizleme görseli yok
                       </span>
                     </div>
                   )}
@@ -1253,28 +1288,58 @@ export function RssStoryboardDeck({
                     disabled={Boolean(generatingSceneImages[activeSceneTabIdx])}
                     style={{
                       width: "100%",
-                      padding: "6px 8px",
+                      padding: "5px 6px",
                       borderRadius: "6px",
                       border: "1px solid #c7d2fe",
                       background: "#eef2ff",
                       color: "#4338ca",
-                      fontSize: "11px",
+                      fontSize: "10.5px",
                       fontWeight: 700,
                       cursor: generatingSceneImages[activeSceneTabIdx] ? "wait" : "pointer",
                       display: "inline-flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      gap: "5px",
+                      gap: "4px",
                     }}
                   >
                     {generatingSceneImages[activeSceneTabIdx] ? (
-                      <LoaderCircle className="spin" size={12} />
+                      <LoaderCircle className="spin" size={11} />
                     ) : (
-                      <RefreshCw size={12} />
+                      <RefreshCw size={11} />
                     )}
                     <span>
-                      {currentScene.previewImageUrl ? "Görseli Yeniden Üret" : "Sahne Görselini Üret"}
+                      {currentScene.previewImageUrl ? "Yeniden Üret" : "Görsel Üret"}
                     </span>
+                  </button>
+                )}
+
+                {onDeleteScene && storyboard.scenes.length > 2 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextIdx = Math.max(0, activeSceneTabIdx - 1);
+                      onDeleteScene(activeSceneTabIdx);
+                      setActiveSceneTabIdx(nextIdx);
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "4px 6px",
+                      borderRadius: "6px",
+                      border: "1px solid #fecaca",
+                      background: "#fef2f2",
+                      color: "#dc2626",
+                      fontSize: "10px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "4px",
+                    }}
+                    title="Bu sahneyi senaryodan çıkar"
+                  >
+                    <Trash2 size={10} />
+                    <span>Sahneyi Sil</span>
                   </button>
                 )}
               </div>
