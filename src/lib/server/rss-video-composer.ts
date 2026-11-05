@@ -1,9 +1,11 @@
 import "server-only";
 
 import { execFile } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
+import sharp from "sharp";
 import { getDatabase } from "@/lib/server/database";
 import { decryptSecret } from "@/lib/server/secrets";
 import { renderCreative } from "@/lib/server/cliproxy-creative";
@@ -522,10 +524,27 @@ export async function processRssVideoJob(job: {
       musicDucking: "-18dB",
     };
 
-    // 1. ADIM: Sahne Görsellerini CLIProxyAPI ile Üret
+    // 1. ADIM: Sahne Görsellerini CLIProxyAPI ile Üret (Önceden üretilmiş sahne görseli varsa yeniden kullan, yoksa üretip kaydet)
+    const assetsDir = path.join(process.cwd(), ".data", "assets");
+    fs.mkdirSync(assetsDir, { recursive: true });
     const imagePaths: string[] = [];
+
     for (let i = 0; i < scenes.length; i++) {
       const sc = scenes[i];
+      const imgOutPath = path.join(tempDir, `scene_${i + 1}.png`);
+
+      // Eğer kullanıcı sahne önizlemesinde görseli zaten ürettiyse doğrudan onu kullan
+      const existingAssetId = sc.previewImageUrl?.match(/^\/api\/assets\/([a-f0-9-]{36})/i)?.[1];
+      const existingAssetPath = existingAssetId
+        ? path.join(assetsDir, `${existingAssetId}.png`)
+        : "";
+
+      if (existingAssetPath && fs.existsSync(existingAssetPath)) {
+        fs.copyFileSync(existingAssetPath, imgOutPath);
+        imagePaths.push(imgOutPath);
+        continue;
+      }
+
       const pct = Math.round(12 + ((i + 0.5) / scenes.length) * 40);
       updateProgress(
         "imaging",
@@ -534,7 +553,6 @@ export async function processRssVideoJob(job: {
         { currentScene: i + 1, totalScenes: scenes.length }
       );
 
-      const imgOutPath = path.join(tempDir, `scene_${i + 1}.png`);
       const rendered = await renderCreative({
         baseUrl: cliproxyBaseUrl,
         apiKey: cliproxyApiKey,
@@ -543,8 +561,46 @@ export async function processRssVideoJob(job: {
         ratio: aspectRatio,
       });
 
-      fs.writeFileSync(imgOutPath, rendered.bytes);
+      const pngBytes = await sharp(rendered.bytes).png().toBuffer();
+      fs.writeFileSync(imgOutPath, pngBytes);
       imagePaths.push(imgOutPath);
+
+      // Kalıcı sahne önizlemesi olarak .data/assets içine de kaydet ki kullanıcı sağ panelde görebilsin
+      try {
+        const assetId = crypto.randomUUID();
+        const assetPngPath = path.join(assetsDir, `${assetId}.png`);
+        const assetThumbPath = path.join(assetsDir, `${assetId}_thumb.webp`);
+        const assetMetaPath = path.join(assetsDir, `${assetId}.json`);
+        fs.writeFileSync(assetPngPath, pngBytes);
+        await sharp(pngBytes)
+          .resize({ width: 360, withoutEnlargement: true })
+          .webp({ quality: 78 })
+          .toFile(assetThumbPath);
+        fs.writeFileSync(
+          assetMetaPath,
+          JSON.stringify({
+            id: assetId,
+            projectId: job.project_id,
+            mimeType: "image/png",
+            extension: "png",
+            isRssSceneImage: true,
+            sceneIndex: i + 1,
+            createdAt: new Date().toISOString(),
+          }),
+          "utf-8"
+        );
+        sc.previewImageUrl = `/api/assets/${assetId}`;
+        if (storyboard) {
+          storyboard.scenes = scenes;
+          req.storyboard = storyboard;
+          db.prepare("UPDATE generation_jobs SET request_json = ? WHERE id = ?").run(
+            JSON.stringify(req),
+            job.id
+          );
+        }
+      } catch {
+        // Önizleme kaydı hatası ana video üretimini durdurmaz
+      }
     }
 
     // 2. ADIM: Gemini 2.0 TTS ile Sahne Bazlı Seslendirme (Edge-TTS Yedeği YOK, Fail-Fast)

@@ -68,6 +68,7 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
   const [planning, setPlanning] = useState(false);
   const [revising, setRevising] = useState(false);
   const [enqueueing, setEnqueueing] = useState(false);
+  const [generatingSceneImages, setGeneratingSceneImages] = useState<Record<number, boolean>>({});
   const [loadingVideos, setLoadingVideos] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -309,6 +310,23 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
         prevActiveJobIdRef.current = data.activeJob.id;
         setActiveJob(data.activeJob);
         setLastErrorJob(null);
+        // Arka planda üretilen sahne görsellerini canlı olarak sağ önizleme kutusuna yansıt
+        const activeSb = data.activeJob.request?.storyboard as RssStoryboard | undefined;
+        if (activeSb?.scenes?.length) {
+          setStoryboard((prev) => {
+            if (!prev) return activeSb;
+            let changed = false;
+            const mergedScenes = prev.scenes.map((sc, idx) => {
+              const incomingUrl = activeSb.scenes?.[idx]?.previewImageUrl;
+              if (incomingUrl && incomingUrl !== sc.previewImageUrl) {
+                changed = true;
+                return { ...sc, previewImageUrl: incomingUrl };
+              }
+              return sc;
+            });
+            return changed ? { ...prev, scenes: mergedScenes } : prev;
+          });
+        }
       } else {
         if (prevActiveJobIdRef.current) {
           prevActiveJobIdRef.current = null;
@@ -527,6 +545,58 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
       scenes: nextScenes,
       totalDurationSeconds,
     });
+  }
+
+  async function handleGenerateSceneImage(sceneIndex: number) {
+    if (!storyboard || !storyboard.scenes[sceneIndex]) return;
+    if (generatingSceneImages[sceneIndex]) return;
+
+    const targetScene = storyboard.scenes[sceneIndex];
+    setGeneratingSceneImages((prev) => ({ ...prev, [sceneIndex]: true }));
+    setMessage(`Sahne ${sceneIndex + 1} görseli CliProxy ile üretiliyor...`);
+
+    try {
+      const res = await fetch(
+        `/api/projects/${encodeURIComponent(projectId)}/rss-videos/scene-image`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sceneIndex: sceneIndex + 1,
+            promptEn: targetScene.promptEn,
+            aspectRatio: storyboard.aspectRatio || aspectRatio,
+          }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok || !data.ok || !data.imageUrl) {
+        throw new Error(data.message || "Sahne görseli üretilemedi.");
+      }
+
+      setStoryboard((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          scenes: prev.scenes.map((sc, idx) =>
+            idx === sceneIndex ? { ...sc, previewImageUrl: data.imageUrl } : sc
+          ),
+        };
+      });
+      setMessage(`Sahne ${sceneIndex + 1} görseli hazır.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Sahne görseli üretilemedi.");
+    } finally {
+      setGeneratingSceneImages((prev) => ({ ...prev, [sceneIndex]: false }));
+    }
+  }
+
+  async function handleGenerateAllSceneImages() {
+    if (!storyboard || !storyboard.scenes.length) return;
+    setMessage(`Tüm sahnelerin (${storyboard.scenes.length} sahne) görselleri üretiliyor...`);
+    for (let i = 0; i < storyboard.scenes.length; i++) {
+      await handleGenerateSceneImage(i);
+    }
+    setMessage("Tüm sahne görselleri hazır! Sağ önizleme alanından inceleyebilirsiniz.");
   }
 
   function handleClearStoryboard() {
@@ -823,6 +893,9 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
           onConfirmAndEnqueue={() => void handleConfirmAndEnqueue()}
           onClearStoryboard={handleClearStoryboard}
           onUpdateScene={handleUpdateScene}
+          generatingSceneImages={generatingSceneImages}
+          onGenerateSceneImage={(idx) => void handleGenerateSceneImage(idx)}
+          onGenerateAllSceneImages={() => void handleGenerateAllSceneImages()}
         />
       </div>
 

@@ -17,6 +17,9 @@ import {
   Copy,
   Globe,
   FileText,
+  Image as ImageIcon,
+  ZoomIn,
+  X,
 } from "lucide-react";
 import {
   RSS_CAMERA_EFFECT_LABELS,
@@ -59,6 +62,9 @@ interface RssStoryboardDeckProps {
   onConfirmAndEnqueue: () => void;
   onClearStoryboard: () => void;
   onUpdateScene: (sceneIndex: number, updates: Partial<RssScenePlan>) => void;
+  generatingSceneImages?: Record<number, boolean>;
+  onGenerateSceneImage?: (sceneIndex: number) => void;
+  onGenerateAllSceneImages?: () => void;
 }
 
 export function RssStoryboardDeck({
@@ -89,6 +95,9 @@ export function RssStoryboardDeck({
   onConfirmAndEnqueue,
   onClearStoryboard,
   onUpdateScene,
+  generatingSceneImages = {},
+  onGenerateSceneImage,
+  onGenerateAllSceneImages,
 }: RssStoryboardDeckProps) {
   const [selectedSourceFilter, setSelectedSourceFilter] = useState<string>("");
   const [showAddSourceForm, setShowAddSourceForm] = useState(false);
@@ -98,6 +107,13 @@ export function RssStoryboardDeck({
   const [activeSceneTabIdx, setActiveSceneTabIdx] = useState(0);
   const [showPromptAccordion, setShowPromptAccordion] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<{
+    url: string;
+    title: string;
+    promptEn: string;
+  } | null>(null);
+
+  const isAnySceneImageGenerating = Object.values(generatingSceneImages).some(Boolean);
 
   const currentScene = storyboard?.scenes?.[activeSceneTabIdx] || storyboard?.scenes?.[0];
   const styleBadge =
@@ -681,7 +697,39 @@ export function RssStoryboardDeck({
           </div>
 
           {storyboard && (
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              {onGenerateAllSceneImages && (
+                <button
+                  type="button"
+                  onClick={onGenerateAllSceneImages}
+                  disabled={isAnySceneImageGenerating || enqueueing}
+                  style={{
+                    fontSize: "11.5px",
+                    fontWeight: 700,
+                    padding: "5px 11px",
+                    borderRadius: "8px",
+                    border: "1px solid #c7d2fe",
+                    background: "#eef2ff",
+                    color: "#4338ca",
+                    cursor: isAnySceneImageGenerating ? "wait" : "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                  }}
+                  title="Tüm sahnelerin görsellerini CliProxy ile üretip sağ önizleme kutusunda gösterir"
+                >
+                  {isAnySceneImageGenerating ? (
+                    <LoaderCircle className="spin" size={13} />
+                  ) : (
+                    <ImageIcon size={13} />
+                  )}
+                  <span>
+                    {isAnySceneImageGenerating
+                      ? "Sahne Görselleri Üretiliyor..."
+                      : "✨ Tüm Sahne Görsellerini Üret"}
+                  </span>
+                </button>
+              )}
               <span
                 style={{
                   fontSize: "11.5px",
@@ -791,271 +839,443 @@ export function RssStoryboardDeck({
               })}
             </div>
 
-            {/* Seçili Sahne Düzenleme Kartı */}
+            {/* Seçili Sahne Düzenleme Kartı (Sol: Sahne Kurgu Özeti & Metinler | Sağ: Üretilen Sahne Görseli Önizleme) */}
             <div
               style={{
                 padding: "14px",
                 borderRadius: "10px",
                 border: "1px solid #cbd5e1",
                 background: "#ffffff",
-                display: "flex",
-                flexDirection: "column",
-                gap: "12px",
+                display: "grid",
+                gridTemplateColumns: "1fr 210px",
+                gap: "16px",
+                alignItems: "start",
               }}
             >
-              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "10px" }}>
+              {/* Sol Sütun: Sahne Kurgu Özeti, Dış Ses, Efektler ve Görsel Promptu */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px", minWidth: 0 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: "10px" }}>
+                  <div>
+                    <label
+                      style={{
+                        fontSize: "11.5px",
+                        fontWeight: 700,
+                        color: "#334155",
+                        display: "block",
+                        marginBottom: "4px",
+                      }}
+                    >
+                      Sahne {currentScene.sceneIndex} Kurgu Özeti
+                    </label>
+                    <input
+                      type="text"
+                      value={currentScene.summaryTr}
+                      onChange={(e) =>
+                        onUpdateScene(activeSceneTabIdx, { summaryTr: e.target.value })
+                      }
+                      style={{
+                        width: "100%",
+                        boxSizing: "border-box",
+                        padding: "7px 10px",
+                        borderRadius: "6px",
+                        border: "1px solid #cbd5e1",
+                        fontSize: "12.5px",
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label
+                      style={{
+                        fontSize: "11.5px",
+                        fontWeight: 700,
+                        color: "#334155",
+                        display: "block",
+                        marginBottom: "4px",
+                      }}
+                    >
+                      Ekran Üst Başlığı (Kısa Kanca)
+                    </label>
+                    <input
+                      type="text"
+                      value={currentScene.onScreenTextTr}
+                      onChange={(e) =>
+                        onUpdateScene(activeSceneTabIdx, { onScreenTextTr: e.target.value })
+                      }
+                      placeholder="Örn: ŞAŞIRTICI GERÇEK"
+                      style={{
+                        width: "100%",
+                        boxSizing: "border-box",
+                        padding: "7px 10px",
+                        borderRadius: "6px",
+                        border: "1px solid #cbd5e1",
+                        fontSize: "12.5px",
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Türkçe Dış Ses Metni (Gemini 2.0 TTS) */}
                 <div>
-                  <label
+                  <div
                     style={{
-                      fontSize: "11.5px",
-                      fontWeight: 700,
-                      color: "#334155",
-                      display: "block",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
                       marginBottom: "4px",
                     }}
                   >
-                    Sahne {currentScene.sceneIndex} Kurgu Özeti
-                  </label>
-                  <input
-                    type="text"
-                    value={currentScene.summaryTr}
+                    <label style={{ fontSize: "11.5px", fontWeight: 700, color: "#4338ca" }}>
+                      🎙️ Gemini 2.0 TTS Dış Ses Metni (Türkçe)
+                    </label>
+                    <span style={{ fontSize: "11px", color: "#64748b" }}>
+                      {currentScene.voiceoverTr.split(/\s+/).filter(Boolean).length} kelime (~
+                      {Math.max(
+                        2,
+                        Math.round(
+                          currentScene.voiceoverTr.split(/\s+/).filter(Boolean).length / 2.2
+                        )
+                      )}{" "}
+                      sn okuma)
+                    </span>
+                  </div>
+                  <textarea
+                    value={currentScene.voiceoverTr}
                     onChange={(e) =>
-                      onUpdateScene(activeSceneTabIdx, { summaryTr: e.target.value })
+                      onUpdateScene(activeSceneTabIdx, { voiceoverTr: e.target.value })
                     }
+                    rows={2}
                     style={{
                       width: "100%",
                       boxSizing: "border-box",
-                      padding: "7px 10px",
+                      padding: "8px 10px",
                       borderRadius: "6px",
-                      border: "1px solid #cbd5e1",
-                      fontSize: "12.5px",
+                      border: "1px solid #a5b4fc",
+                      background: "#fafaff",
+                      fontSize: "13px",
+                      fontFamily: "inherit",
                     }}
                   />
                 </div>
+
+                {/* Kamera Hareketi, Geçiş ve Ses Duygusu */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                  <div>
+                    <label
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        color: "#475569",
+                        display: "block",
+                        marginBottom: "3px",
+                      }}
+                    >
+                      Kamera Hareketi (FFmpeg)
+                    </label>
+                    <select
+                      value={currentScene.cameraEffect}
+                      onChange={(e) =>
+                        onUpdateScene(activeSceneTabIdx, {
+                          cameraEffect: e.target.value as RssCameraEffect,
+                        })
+                      }
+                      style={{
+                        width: "100%",
+                        padding: "6px 8px",
+                        borderRadius: "6px",
+                        border: "1px solid #cbd5e1",
+                        fontSize: "12px",
+                      }}
+                    >
+                      {Object.entries(RSS_CAMERA_EFFECT_LABELS).map(([k, lbl]) => (
+                        <option key={k} value={k}>
+                          {lbl}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        color: "#475569",
+                        display: "block",
+                        marginBottom: "3px",
+                      }}
+                    >
+                      Sahne Geçişi (xfade)
+                    </label>
+                    <select
+                      value={currentScene.transition}
+                      onChange={(e) =>
+                        onUpdateScene(activeSceneTabIdx, {
+                          transition: e.target.value as RssTransitionType,
+                        })
+                      }
+                      style={{
+                        width: "100%",
+                        padding: "6px 8px",
+                        borderRadius: "6px",
+                        border: "1px solid #cbd5e1",
+                        fontSize: "12px",
+                      }}
+                    >
+                      {Object.entries(RSS_TRANSITION_LABELS).map(([k, lbl]) => (
+                        <option key={k} value={k}>
+                          {lbl}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        color: "#475569",
+                        display: "block",
+                        marginBottom: "3px",
+                      }}
+                    >
+                      Sahne Ses Duygusu
+                    </label>
+                    <select
+                      value={currentScene.voiceEmotion}
+                      onChange={(e) =>
+                        onUpdateScene(activeSceneTabIdx, {
+                          voiceEmotion: e.target.value as RssVoiceEmotion,
+                        })
+                      }
+                      style={{
+                        width: "100%",
+                        padding: "6px 8px",
+                        borderRadius: "6px",
+                        border: "1px solid #cbd5e1",
+                        fontSize: "12px",
+                      }}
+                    >
+                      <option value="urgent">Acil / Sıcak Haber</option>
+                      <option value="serious">Ciddi / Analitik</option>
+                      <option value="calm">Sakin / Belgesel</option>
+                      <option value="warm_storyteller">Sıcak Masal Anlatıcısı</option>
+                      <option value="dramatic">Derin / Sinematik</option>
+                      <option value="mysterious">Gizemli / Merak</option>
+                      <option value="excited">Enerjik / Rehber</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Açılır Akordeon: İngilizce CLIProxy Görsel Promptu */}
                 <div>
-                  <label
+                  <button
+                    type="button"
+                    onClick={() => setShowPromptAccordion(!showPromptAccordion)}
                     style={{
+                      background: "none",
+                      border: "none",
+                      color: "#475569",
                       fontSize: "11.5px",
-                      fontWeight: 700,
-                      color: "#334155",
-                      display: "block",
-                      marginBottom: "4px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      padding: 0,
                     }}
                   >
-                    Ekran Üst Başlığı (Kısa Kanca)
-                  </label>
-                  <input
-                    type="text"
-                    value={currentScene.onScreenTextTr}
-                    onChange={(e) =>
-                      onUpdateScene(activeSceneTabIdx, { onScreenTextTr: e.target.value })
-                    }
-                    placeholder="Örn: ŞAŞIRTICI GERÇEK"
-                    style={{
-                      width: "100%",
-                      boxSizing: "border-box",
-                      padding: "7px 10px",
-                      borderRadius: "6px",
-                      border: "1px solid #cbd5e1",
-                      fontSize: "12.5px",
-                    }}
-                  />
+                    {showPromptAccordion ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                    <span>
+                      ⚙️ Teknik CliProxy Görsel Promptunu Düzenle (İngilizce • FG/MG/BG Derinlikli)
+                    </span>
+                  </button>
+                  {showPromptAccordion && (
+                    <textarea
+                      value={currentScene.promptEn}
+                      onChange={(e) =>
+                        onUpdateScene(activeSceneTabIdx, { promptEn: e.target.value })
+                      }
+                      rows={3}
+                      style={{
+                        marginTop: "6px",
+                        width: "100%",
+                        boxSizing: "border-box",
+                        padding: "8px 10px",
+                        borderRadius: "6px",
+                        border: "1px solid #cbd5e1",
+                        fontSize: "12px",
+                        fontFamily: "monospace",
+                        background: "#f8fafc",
+                      }}
+                    />
+                  )}
                 </div>
               </div>
 
-              {/* Türkçe Dış Ses Metni (Gemini 2.0 TTS) */}
-              <div>
+              {/* Sağ Sütun: Sahne Görseli Önizleme Kutusu */}
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "8px",
+                  padding: "10px",
+                  borderRadius: "10px",
+                  border: "1px solid #e2e8f0",
+                  background: "#f8fafc",
+                }}
+              >
                 <div
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
-                    marginBottom: "4px",
                   }}
                 >
-                  <label style={{ fontSize: "11.5px", fontWeight: 700, color: "#4338ca" }}>
-                    🎙️ Gemini 2.0 TTS Dış Ses Metni (Türkçe)
-                  </label>
-                  <span style={{ fontSize: "11px", color: "#64748b" }}>
-                    {currentScene.voiceoverTr.split(/\s+/).filter(Boolean).length} kelime (~
-                    {Math.max(
-                      2,
-                      Math.round(currentScene.voiceoverTr.split(/\s+/).filter(Boolean).length / 2.2)
-                    )}{" "}
-                    sn okuma)
+                  <span style={{ fontSize: "11px", fontWeight: 700, color: "#334155" }}>
+                    🖼️ Sahne {currentScene.sceneIndex} Görseli
+                  </span>
+                  <span style={{ fontSize: "10px", color: "#64748b", fontWeight: 600 }}>
+                    {storyboard.aspectRatio}
                   </span>
                 </div>
-                <textarea
-                  value={currentScene.voiceoverTr}
-                  onChange={(e) =>
-                    onUpdateScene(activeSceneTabIdx, { voiceoverTr: e.target.value })
-                  }
-                  rows={2}
+
+                <div
                   style={{
+                    position: "relative",
                     width: "100%",
-                    boxSizing: "border-box",
-                    padding: "8px 10px",
-                    borderRadius: "6px",
-                    border: "1px solid #a5b4fc",
-                    background: "#fafaff",
-                    fontSize: "13px",
-                    fontFamily: "inherit",
-                  }}
-                />
-              </div>
-
-              {/* Kamera Hareketi, Geçiş ve Ses Duygusu */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
-                <div>
-                  <label
-                    style={{
-                      fontSize: "11px",
-                      fontWeight: 600,
-                      color: "#475569",
-                      display: "block",
-                      marginBottom: "3px",
-                    }}
-                  >
-                    Kamera Hareketi (FFmpeg)
-                  </label>
-                  <select
-                    value={currentScene.cameraEffect}
-                    onChange={(e) =>
-                      onUpdateScene(activeSceneTabIdx, {
-                        cameraEffect: e.target.value as RssCameraEffect,
-                      })
-                    }
-                    style={{
-                      width: "100%",
-                      padding: "6px 8px",
-                      borderRadius: "6px",
-                      border: "1px solid #cbd5e1",
-                      fontSize: "12px",
-                    }}
-                  >
-                    {Object.entries(RSS_CAMERA_EFFECT_LABELS).map(([k, lbl]) => (
-                      <option key={k} value={k}>
-                        {lbl}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label
-                    style={{
-                      fontSize: "11px",
-                      fontWeight: 600,
-                      color: "#475569",
-                      display: "block",
-                      marginBottom: "3px",
-                    }}
-                  >
-                    Sahne Geçişi (xfade)
-                  </label>
-                  <select
-                    value={currentScene.transition}
-                    onChange={(e) =>
-                      onUpdateScene(activeSceneTabIdx, {
-                        transition: e.target.value as RssTransitionType,
-                      })
-                    }
-                    style={{
-                      width: "100%",
-                      padding: "6px 8px",
-                      borderRadius: "6px",
-                      border: "1px solid #cbd5e1",
-                      fontSize: "12px",
-                    }}
-                  >
-                    {Object.entries(RSS_TRANSITION_LABELS).map(([k, lbl]) => (
-                      <option key={k} value={k}>
-                        {lbl}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label
-                    style={{
-                      fontSize: "11px",
-                      fontWeight: 600,
-                      color: "#475569",
-                      display: "block",
-                      marginBottom: "3px",
-                    }}
-                  >
-                    Sahne Ses Duygusu
-                  </label>
-                  <select
-                    value={currentScene.voiceEmotion}
-                    onChange={(e) =>
-                      onUpdateScene(activeSceneTabIdx, {
-                        voiceEmotion: e.target.value as RssVoiceEmotion,
-                      })
-                    }
-                    style={{
-                      width: "100%",
-                      padding: "6px 8px",
-                      borderRadius: "6px",
-                      border: "1px solid #cbd5e1",
-                      fontSize: "12px",
-                    }}
-                  >
-                    <option value="urgent">Acil / Sıcak Haber</option>
-                    <option value="serious">Ciddi / Analitik</option>
-                    <option value="calm">Sakin / Belgesel</option>
-                    <option value="warm_storyteller">Sıcak Masal Anlatıcısı</option>
-                    <option value="dramatic">Derin / Sinematik</option>
-                    <option value="mysterious">Gizemli / Merak</option>
-                    <option value="excited">Enerjik / Rehber</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Açılır Akordeon: İngilizce CLIProxy Görsel Promptu */}
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setShowPromptAccordion(!showPromptAccordion)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "#475569",
-                    fontSize: "11.5px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    display: "inline-flex",
+                    aspectRatio:
+                      storyboard.aspectRatio === "16:9"
+                        ? "16 / 9"
+                        : storyboard.aspectRatio === "1:1"
+                        ? "1 / 1"
+                        : "9 / 16",
+                    maxHeight: "240px",
+                    borderRadius: "8px",
+                    overflow: "hidden",
+                    background: "#e2e8f0",
+                    border: "1px solid #cbd5e1",
+                    display: "flex",
                     alignItems: "center",
-                    gap: "4px",
-                    padding: 0,
+                    justifyContent: "center",
                   }}
                 >
-                  {showPromptAccordion ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                  <span>
-                    ⚙️ Teknik CliProxy Görsel Promptunu Düzenle (İngilizce • FG/MG/BG Derinlikli)
-                  </span>
-                </button>
-                {showPromptAccordion && (
-                  <textarea
-                    value={currentScene.promptEn}
-                    onChange={(e) =>
-                      onUpdateScene(activeSceneTabIdx, { promptEn: e.target.value })
-                    }
-                    rows={3}
+                  {generatingSceneImages[activeSceneTabIdx] ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "6px",
+                        color: "#4338ca",
+                        padding: "12px",
+                        textAlign: "center",
+                      }}
+                    >
+                      <LoaderCircle className="spin" size={22} />
+                      <span style={{ fontSize: "11px", fontWeight: 600 }}>
+                        CliProxy ile üretiliyor...
+                      </span>
+                    </div>
+                  ) : currentScene.previewImageUrl ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={currentScene.previewImageUrl}
+                        alt={`Sahne ${currentScene.sceneIndex}`}
+                        onClick={() =>
+                          setLightboxImage({
+                            url: currentScene.previewImageUrl!,
+                            title: `Sahne ${currentScene.sceneIndex}: ${currentScene.summaryTr}`,
+                            promptEn: currentScene.promptEn,
+                          })
+                        }
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                          cursor: "zoom-in",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setLightboxImage({
+                            url: currentScene.previewImageUrl!,
+                            title: `Sahne ${currentScene.sceneIndex}: ${currentScene.summaryTr}`,
+                            promptEn: currentScene.promptEn,
+                          })
+                        }
+                        style={{
+                          position: "absolute",
+                          top: "6px",
+                          right: "6px",
+                          background: "rgba(15, 23, 42, 0.72)",
+                          color: "#ffffff",
+                          border: "none",
+                          borderRadius: "6px",
+                          padding: "4px 6px",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "3px",
+                          fontSize: "10px",
+                        }}
+                        title="Tam ekran büyüt"
+                      >
+                        <ZoomIn size={12} />
+                      </button>
+                    </>
+                  ) : (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "6px",
+                        color: "#64748b",
+                        padding: "12px",
+                        textAlign: "center",
+                      }}
+                    >
+                      <ImageIcon size={22} style={{ opacity: 0.55 }} />
+                      <span style={{ fontSize: "11px", lineHeight: 1.3 }}>
+                        İster şimdi önizleyin, ister video üretilirken otomatik oluşturulsun
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {onGenerateSceneImage && (
+                  <button
+                    type="button"
+                    onClick={() => onGenerateSceneImage(activeSceneTabIdx)}
+                    disabled={Boolean(generatingSceneImages[activeSceneTabIdx])}
                     style={{
-                      marginTop: "6px",
                       width: "100%",
-                      boxSizing: "border-box",
-                      padding: "8px 10px",
+                      padding: "6px 8px",
                       borderRadius: "6px",
-                      border: "1px solid #cbd5e1",
-                      fontSize: "12px",
-                      fontFamily: "monospace",
-                      background: "#f8fafc",
+                      border: "1px solid #c7d2fe",
+                      background: "#eef2ff",
+                      color: "#4338ca",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      cursor: generatingSceneImages[activeSceneTabIdx] ? "wait" : "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "5px",
                     }}
-                  />
+                  >
+                    {generatingSceneImages[activeSceneTabIdx] ? (
+                      <LoaderCircle className="spin" size={12} />
+                    ) : (
+                      <RefreshCw size={12} />
+                    )}
+                    <span>
+                      {currentScene.previewImageUrl ? "Görseli Yeniden Üret" : "Sahne Görselini Üret"}
+                    </span>
+                  </button>
                 )}
               </div>
             </div>
@@ -1132,6 +1352,71 @@ export function RssStoryboardDeck({
           </div>
         )}
       </div>
+
+      {/* Sahne Görseli Tam Ekran Lightbox Modalı */}
+      {lightboxImage && (
+        <div
+          onClick={() => setLightboxImage(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.82)",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "24px",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#ffffff",
+              borderRadius: "14px",
+              maxWidth: "560px",
+              width: "100%",
+              maxHeight: "90vh",
+              overflow: "auto",
+              padding: "16px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <strong style={{ fontSize: "14px", color: "#0f172a" }}>{lightboxImage.title}</strong>
+              <button
+                type="button"
+                onClick={() => setLightboxImage(null)}
+                style={{
+                  background: "#f1f5f9",
+                  border: "none",
+                  borderRadius: "6px",
+                  padding: "4px 8px",
+                  cursor: "pointer",
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={lightboxImage.url}
+              alt={lightboxImage.title}
+              style={{
+                width: "100%",
+                maxHeight: "68vh",
+                objectFit: "contain",
+                borderRadius: "10px",
+                background: "#0f172a",
+              }}
+            />
+            <small style={{ fontSize: "11px", color: "#64748b", fontFamily: "monospace" }}>
+              {lightboxImage.promptEn}
+            </small>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
