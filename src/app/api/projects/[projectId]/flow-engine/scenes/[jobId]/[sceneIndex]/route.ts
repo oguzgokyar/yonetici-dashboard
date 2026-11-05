@@ -57,7 +57,13 @@ export async function GET(request: Request, context: Context) {
     const isThumb = url.searchParams.get("thumb") === "1";
 
     if (isThumb) {
-      const thumbPath = path.join(process.cwd(), ".data", "flow-scenes", jobId, `scene-${sceneIndex}_thumb.webp`);
+      const thumbPath = path.join(
+        process.cwd(),
+        ".data",
+        "flow-scenes",
+        jobId,
+        isMaster ? "master_full_thumb.webp" : `scene-${sceneIndex}_thumb.webp`
+      );
       if (!fs.existsSync(thumbPath)) {
         try {
           execSync(

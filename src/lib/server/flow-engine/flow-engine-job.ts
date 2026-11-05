@@ -9,7 +9,8 @@ import {
   recordVidsAccountRenderSuccess,
   markVidsAccountQuotaExhausted,
 } from "@/lib/server/google-vids-account-pool";
-import type { ScriptScenePlan } from "@/features/generation/google-vids/types";
+import type { ScriptScenePlan, AudioProductionSettings } from "@/features/generation/google-vids/types";
+import { stitchFlowScenesMaster } from "@/lib/server/flow-post-production";
 
 export interface FlowEngineJobRequest {
   title: string;
@@ -305,6 +306,18 @@ export async function processFlowEngineJob(job: {
   const now = new Date().toISOString();
 
   if (readyCount === totalScenes) {
+    // Sahneleri otomatik olarak tek bir Reels master videosuna bağla
+    const masterVideoPath = path.join(scenesDir, "master_full.mp4");
+    try {
+      stitchFlowScenesMaster({
+        scenesDir,
+        masterVideoPath,
+        audioSettings: (req as Record<string, unknown>).audioSettings as Partial<AudioProductionSettings> | undefined,
+      });
+    } catch (stitchErr) {
+      console.warn("[FlowEngine] Master video ön birleştirmesi atlandı:", stitchErr);
+    }
+
     db.prepare(`
       UPDATE generation_jobs
       SET status = 'complete',
@@ -325,6 +338,7 @@ export async function processFlowEngineJob(job: {
         readyScenes: readyCount,
         totalScenes,
         sceneStates,
+        masterVideoUrl: `/api/projects/${job.project_id}/flow-engine/scenes/${job.id}/master`,
       }),
       now,
       job.id
