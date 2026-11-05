@@ -536,11 +536,11 @@ export async function processRssVideoJob(job: {
       // Eğer kullanıcı sahne önizlemesinde görseli zaten ürettiyse doğrudan onu kullan
       const existingAssetId = sc.previewImageUrl?.match(/^\/api\/assets\/([a-f0-9-]{36})/i)?.[1];
       const existingAssetPath = existingAssetId
-        ? path.join(assetsDir, `${existingAssetId}.png`)
+        ? path.join(/*turbopackIgnore: true*/ assetsDir, `${existingAssetId}.png`)
         : "";
 
-      if (existingAssetPath && fs.existsSync(existingAssetPath)) {
-        fs.copyFileSync(existingAssetPath, imgOutPath);
+      if (existingAssetPath && fs.existsSync(/*turbopackIgnore: true*/ existingAssetPath)) {
+        fs.copyFileSync(/*turbopackIgnore: true*/ existingAssetPath, imgOutPath);
         imagePaths.push(imgOutPath);
         continue;
       }
