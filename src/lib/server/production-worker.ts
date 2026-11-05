@@ -8,6 +8,7 @@ import { buildHermesCanvaTaskPrompt } from "@/lib/server/hermes-canva-task";
 import { dispatchHermesCanvaTask } from "@/lib/server/hermes-agent-client";
 import { processGoogleVidsJob } from "@/lib/server/google-vids-service";
 import { processFlowEngineJob } from "@/lib/server/flow-engine/flow-engine-job";
+import { processRssVideoJob } from "@/lib/server/rss-video-composer";
 
 /**
  * Process-local FIFO plus mandatory shared host coordinator admission.
@@ -150,7 +151,18 @@ export function triggerProductionWorker(): void {
         }
 
         if (nextJob.type === "video") {
-          await withHeavyJob(`production:${nextJob.id}`, `dashboard:${randomUUID()}`, () => processStockVideoJob(nextJob));
+          let isRssVideo = nextJob.model === "rss-video-composer";
+          if (!isRssVideo) {
+            try {
+              const req = JSON.parse(nextJob.request_json || "{}");
+              isRssVideo = Boolean(req.isRssVideo || req.renderer === "rss-video-composer");
+            } catch {}
+          }
+          if (isRssVideo) {
+            await withHeavyJob(`production:${nextJob.id}`, `dashboard:${randomUUID()}`, () => processRssVideoJob(nextJob));
+          } else {
+            await withHeavyJob(`production:${nextJob.id}`, `dashboard:${randomUUID()}`, () => processStockVideoJob(nextJob));
+          }
         } else if (nextJob.type === "google-vids") {
           let isFlow = false;
           try {

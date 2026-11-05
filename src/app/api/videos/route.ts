@@ -65,10 +65,13 @@ export async function GET(request: Request) {
     let durationSeconds: number | undefined;
     let motionStyle: string | undefined;
     let isStockRender = false;
+    let isRssVideo = row.model === "rss-video-composer";
     let isGoogleVids = row.type === "google-vids";
     let isFlowVideo = row.type === "flow-video";
     let googleVidsUrl: string | undefined;
     let metadata: Record<string, unknown> | undefined;
+    let rssStoryboard: Record<string, unknown> | undefined;
+    let narrativeStyle: string | undefined;
 
     try {
       const requestState = JSON.parse(row.request_json || "{}");
@@ -78,11 +81,17 @@ export async function GET(request: Request) {
       idea = requestState.idea;
       sourceTopic = requestState.sourceTopic || requestState.topic;
       metadata = requestState.metadata;
+      if (requestState.isRssVideo || requestState.renderer === "rss-video-composer") {
+        isRssVideo = true;
+        rssStoryboard = requestState.storyboard;
+        narrativeStyle = requestState.narrativeStyle;
+      }
       isStockRender = Boolean(
-        requestState.stockVideoId ||
-        requestState.sourceStockVideoId ||
-        requestState.renderer === "ffmpeg-frame-engine" ||
-        row.model === "ffmpeg-frame-engine"
+        !isRssVideo &&
+        (requestState.stockVideoId ||
+          requestState.sourceStockVideoId ||
+          requestState.renderer === "ffmpeg-frame-engine" ||
+          row.model === "ffmpeg-frame-engine")
       );
     } catch { /* ignore */ }
 
@@ -150,17 +159,19 @@ export async function GET(request: Request) {
     return {
       id: row.id,
       url: responseState.url || `/api/videos/${row.id}`,
-      title: responseState.title || (isGoogleVids ? "Google Vids Video" : isFlowVideo ? "Flow Video (Veo)" : isStockRender ? "Stok Üretim Video" : undefined),
+      title: responseState.title || (isGoogleVids ? "Google Vids Video" : isFlowVideo ? "Flow Video (Veo)" : isRssVideo ? "RSS Video" : isStockRender ? "Stok Üretim Video" : undefined),
       isStockRender,
+      isRssVideo: isRssVideo || Boolean(responseState.isRssVideo),
       isGoogleVids: isGoogleVids || Boolean(responseState.isGoogleVids),
       isFlowVideo,
       googleVidsUrl,
       sourceAssetId,
       durationSeconds: responseState.durationSeconds || durationSeconds,
       motionStyle,
+      narrativeStyle: narrativeStyle || responseState.narrativeStyle,
       idea,
       sourceTopic: isGoogleVids ? (vidsTopic || sourceTopic) : sourceTopic,
-      storyboard,
+      storyboard: isRssVideo ? rssStoryboard : storyboard,
       metadata: responseState.metadata || metadata,
       createdAt: row.completed_at || row.created_at,
     };

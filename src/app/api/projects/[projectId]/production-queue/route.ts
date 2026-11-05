@@ -67,6 +67,9 @@ function resolveTypeLabel(type: string, requestData: RequestData, model?: string
   if (type === "google-vids") return "🎬 Google Vids (FIFO)";
   if (type === "image") return "AI Görsel";
   if (type === "video") {
+    if (model === "rss-video-composer" || (requestData as any)?.isRssVideo || requestData?.renderer === "rss-video-composer") {
+      return "📰 RSS Video (FIFO)";
+    }
     if (requestData?.renderer === "ffmpeg-frame-engine" || requestData?.sourceStockVideoId) {
       return "🎬 Stok Video Render (FIFO)";
     }

@@ -307,6 +307,18 @@ function runMigrations(database: DatabaseSync) {
       UNIQUE(package_id, position)
     );
     CREATE INDEX IF NOT EXISTS idx_media_package_items_package_position ON media_package_items(package_id, position ASC);
+    CREATE TABLE IF NOT EXISTS project_rss_sources (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'genel',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      last_checked_at TEXT,
+      created_at TEXT NOT NULL,
+      UNIQUE(project_id, url)
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_rss_sources_project ON project_rss_sources(project_id);
   `);
 }
 

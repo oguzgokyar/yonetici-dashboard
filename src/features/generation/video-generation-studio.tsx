@@ -4,16 +4,17 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Player } from "@remotion/player";
-import { Blend, Check, Clapperboard, Download, Film, ImageOff, Layers3, LoaderCircle, Play, RefreshCw, Send, Sparkles, Type } from "lucide-react";
+import { Blend, Check, Clapperboard, Download, Film, ImageOff, Layers3, LoaderCircle, Play, RefreshCw, Rss, Send, Sparkles, Type } from "lucide-react";
 import { TelegramSendButton } from "@/components/ui/telegram-send-button";
 import { useProjects } from "@/features/projects/projects-context";
 import { AnimatedCreative } from "@/remotion/AnimatedCreative";
 import { AnimatedCreativeProps, MotionStyle } from "@/remotion/types";
 import { GoogleVidsStudio } from "./google-vids-studio";
 import { FlowVideoStudio } from "./flow-video-studio";
+import { RssVideoStudio } from "./rss-video-studio";
 
 type CreativeAsset = { id: string; url: string; model: string; prompt: string; createdAt: string };
-type RenderedVideo = { id: string; url: string; sourceAssetId?: string; durationSeconds?: number; motionStyle?: string; createdAt: string };
+type RenderedVideo = { id: string; url: string; sourceAssetId?: string; durationSeconds?: number; motionStyle?: string; isRssVideo?: boolean; isGoogleVids?: boolean; isFlowVideo?: boolean; isStockRender?: boolean; createdAt: string };
 
 const styleOptions: { value: MotionStyle; label: string; detail: string }[] = [
   { value: "minimal", label: "Sade", detail: "Yumuşak ve kontrollü" },
@@ -28,7 +29,10 @@ async function fetchStudioData(projectId: string) {
   ]);
   const imageBody = await imageResponse.json() as { ok: boolean; assets?: CreativeAsset[] };
   const videoBody = await videoResponse.json() as { ok: boolean; videos?: RenderedVideo[] };
-  return { assets: imageBody.assets || [], videos: videoBody.videos || [] };
+  const motionVideos = (videoBody.videos || []).filter(
+    (v) => !v.isRssVideo && !v.isGoogleVids && !v.isFlowVideo && !v.isStockRender
+  );
+  return { assets: imageBody.assets || [], videos: motionVideos };
 }
 
 export function VideoGenerationStudio({ projectId }: { projectId: string }) {
@@ -45,17 +49,17 @@ export function VideoGenerationStudio({ projectId }: { projectId: string }) {
   const [packageId, setPackageId] = useState("");
   const [preparedSpec, setPreparedSpec] = useState<AnimatedCreativeProps | null>(null);
   const [message, setMessage] = useState("");
-  const [activeStudioTab, setActiveStudioTab] = useState<"motion" | "vids" | "flow">("motion");
+  const [activeStudioTab, setActiveStudioTab] = useState<"motion" | "vids" | "flow" | "rss">("motion");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const requested = params.get("studio");
-    if (requested === "vids" || requested === "flow") {
+    if (requested === "vids" || requested === "flow" || requested === "rss") {
       setActiveStudioTab(requested);
     }
   }, []);
 
-  function switchStudioTab(tab: "motion" | "vids" | "flow") {
+  function switchStudioTab(tab: "motion" | "vids" | "flow" | "rss") {
     setActiveStudioTab(tab);
     const url = new URL(window.location.href);
     url.searchParams.set("studio", tab);
@@ -160,12 +164,25 @@ export function VideoGenerationStudio({ projectId }: { projectId: string }) {
           <Film size={14} />
           Flow Video (Veo REST)
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeStudioTab === "rss"}
+          onClick={() => switchStudioTab("rss")}
+          className={`button ${activeStudioTab === "rss" ? "primary" : "secondary"}`}
+          style={{ height: "34px", fontSize: "12px", padding: "0 14px", border: "none" }}
+        >
+          <Rss size={14} />
+          RSS Video
+        </button>
       </div>
 
       {activeStudioTab === "vids" ? (
         <GoogleVidsStudio projectId={projectId} />
       ) : activeStudioTab === "flow" ? (
         <FlowVideoStudio projectId={projectId} />
+      ) : activeStudioTab === "rss" ? (
+        <RssVideoStudio projectId={projectId} />
       ) : (
         <div className="video-studio">
       <section className="video-controls">
