@@ -119,156 +119,115 @@ export async function synthesizeGeminiTtsSegment(options: {
   }
 
   const db = getDatabase();
-  const rows = db
+  const geminiRow = db
     .prepare(
-      "SELECT provider, enabled, base_url, encrypted_api_key, text_model FROM ai_provider_configs WHERE provider IN ('gemini', 'cliproxy') ORDER BY CASE WHEN provider = 'gemini' THEN 0 ELSE 1 END"
+      "SELECT provider, enabled, base_url, encrypted_api_key, text_model FROM ai_provider_configs WHERE provider = 'gemini'"
     )
-    .all() as unknown as ProviderRow[];
+    .get() as ProviderRow | undefined;
 
-  const candidates: Array<{
-    provider: string;
-    origin: string;
-    apiKey: string;
-    useQueryKey: boolean;
-    models: string[];
-  }> = [];
-
-  for (const row of rows) {
-    if (!row.encrypted_api_key) continue;
-    let apiKey = "";
-    try {
-      apiKey = decryptSecret(row.encrypted_api_key).trim();
-    } catch {
-      continue;
-    }
-    if (!apiKey) continue;
-
-    if (row.provider === "gemini") {
-      const base = (row.base_url || "https://generativelanguage.googleapis.com").replace(/\/+$/, "");
-      const origin = new URL(base).origin;
-      const models = Array.from(
-        new Set(
-          [
-            row.text_model?.includes("tts") ? row.text_model : "",
-            "gemini-2.5-flash-preview-tts",
-            "gemini-2.0-flash-exp",
-            "gemini-2.0-flash",
-          ].filter(Boolean)
-        )
-      );
-      candidates.push({
-        provider: "gemini",
-        origin,
-        apiKey,
-        useQueryKey: true,
-        models,
-      });
-    } else if (row.provider === "cliproxy" && row.enabled) {
-      const origin = new URL(row.base_url).origin;
-      const models = Array.from(
-        new Set(
-          [
-            "gemini-2.5-flash-preview-tts",
-            "gemini-2.0-flash-exp",
-            "gemini-2.0-flash",
-            row.text_model && /gemini/i.test(row.text_model) ? row.text_model : "gemini-3-flash",
-          ].filter(Boolean)
-        )
-      );
-      candidates.push({
-        provider: "cliproxy",
-        origin,
-        apiKey,
-        useQueryKey: false,
-        models,
-      });
-    }
-  }
-
-  if (!candidates.length) {
+  if (!geminiRow?.encrypted_api_key) {
     throw new Error(
-      "Gemini 2.0 TTS için yapılandırılmış API anahtarı bulunamadı. Lütfen Sistem Ayarları > API Yönetimi bölümünden Gemini veya CliProxyAPI bağlantısını kontrol edin."
+      "Sistem Ayarları > API Yönetimi > Gemini bölümünde kayıtlı bir API anahtarı bulunamadı. Lütfen Gemini TTS anahtarınızı kaydedin."
     );
   }
 
-  const deliveryDirective =
-    EMOTION_DELIVERY_DIRECTIVES[options.emotion] || EMOTION_DELIVERY_DIRECTIVES.calm;
-  const ttsPrompt = `${deliveryDirective}:\n"${cleanText}"`;
+  let apiKey = "";
+  try {
+    apiKey = decryptSecret(geminiRow.encrypted_api_key).trim();
+  } catch {
+    throw new Error(
+      "Sistem Ayarları > API Yönetimi > Gemini bölümündeki API anahtarı çözülemedi. Lütfen anahtarı yeniden kaydedin."
+    );
+  }
+
+  if (!apiKey) {
+    throw new Error(
+      "Sistem Ayarları > API Yönetimi > Gemini API anahtarı boş. Lütfen geçerli bir anahtar kaydedin."
+    );
+  }
+
+  const base = (geminiRow.base_url || "https://generativelanguage.googleapis.com").replace(
+    /\/+$/,
+    ""
+  );
+  const origin = new URL(base).origin;
+  const models = Array.from(
+    new Set(
+      [
+        geminiRow.text_model?.toLowerCase().includes("tts") ? geminiRow.text_model.trim() : "",
+        "gemini-2.5-flash-preview-tts",
+        "gemini-3.8-flash-tts",
+        "gemini-3.1-flash-tts-preview",
+        "gemini-2.5-pro-preview-tts",
+      ].filter(Boolean)
+    )
+  );
 
   const errors: string[] = [];
   let extractedAudio: { bytes: Buffer; mimeType: string; modelUsed: string } | null = null;
 
-  for (const candidate of candidates) {
-    for (const model of candidate.models) {
-      const endpoint = candidate.useQueryKey
-        ? `${candidate.origin}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(candidate.apiKey)}`
-        : `${candidate.origin}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  for (const model of models) {
+    const endpoint = `${origin}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      if (!candidate.useQueryKey) {
-        headers.Authorization = `Bearer ${candidate.apiKey}`;
-      }
-
-      try {
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: ttsPrompt }],
-              },
-            ],
-            generationConfig: {
-              responseModalities: ["AUDIO"],
-              speechConfig: {
-                voiceConfig: {
-                  prebuiltVoiceConfig: {
-                    voiceName: options.voice || "Kore",
-                  },
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: cleanText }],
+            },
+          ],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: options.voice || "Kore",
                 },
               },
             },
-          }),
-          signal: AbortSignal.timeout(60_000),
-        });
+          },
+        }),
+        signal: AbortSignal.timeout(60_000),
+      });
 
-        if (!response.ok) {
-          const errBody = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-          const msg = errBody?.error?.message || `HTTP ${response.status}`;
-          errors.push(`[${candidate.provider}/${model}]: ${msg}`);
-          continue;
-        }
-
-        const body = await response.json();
-        const audio = extractAudioFromGeminiResponse(body);
-        if (!audio) {
-          errors.push(
-            `[${candidate.provider}/${model}]: Model yanıt döndürdü ancak içinde AUDIO (inlineData) ses akışı bulunamadı (yalnızca metin döndü).`
-          );
-          continue;
-        }
-
-        extractedAudio = {
-          bytes: audio.bytes,
-          mimeType: audio.mimeType,
-          modelUsed: model,
-        };
-        break;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        errors.push(`[${candidate.provider}/${model}]: ${msg}`);
+      if (!response.ok) {
+        const errBody = (await response.json().catch(() => null)) as {
+          error?: { message?: string };
+        } | null;
+        const msg = errBody?.error?.message || `HTTP ${response.status}`;
+        errors.push(`[gemini/${model}]: ${msg}`);
+        continue;
       }
+
+      const body = await response.json();
+      const audio = extractAudioFromGeminiResponse(body);
+      if (!audio) {
+        errors.push(
+          `[gemini/${model}]: Model yanıt döndürdü ancak içinde AUDIO (inlineData) ses akışı bulunamadı.`
+        );
+        continue;
+      }
+
+      extractedAudio = {
+        bytes: audio.bytes,
+        mimeType: audio.mimeType,
+        modelUsed: model,
+      };
+      break;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`[gemini/${model}]: ${msg}`);
     }
-    if (extractedAudio) break;
   }
 
   if (!extractedAudio) {
     throw new Error(
-      `Gemini 2.0 TTS ses üretimi başarısız oldu (Edge-TTS yedeği kapalıdır). Denenen modeller ses verisi döndürmedi: ${errors.join(" | ")}. Lütfen Sistem Ayarları > API Yönetimi > Gemini sekmesinden doğrudan Google AI Studio (Gemini) API anahtarının girili olduğundan veya CliProxyAPI üzerinde Gemini TTS destekli anahtar bulunduğundan emin olun.`
+      `Gemini TTS ses üretimi başarısız oldu (Edge-TTS yedeği kapalıdır). Hata detayı: ${errors.join(" | ")}`
     );
   }
 

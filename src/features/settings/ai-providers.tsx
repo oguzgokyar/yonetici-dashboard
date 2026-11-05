@@ -11,7 +11,7 @@ type TelegramState = { configured: boolean; source: string; chatId: string; thre
 const providers: Provider[] = [
   { id: "cliproxy", name: "CliProxyAPI", description: "Prompt, görsel ve video isteklerini özel dağıtım servisiniz üzerinden yönetin.", color: "#725cff", baseUrl: "", textModel: "", imageModel: "" },
   { id: "openai", name: "OpenAI", description: "Prompt geliştirme ve GPT Image modelleri için doğrudan bağlantı.", color: "#111827", baseUrl: "https://api.openai.com/v1", textModel: "", imageModel: "" },
-  { id: "gemini", name: "Gemini", description: "Gemini metin ve Nano Banana görsel üretim modellerini kullanın.", color: "#3b82f6", baseUrl: "https://generativelanguage.googleapis.com", textModel: "", imageModel: "" },
+  { id: "gemini", name: "Gemini", description: "Gemini TTS (Seslendirme), metin ve görsel üretim modellerini doğrudan Google API ile kullanın.", color: "#3b82f6", baseUrl: "https://generativelanguage.googleapis.com", textModel: "gemini-2.5-flash-preview-tts", imageModel: "" },
   { id: "postiz", name: "Postiz", description: "Instagram, Reels, Hikâye ve çoklu kanal zamanlama motoru.", color: "#612bd3", baseUrl: "http://10.0.1.1:4007/api", textModel: "", imageModel: "" },
   { id: "telegram", name: "Telegram Bot", description: "Üretilen medyaları doğrudan Telegram kanalınıza veya hesabınıza aktarın.", color: "#0284c7", baseUrl: "https://api.telegram.org", textModel: "", imageModel: "" },
 ];

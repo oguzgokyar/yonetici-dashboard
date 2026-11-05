@@ -13,20 +13,34 @@ export async function POST(request: Request) {
   if (!apiKey && stored?.encrypted_api_key) try { apiKey = decryptSecret(stored.encrypted_api_key); } catch { return Response.json({ ok: false, message: "Kayıtlı API anahtarı çözülemedi." }, { status: 500 }); }
   if (!baseUrl || !apiKey) return Response.json({ ok: false, message: "Base URL ve API anahtarı gerekli." }, { status: 400 });
 
+  const isGeminiDirect =
+    payload.provider === "gemini" || /generativelanguage\.googleapis\.com/i.test(baseUrl);
+
   let target: URL;
   try {
-    target = new URL(`${baseUrl.replace(/\/+$/, "")}/models`);
+    if (isGeminiDirect) {
+      const origin = new URL(baseUrl).origin;
+      target = new URL(`${origin}/v1beta/models?key=${encodeURIComponent(apiKey)}`);
+    } else {
+      target = new URL(`${baseUrl.replace(/\/+$/, "")}/models`);
+    }
     if (!["http:", "https:"].includes(target.protocol)) throw new Error("unsupported protocol");
   } catch { return Response.json({ ok: false, message: "Geçerli bir HTTP veya HTTPS Base URL girin." }, { status: 400 }); }
 
   try {
-    const response = await fetch(target, { headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(12_000) });
-    const body = await response.json().catch(() => null) as { data?: { id?: string }[] } | null;
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (!isGeminiDirect) {
+      headers.Authorization = `Bearer ${apiKey}`;
+    }
+    const response = await fetch(target, { headers, cache: "no-store", signal: AbortSignal.timeout(12_000) });
+    const body = await response.json().catch(() => null) as { data?: { id?: string }[]; models?: { name?: string }[] } | null;
     if (!response.ok) {
-      const message = response.status === 401 || response.status === 403 ? "API anahtarı kabul edilmedi." : `CLIProxyAPI ${response.status} yanıtı verdi.`;
+      const message = response.status === 401 || response.status === 403 || response.status === 400 ? "API anahtarı kabul edilmedi." : `Servis ${response.status} yanıtı verdi.`;
       return Response.json({ ok: false, status: response.status, message }, { status: 502 });
     }
-    const models = Array.isArray(body?.data) ? body.data.map((item) => item.id).filter((id): id is string => Boolean(id)) : [];
+    const models = isGeminiDirect
+      ? (Array.isArray(body?.models) ? body.models.map((m) => (m.name || "").replace(/^models\//, "")).filter(Boolean) : [])
+      : (Array.isArray(body?.data) ? body.data.map((item) => item.id).filter((id): id is string => Boolean(id)) : []);
     return Response.json({ ok: true, status: response.status, modelCount: models.length, models: models.slice(0, 50), message: `${models.length} model erişilebilir.` });
   } catch (error) {
     const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
