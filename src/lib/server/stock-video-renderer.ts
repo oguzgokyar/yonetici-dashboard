@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 import { getStockTimeline } from "@/lib/stock-timeline";
 import { parseStockVideoProbe } from "@/lib/stock-render-timing";
@@ -108,8 +109,8 @@ async function renderStockVideoCore(options: RenderStockVideoOptions, transientM
   const hasOutro = Boolean(outroRow?.local_path && fs.existsSync(/*turbopackIgnore: true*/ outroRow.local_path));
   const mainStageOutput = hasOutro ? path.join(tempDir, `${renderId}_main.mp4`) : outputLocation;
 
-  // Fetch stock video record
-  const stockRow = db
+  // Fetch stock video record (or Sinematik Studio merged video)
+  let stockRow = db
     .prepare("SELECT * FROM stock_videos WHERE project_id = ? AND (id = ? OR drive_file_id = ?)")
     .get(options.projectId, options.stockVideoId, options.stockVideoId) as {
       id: string;
@@ -121,12 +122,53 @@ async function renderStockVideoCore(options: RenderStockVideoOptions, transientM
       metadata_json?: string;
     } | undefined;
 
+  let localVideoPath: string | undefined;
+
+  if (!stockRow && options.stockVideoId?.startsWith("studio_merge_")) {
+    const mergeIdStr = options.stockVideoId.replace("studio_merge_", "");
+    const studioDbPath = "/opt/data/sinematik-studio/data/huobao.sqlite3";
+    if (fs.existsSync(studioDbPath)) {
+      const sdb = new DatabaseSync(studioDbPath, { readOnly: true });
+      const mRow = sdb.prepare(`
+        SELECT m.id, m.title, m.merged_url, m.duration, e.episode_number, d.title as drama_title, d.aspect_ratio
+        FROM video_merges m
+        JOIN episodes e ON m.episode_id = e.id
+        JOIN dramas d ON m.drama_id = d.id
+        WHERE m.id = ? AND m.status = 'completed'
+      `).get(mergeIdStr) as unknown as {
+        id: number;
+        title: string | null;
+        merged_url: string | null;
+        duration: number | null;
+        episode_number: number | null;
+        drama_title: string | null;
+        aspect_ratio: string | null;
+      } | undefined;
+      sdb.close();
+
+      if (mRow && mRow.merged_url) {
+        const absM = path.join("/opt/data/sinematik-studio/data", mRow.merged_url);
+        if (fs.existsSync(absM)) {
+          localVideoPath = absM;
+          stockRow = {
+            id: options.stockVideoId,
+            name: `${mRow.drama_title || "Sinematik"} - Bölüm ${mRow.episode_number || 1} (Tam Film)`,
+            drive_file_id: options.stockVideoId,
+            duration_seconds: Number(mRow.duration || 0),
+            width: mRow.aspect_ratio === "9:16" ? 720 : 1280,
+            height: mRow.aspect_ratio === "9:16" ? 1280 : 720,
+          };
+        }
+      }
+    }
+  }
+
   if (!stockRow) {
     throw new Error("Stok video bulunamadı.");
   }
 
   // Ensure local video is cached
-  const { localPath } = await ensureCachedVideo(stockRow.drive_file_id, options.projectId);
+  const localPath = localVideoPath || (await ensureCachedVideo(stockRow.drive_file_id, options.projectId)).localPath;
 
   // Probe failures are fatal: stale database metadata must never substitute for the file.
   const probeVideo = async (file: string) => {

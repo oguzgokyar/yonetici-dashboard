@@ -246,7 +246,7 @@ ZORUNLU PROFESYONEL KURALLAR:
 3. EKRAN KANCA METNİ ("onScreenTextTr"):
    - Her sahne için en fazla 3-5 kelimelik kısa bir sahne başlığı/vurgu özeti yaz.
 4. KAMERA VE GEÇİŞ EFEKTLERİ:
-   - "cameraEffect" yalnızca şunlardan biri olabilir: "ken_burns_zoom_in", "ken_burns_zoom_out", "cinematic_push", "zoom_in_fast", "pan_right", "pan_left", "drift_left_right", "tilt_pan", "pulse", "micro_zoom_jitter".
+   - "cameraEffect" yalnızca şunlardan biri olabilir: "ken_burns_zoom_in", "ken_burns_zoom_out", "cinematic_push", "zoom_in_fast", "pan_right", "pan_left", "drift_left_right", "tilt_pan", "pulse".
    - "transition" yalnızca şunlardan biri olabilir: "dissolve", "fadeblack", "smoothleft", "wipeleft", "circleopen", "slideleft".
    - "voiceEmotion" yalnızca şunlardan biri olabilir: "urgent", "serious", "calm", "warm_storyteller", "dramatic", "mysterious", "excited".
 
@@ -311,7 +311,6 @@ ${options.topicOrText.slice(0, 4500)}${revisionBlock}`;
     "drift_left_right",
     "tilt_pan",
     "pulse",
-    "micro_zoom_jitter",
   ]);
   const validTransitions = new Set<RssTransitionType>([
     "dissolve",

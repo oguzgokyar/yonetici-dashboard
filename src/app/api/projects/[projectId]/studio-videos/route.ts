@@ -18,11 +18,11 @@ interface MergedVideoRow {
 
 export async function GET(
   request: NextRequest,
-  context: { params: Promise<{ projectId: string }> }
+  { params }: { params: Promise<{ projectId: string }> }
 ) {
-  const { projectId } = await context.params;
+  const { projectId } = await params;
   const dbPath = "/opt/data/sinematik-studio/data/huobao.sqlite3";
-  if (!fs.existsSync(/*turbopackIgnore: true*/ dbPath)) {
+  if (!fs.existsSync(dbPath)) {
     return NextResponse.json({ success: true, videos: [] });
   }
 
@@ -41,12 +41,12 @@ export async function GET(
     const videos = [];
     for (const r of rows) {
       if (!r.merged_url) continue;
-      const absPath = path.join(/*turbopackIgnore: true*/ "/opt/data/sinematik-studio/data", r.merged_url);
-      if (!fs.existsSync(/*turbopackIgnore: true*/ absPath)) continue;
+      const absPath = path.join("/opt/data/sinematik-studio/data", r.merged_url);
+      if (!fs.existsSync(absPath)) continue;
 
       let sizeBytes = 0;
       try {
-        sizeBytes = fs.statSync(/*turbopackIgnore: true*/ absPath).size;
+        sizeBytes = fs.statSync(absPath).size;
       } catch {}
 
       const ar = r.aspect_ratio || "9:16";

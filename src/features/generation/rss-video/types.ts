@@ -47,8 +47,7 @@ export type RssCameraEffect =
   | "pan_left"
   | "drift_left_right"
   | "tilt_pan"
-  | "pulse"
-  | "micro_zoom_jitter";
+  | "pulse";
 
 export type RssTransitionType =
   | "dissolve"
@@ -233,7 +232,7 @@ export const RSS_NARRATIVE_STYLES: RssNarrativeStyleOption[] = [
     badge: "🕵️ Gizem",
     desc: "Çözülmemiş sır kancası → İpuçları zinciri → Beklenmedik gerçek.",
     pacingRule: "Merak tırmandıran dar açılı planlar (4-6 sn/sahne).",
-    defaultCameraSequence: ["cinematic_push", "micro_zoom_jitter", "pan_right", "zoom_in_fast"],
+    defaultCameraSequence: ["cinematic_push", "drift_left_right", "pan_right", "zoom_in_fast"],
     defaultTransition: "smoothleft",
     defaultVoiceEmotion: "mysterious",
     defaultVoiceActor: "Kore",
@@ -310,7 +309,6 @@ export const RSS_CAMERA_EFFECT_LABELS: Record<RssCameraEffect, string> = {
   drift_left_right: "Yumuşak Salınım (Drift)",
   tilt_pan: "Dikey + Yatay Perspektif (Tilt & Pan)",
   pulse: "Ritmik Vurgu (Pulse)",
-  micro_zoom_jitter: "Gerilim Mikro Titreşim (Jitter)",
 };
 
 export const RSS_TRANSITION_LABELS: Record<RssTransitionType, string> = {

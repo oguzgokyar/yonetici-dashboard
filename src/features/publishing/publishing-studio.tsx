@@ -112,7 +112,7 @@ function parseIstanbulDatetimeLocalToUtc(val: string): string | undefined {
 type RecentAsset = {
   id: string;
   type: "image" | "video";
-  category: "image" | "video" | "stock" | "stock_render" | "canva_package" | "raw_stock";
+  category: "image" | "video" | "stock" | "stock_render" | "canva_package" | "raw_stock" | "studio";
   url: string;
   thumbnailUrl?: string;
   packageId?: string;
@@ -201,7 +201,7 @@ export function PublishingStudio({
   const [customMediaUrl, setCustomMediaUrl] = useState("");
   const [mediaSourceTab, setMediaSourceTab] = useState<"recent" | "custom">("recent");
   const [mediaCategoryFilter, setMediaCategoryFilter] = useState<
-    "all" | "image" | "canva_package" | "video" | "stock" | "raw_stock"
+    "all" | "image" | "canva_package" | "video" | "stock" | "raw_stock" | "studio"
   >("all");
   const [mediaPage, setMediaPage] = useState(1);
   const MEDIA_PER_PAGE = 15;
@@ -383,6 +383,7 @@ export function PublishingStudio({
             url: string;
             title?: string;
             isStockRender?: boolean;
+            isStudioVideo?: boolean;
             prompt?: string;
             sourceAssetId?: string;
             idea?: { id?: string; title?: string; concept?: string };
@@ -390,17 +391,20 @@ export function PublishingStudio({
             metadata?: Record<string, unknown>;
             createdAt?: string;
           }) => {
+            const isStudio = Boolean(v.isStudioVideo || (v.metadata as any)?.isStudioMerge || v.id.startsWith("studio_merge_"));
             const isStockRender = Boolean(v.isStockRender);
-            const thumbUrl = v.sourceAssetId
+            const thumbUrl = isStudio
+              ? `${v.url}?thumb=1`
+              : v.sourceAssetId
               ? `/api/assets/${v.sourceAssetId}?thumb=1`
               : `${v.url}?thumb=1`;
             items.push({
               id: v.id,
               type: "video",
-              category: isStockRender ? "stock_render" : "video",
+              category: isStudio ? "studio" : isStockRender ? "stock_render" : "video",
               url: v.url || `/api/videos/${v.id}`,
               thumbnailUrl: thumbUrl,
-              prompt: v.title || v.prompt || (isStockRender ? "Stok Üretim Video" : undefined),
+              prompt: v.title || v.prompt || (isStudio ? "Sinematik Stüdyo (Tam Film)" : isStockRender ? "Stok Üretim Video" : undefined),
               idea: v.idea,
               sourceTopic: v.title || v.sourceTopic,
               metadata: v.metadata,
@@ -523,6 +527,9 @@ export function PublishingStudio({
       setGlobalPostType("post");
     } else if (asset.type === "video") {
       setGlobalPostType("reel");
+    }
+    if (asset.category === "studio") {
+      setIsAiGenerated(true);
     }
     setCopyFeedback(null);
 
@@ -988,7 +995,8 @@ export function PublishingStudio({
       if (mediaCategoryFilter === "all") return true;
       if (mediaCategoryFilter === "image") return a.type === "image" && a.category !== "canva_package";
       if (mediaCategoryFilter === "canva_package") return a.category === "canva_package";
-      if (mediaCategoryFilter === "video") return a.type === "video" && a.category !== "stock" && a.category !== "stock_render" && a.category !== "raw_stock";
+      if (mediaCategoryFilter === "studio") return a.category === "studio";
+      if (mediaCategoryFilter === "video") return a.type === "video" && a.category !== "stock" && a.category !== "stock_render" && a.category !== "raw_stock" && a.category !== "studio";
       if (mediaCategoryFilter === "stock") return a.category === "stock_render";
       if (mediaCategoryFilter === "raw_stock") return a.category === "stock" || a.category === "raw_stock";
       return true;
@@ -1569,7 +1577,8 @@ export function PublishingStudio({
   const filteredAssets = recentAssets.filter((a) => {
     if (mediaCategoryFilter === "all") return true;
     if (mediaCategoryFilter === "canva_package") return a.category === "canva_package";
-    if (mediaCategoryFilter === "video") return a.type === "video" && a.category !== "stock" && a.category !== "stock_render" && a.category !== "raw_stock";
+    if (mediaCategoryFilter === "studio") return a.category === "studio";
+    if (mediaCategoryFilter === "video") return a.type === "video" && a.category !== "stock" && a.category !== "stock_render" && a.category !== "raw_stock" && a.category !== "studio";
     if (mediaCategoryFilter === "stock") return a.category === "stock_render";
     if (mediaCategoryFilter === "raw_stock") return a.category === "stock" || a.category === "raw_stock";
     if (mediaCategoryFilter === "image") return a.type === "image" && a.category !== "canva_package";
@@ -1794,6 +1803,13 @@ export function PublishingStudio({
                     </button>
                     <button
                       type="button"
+                      className={`composer-media-tab-btn ${mediaCategoryFilter === "studio" ? "active" : ""}`}
+                      onClick={() => { setMediaCategoryFilter("studio"); setMediaPage(1); }}
+                    >
+                      🎬 Stüdyo
+                    </button>
+                    <button
+                      type="button"
                       className={`composer-media-tab-btn ${mediaCategoryFilter === "stock" ? "active" : ""}`}
                       onClick={() => { setMediaCategoryFilter("stock"); setMediaPage(1); }}
                     >
@@ -1884,6 +1900,8 @@ export function PublishingStudio({
                             >
                               {asset.category === "canva_package"
                                 ? `Canva (${asset.itemCount || 1})`
+                                : asset.category === "studio"
+                                ? "🎬 Stüdyo"
                                 : asset.category === "raw_stock"
                                 ? "Ham Stok"
                                 : asset.category === "stock_render"
@@ -1897,7 +1915,9 @@ export function PublishingStudio({
                       })
                     ) : (
                       <div style={{ width: "100%", gridColumn: "1 / -1", textAlign: "center", padding: "32px 12px", color: "var(--muted)", fontSize: "12px" }}>
-                        {mediaCategoryFilter === "raw_stock"
+                        {mediaCategoryFilter === "studio"
+                          ? "Sinematik Stüdyo'da henüz tamamlanmış tam film/bölüm birleştirmesi bulunamadı."
+                          : mediaCategoryFilter === "raw_stock"
                           ? "Henüz kaynak klasörde taranmış ham stok video bulunamadı."
                           : mediaCategoryFilter === "stock"
                           ? "Henüz işlenmiş/render edilmiş stok video bulunamadı."
@@ -3065,6 +3085,13 @@ export function PublishingStudio({
                   </button>
                   <button
                     type="button"
+                    className={`composer-media-tab-btn ${mediaCategoryFilter === "studio" ? "active" : ""}`}
+                    onClick={() => { setMediaCategoryFilter("studio"); setMediaPage(1); }}
+                  >
+                    🎬 Stüdyo
+                  </button>
+                  <button
+                    type="button"
                     className={`composer-media-tab-btn ${mediaCategoryFilter === "stock" ? "active" : ""}`}
                     onClick={() => { setMediaCategoryFilter("stock"); setMediaPage(1); }}
                   >
@@ -3086,7 +3113,8 @@ export function PublishingStudio({
                       if (mediaCategoryFilter === "all") return true;
                       if (mediaCategoryFilter === "image") return a.type === "image" && a.category !== "canva_package";
                       if (mediaCategoryFilter === "canva_package") return a.category === "canva_package";
-                      if (mediaCategoryFilter === "video") return a.type === "video" && a.category !== "stock" && a.category !== "stock_render" && a.category !== "raw_stock";
+                      if (mediaCategoryFilter === "studio") return a.category === "studio";
+                      if (mediaCategoryFilter === "video") return a.type === "video" && a.category !== "stock" && a.category !== "stock_render" && a.category !== "raw_stock" && a.category !== "studio";
                       if (mediaCategoryFilter === "stock") return a.category === "stock_render";
                       if (mediaCategoryFilter === "raw_stock") return a.category === "stock" || a.category === "raw_stock";
                       return true;

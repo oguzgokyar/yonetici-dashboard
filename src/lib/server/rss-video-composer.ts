@@ -202,12 +202,6 @@ export function buildSceneMotionFilter(options: {
       return makeZoompan(`1.0+0.26*${progress}`);
     case "pulse":
       return makeZoompan(`1.06+0.06*sin(2*PI*2*${progress})`);
-    case "micro_zoom_jitter":
-      return makeZoompan(
-        "1.08",
-        "iw/2-(iw/zoom/2)+4*sin(on*2.2)",
-        "ih/2-(ih/zoom/2)+2*cos(on*3.1)"
-      );
     case "pan_right":
     case "pan_left":
     case "drift_left_right":

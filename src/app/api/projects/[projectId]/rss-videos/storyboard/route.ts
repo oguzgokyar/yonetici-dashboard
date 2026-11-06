@@ -53,14 +53,15 @@ export async function POST(request: Request, context: Context) {
 
     const sourceMode = body.sourceMode || "prompt";
     let topicOrText = (body.topicOrText || "").trim();
-    const sourceUrl = (body.sourceUrl || "").trim() || undefined;
+    const sourceUrl =
+      sourceMode === "prompt" ? undefined : (body.sourceUrl || "").trim() || undefined;
     let scrapedArticle: { title: string; text: string; url: string } | undefined;
 
-    // URL modunda veya RSS haberinde metin kısaysa URL'den tam makaleyi çek
+    // Yalnızca kullanıcı bir konu/metin girmediyse ve URL/RSS modunda bir URL varsa makaleyi çek
     if (
       (sourceMode === "url" || sourceMode === "rss") &&
       sourceUrl &&
-      topicOrText.length < 220
+      !topicOrText
     ) {
       try {
         scrapedArticle = await scrapeArticleFromUrl(sourceUrl);

@@ -314,7 +314,12 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
         const activeSb = data.activeJob.request?.storyboard as RssStoryboard | undefined;
         if (activeSb?.scenes?.length) {
           setStoryboard((prev) => {
-            if (!prev) return activeSb;
+            if (!prev) return null;
+            // Ekranda farklı bir senaryo varsa (kullanıcı yeni bir konu araştırdıysa veya taslak hazırlıyorsa)
+            // aktif işin senaryosuyla ekrandaki yeni senaryoyu ezme!
+            if (prev.title && activeSb.title && prev.title !== activeSb.title) {
+              return prev;
+            }
             let changed = false;
             const mergedScenes = prev.scenes.map((sc, idx) => {
               const incomingUrl = activeSb.scenes?.[idx]?.previewImageUrl;
@@ -339,7 +344,9 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
         if (latestJob?.request?.storyboard?.scenes?.length) {
           const latestSb = latestJob.request.storyboard as RssStoryboard;
           setStoryboard((prev) => {
-            if (!prev) return latestSb;
+            // Yalnızca ekranda senaryo varsa ve aynı videoya aitse görsel URL'lerini güncelle;
+            // Eğer prev null ise (kullanıcı yeni video için sıfırladıysa) eski senaryoyu ekrana zorla geri getirme!
+            if (!prev) return null;
             if (prev.title !== latestSb.title || prev.scenes.length !== latestSb.scenes.length) {
               return prev;
             }
@@ -391,8 +398,13 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
       return;
     }
 
-    if (isRevision) setRevising(true);
-    else setPlanning(true);
+    if (isRevision) {
+      setRevising(true);
+    } else {
+      setPlanning(true);
+      setStoryboard(null);
+      setGeneratingSceneImages({});
+    }
 
     setMessage(
       isRevision
@@ -634,8 +646,11 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
 
   function handleClearStoryboard() {
     setStoryboard(null);
+    setTopicOrText("");
+    setSourceUrl("");
     setRevisionNote("");
-    setMessage("Senaryo taslağı temizlendi.");
+    setGeneratingSceneImages({});
+    setMessage("Yeni video üretimi için senaryo ve konu temizlendi.");
     try {
       localStorage.removeItem(`rss_video_form_${projectId}`);
     } catch {}

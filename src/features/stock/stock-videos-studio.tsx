@@ -141,7 +141,9 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<"library" | "rendered">("library");
+  const [activeTab, setActiveTab] = useState<"library" | "rendered" | "studio">("library");
+  const [studioVideos, setStudioVideos] = useState<StockVideoItem[]>([]);
+  const [studioPage, setStudioPage] = useState<number>(1);
 
   // Selected video for customizer
   const [selectedVideoId, setSelectedVideoId] = useState<string>("");
@@ -226,12 +228,36 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
     const request = ++loadRequestRef.current;
     const hydrateSettings = hydratedProjectRef.current !== projectId;
     try {
-      const [stockRes, vidRes, settingsRes, driveRes] = await Promise.all([
+      const [stockRes, vidRes, settingsRes, driveRes, studioRes] = await Promise.all([
         fetch(`/api/projects/${projectId}/stock-videos`, { cache: "no-store" }),
         fetch(`/api/videos?projectId=${projectId}`, { cache: "no-store" }),
         fetch(`/api/projects/${projectId}/stock-videos/settings`, { cache: "no-store" }),
         fetch(`/api/projects/${projectId}/stock-videos/drive-accounts`, { cache: "no-store" }),
+        fetch(`/api/projects/${projectId}/studio-videos`, { cache: "no-store" }).catch(() => null),
       ]);
+
+      if (request !== loadRequestRef.current) return;
+      if (studioRes && studioRes.ok) {
+        const sData = await studioRes.json();
+        if (request === loadRequestRef.current && sData.videos) {
+          const mappedStudio: StockVideoItem[] = sData.videos.map((sv: any) => ({
+            id: sv.id,
+            driveFileId: sv.drive_file_id || sv.id,
+            name: sv.name || sv.title,
+            sizeBytes: sv.size_bytes || 0,
+            mimeType: "video/mp4",
+            thumbnailUrl: sv.thumbnail_url,
+            durationSeconds: sv.duration_seconds || 0,
+            width: sv.width || 720,
+            height: sv.height || 1280,
+            hasCache: true,
+            streamUrl: sv.stream_url,
+            metadata: { isStudioMerge: true, ...sv },
+            createdAt: sv.created_at || new Date().toISOString(),
+          }));
+          setStudioVideos(mappedStudio);
+        }
+      }
 
       if (request !== loadRequestRef.current) return;
       if (stockRes.ok) {
@@ -447,10 +473,10 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
     setDriveModalOpen(true);
   }, [searchParams]);
 
-  // Selected video object
+  // Selected video object (from stock library or studio videos)
   const selectedVideo = useMemo(
-    () => videos.find((v) => v.id === selectedVideoId) || null,
-    [videos, selectedVideoId]
+    () => videos.find((v) => v.id === selectedVideoId) || studioVideos.find((v) => v.id === selectedVideoId) || null,
+    [videos, studioVideos, selectedVideoId]
   );
 
   const selectedOutro = outros.find((outro) => outro.id === selectedOutroId);
@@ -706,6 +732,13 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
               </button>
               <button
                 type="button"
+                className={activeTab === "studio" ? "active" : ""}
+                onClick={() => setActiveTab("studio")}
+              >
+                🎬 Stüdyo ({studioVideos.length})
+              </button>
+              <button
+                type="button"
                 className={activeTab === "rendered" ? "active" : ""}
                 onClick={() => setActiveTab("rendered")}
               >
@@ -859,6 +892,106 @@ export function StockVideosStudio({ projectId }: { projectId: string }) {
                           type="button"
                           disabled={safeCurrentPage === totalPages}
                           onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                          className="button secondary"
+                          style={{ height: "30px", fontSize: "11px", padding: "0 10px" }}
+                        >
+                          Sonraki ›
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+
+          {/* Studio Tab (Sinematik Stüdyo Tam Film Kurguları) */}
+          {activeTab === "studio" && (
+            <>
+              {studioVideos.length === 0 ? (
+                <div className="history-empty">
+                  <Film size={32} />
+                  <span>Sinematik Stüdyo'da henüz tamamlanmış tam film/bölüm birleştirmesi bulunamadı.</span>
+                </div>
+              ) : (
+                <>
+                  <div className="stock-video-grid">
+                    {studioVideos
+                      .slice((studioPage - 1) * PAGE_SIZE, studioPage * PAGE_SIZE)
+                      .map((item) => {
+                        const isSelected = selectedVideo?.id === item.id;
+                        const mins = Math.floor(item.durationSeconds / 60);
+                        const secs = Math.floor(item.durationSeconds % 60);
+                        const durStr = `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+
+                        return (
+                          <article
+                            key={item.id}
+                            className={`stock-video-card ${isSelected ? "selected" : ""}`}
+                            onClick={() => selectVideo(item.id)}
+                            style={{ cursor: "pointer" }}
+                          >
+                            <div className="stock-thumb-wrap">
+                              <video
+                                src={item.streamUrl}
+                                poster={item.thumbnailUrl}
+                                preload="metadata"
+                                playsInline
+                                muted
+                                onMouseEnter={(e) => {
+                                  try { e.currentTarget.play(); } catch {}
+                                }}
+                                onMouseLeave={(e) => {
+                                  try { e.currentTarget.pause(); } catch {}
+                                }}
+                              />
+                              <span className="stock-thumb-duration">
+                                🎬 {durStr}
+                              </span>
+                            </div>
+                            <div className="stock-card-content">
+                              <strong title={item.name}>{item.name}</strong>
+                              <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "2px" }}>
+                                {item.width}x{item.height} ({item.width < item.height ? "9:16" : "16:9"})
+                              </div>
+                              <div className="stock-card-actions" style={{ marginTop: "6px" }}>
+                                <button
+                                  type="button"
+                                  className={`button ${isSelected ? "primary" : "secondary"}`}
+                                  style={{ height: "26px", fontSize: "11px", width: "100%", justifyContent: "center" }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    selectVideo(item.id);
+                                  }}
+                                >
+                                  {isSelected ? "✓ Tuvalde Seçili" : "Stüdyoda Düzenle"}
+                                </button>
+                              </div>
+                            </div>
+                          </article>
+                        );
+                      })}
+                  </div>
+
+                  {Math.ceil(studioVideos.length / PAGE_SIZE) > 1 && (
+                    <div className="stock-pagination-bar" style={{ marginTop: "12px" }}>
+                      <div className="stock-page-controls">
+                        <button
+                          type="button"
+                          disabled={studioPage === 1}
+                          onClick={() => setStudioPage((p) => Math.max(1, p - 1))}
+                          className="button secondary"
+                          style={{ height: "30px", fontSize: "11px", padding: "0 10px" }}
+                        >
+                          ‹ Önceki
+                        </button>
+                        <span className="stock-page-indicator">
+                          {studioPage} / {Math.ceil(studioVideos.length / PAGE_SIZE)}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={studioPage === Math.ceil(studioVideos.length / PAGE_SIZE)}
+                          onClick={() => setStudioPage((p) => Math.min(Math.ceil(studioVideos.length / PAGE_SIZE), p + 1))}
                           className="button secondary"
                           style={{ height: "30px", fontSize: "11px", padding: "0 10px" }}
                         >

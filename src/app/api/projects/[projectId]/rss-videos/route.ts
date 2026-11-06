@@ -136,9 +136,10 @@ export async function POST(request: Request, context: Context) {
     if (!storyboard || !Array.isArray(storyboard.scenes) || storyboard.scenes.length === 0) {
       const sourceMode = body.sourceMode || "prompt";
       let topicOrText = (body.topicOrText || "").trim();
-      const sourceUrl = (body.sourceUrl || "").trim() || undefined;
+      const sourceUrl =
+        sourceMode === "prompt" ? undefined : (body.sourceUrl || "").trim() || undefined;
 
-      if ((sourceMode === "url" || sourceMode === "rss") && sourceUrl && topicOrText.length < 220) {
+      if ((sourceMode === "url" || sourceMode === "rss") && sourceUrl && !topicOrText) {
         try {
           const scraped = await scrapeArticleFromUrl(sourceUrl);
           topicOrText = `${scraped.title}\n\n${scraped.text}`;

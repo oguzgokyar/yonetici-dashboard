@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { getDatabase } from "@/lib/server/database";
 import { renderAnimatedCreative } from "@/lib/server/local-remotion-renderer";
 import { runInFifoQueue } from "@/lib/server/production-worker";
@@ -176,6 +177,73 @@ export async function GET(request: Request) {
       createdAt: row.completed_at || row.created_at,
     };
   });
+
+  // Sinematik Stüdyo Tam Film Birleştirmelerini de ekle
+  try {
+    const studioDbPath = "/opt/data/sinematik-studio/data/huobao.sqlite3";
+    if (fs.existsSync(studioDbPath)) {
+      const sdb = new DatabaseSync(studioDbPath, { readOnly: true });
+      const merges = sdb.prepare(`
+        SELECT m.id, m.title, m.merged_url, m.duration, m.created_at, e.episode_number, d.title as drama_title, d.aspect_ratio
+        FROM video_merges m
+        JOIN episodes e ON m.episode_id = e.id
+        JOIN dramas d ON m.drama_id = d.id
+        WHERE m.status = 'completed' AND m.merged_url IS NOT NULL
+        ORDER BY m.id DESC
+      `).all() as unknown as Array<{
+        id: number;
+        title: string | null;
+        merged_url: string | null;
+        duration: number | null;
+        created_at: string | null;
+        episode_number: number | null;
+        drama_title: string | null;
+        aspect_ratio: string | null;
+      }>;
+      sdb.close();
+
+      for (const m of merges) {
+        if (!m.merged_url) continue;
+        const abs = path.join("/opt/data/sinematik-studio/data", m.merged_url);
+        if (!fs.existsSync(abs)) continue;
+
+        const ar = m.aspect_ratio || "9:16";
+        const epNum = m.episode_number || 1;
+        const dramaTitle = m.drama_title || "Sinematik Stüdyo";
+        const displayName = `${dramaTitle} - Bölüm ${epNum} (Tam Film)`;
+
+        videos.push({
+          id: `studio_merge_${m.id}`,
+          url: `/api/projects/${projectId}/studio-videos/${m.id}/stream`,
+          title: displayName,
+          isStockRender: false,
+          isRssVideo: false,
+          isGoogleVids: false,
+          isFlowVideo: false,
+          isStudioVideo: true,
+          googleVidsUrl: undefined,
+          sourceAssetId: undefined,
+          durationSeconds: Number(m.duration || 0),
+          motionStyle: "cinematic",
+          narrativeStyle: "cinematic",
+          idea: { title: displayName, concept: `${dramaTitle} Bölüm ${epNum}` },
+          sourceTopic: displayName,
+          storyboard: undefined,
+          metadata: {
+            aspectRatio: ar,
+            width: ar === "9:16" ? 720 : 1280,
+            height: ar === "9:16" ? 1280 : 720,
+            isStudioMerge: true,
+            source: "studio"
+          },
+          createdAt: m.created_at || new Date().toISOString(),
+        });
+      }
+    }
+  } catch (studioErr) {
+    console.warn("[VideosAPI] Could not append studio videos:", studioErr);
+  }
+
   return Response.json({ ok: true, videos });
 }
 

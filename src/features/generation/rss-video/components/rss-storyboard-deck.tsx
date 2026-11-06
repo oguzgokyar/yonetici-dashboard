@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Rss,
   Link2,
   Sparkles,
   LoaderCircle,
   RefreshCw,
+  RotateCcw,
   Plus,
   Trash2,
   ChevronDown,
@@ -113,6 +114,10 @@ export function RssStoryboardDeck({
   const [newSourceUrl, setNewSourceUrl] = useState("");
   const [newSourceCategory, setNewSourceCategory] = useState("teknoloji");
   const [activeSceneTabIdx, setActiveSceneTabIdx] = useState(0);
+
+  useEffect(() => {
+    setActiveSceneTabIdx(0);
+  }, [storyboard?.title]);
   const [showPromptAccordion, setShowPromptAccordion] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<{
@@ -199,7 +204,10 @@ export function RssStoryboardDeck({
           >
             <button
               type="button"
-              onClick={() => setSourceMode("prompt")}
+              onClick={() => {
+                setSourceMode("prompt");
+                setSourceUrl("");
+              }}
               style={{
                 padding: "6px 11px",
                 borderRadius: "6px",
@@ -576,24 +584,49 @@ export function RssStoryboardDeck({
                   : "Seçilen Haberin / Makalenin Araştırma Metni"}
               </span>
             </label>
-            {topicOrText.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  setTopicOrText("");
-                  setSourceUrl("");
-                }}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#64748b",
-                  fontSize: "11px",
-                  cursor: "pointer",
-                }}
-              >
-                Metni Temizle
-              </button>
-            )}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              {storyboard && (
+                <button
+                  type="button"
+                  onClick={onClearStoryboard}
+                  style={{
+                    background: "#fef2f2",
+                    border: "1px solid #fecaca",
+                    color: "#b91c1c",
+                    padding: "2px 7px",
+                    borderRadius: "5px",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                  }}
+                  title="Ekrandaki mevcut senaryoyu sıfırlayıp yeni video üretimine başlar"
+                >
+                  <RotateCcw size={11} />
+                  <span>Yeni Video / Sıfırla</span>
+                </button>
+              )}
+              {topicOrText.length > 0 && !storyboard && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTopicOrText("");
+                    setSourceUrl("");
+                  }}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "#64748b",
+                    fontSize: "11px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Metni Temizle
+                </button>
+              )}
+            </div>
           </div>
           <textarea
             id="rss-topic-textarea"
@@ -754,9 +787,11 @@ export function RssStoryboardDeck({
                 type="button"
                 onClick={onClearStoryboard}
                 style={{
-                  background: "none",
-                  border: "none",
+                  background: "#fef2f2",
+                  border: "1px solid #fecaca",
                   color: "#dc2626",
+                  padding: "4px 10px",
+                  borderRadius: "6px",
                   fontSize: "12px",
                   fontWeight: 600,
                   cursor: "pointer",
@@ -764,9 +799,10 @@ export function RssStoryboardDeck({
                   alignItems: "center",
                   gap: "4px",
                 }}
+                title="Yeni bir video konusu girmek için mevcut senaryoyu ve formu sıfırlar"
               >
                 <Trash2 size={13} />
-                <span>Sıfırla</span>
+                <span>Yeni Video Başlat (Sıfırla)</span>
               </button>
             </div>
           )}
@@ -1392,6 +1428,29 @@ export function RssStoryboardDeck({
                 )}
                 <span>2. Senaryoyu Onayla &amp; Videoyu Üret (FIFO)</span>
               </button>
+            </div>
+          </div>
+        ) : planning ? (
+          <div
+            style={{
+              padding: "40px 20px",
+              textAlign: "center",
+              background: "linear-gradient(135deg, #eef2ff 0%, #f8fafc 100%)",
+              borderRadius: "12px",
+              border: "1.5px dashed #818cf8",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "10px",
+            }}
+          >
+            <LoaderCircle className="spin" size={32} color="#6366f1" />
+            <div style={{ fontSize: "14.5px", fontWeight: 700, color: "#1e1b4b" }}>
+              Yeni Video Konusu Araştırılıyor &amp; Senaryo Kurgulanıyor...
+            </div>
+            <div style={{ fontSize: "12.5px", color: "#475569", maxWidth: "440px", lineHeight: 1.5 }}>
+              İçerik analiz ediliyor, sahne akışı, doğal Türkçe dış ses ve sinematik görsel planı hazırlanıyor. Lütfen bekleyin...
             </div>
           </div>
         ) : (

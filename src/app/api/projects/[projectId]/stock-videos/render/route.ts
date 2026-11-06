@@ -1,4 +1,7 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { renderFramedStockVideo, type FrameStyle } from "@/lib/server/stock-video-renderer";
 import { getDatabase } from "@/lib/server/database";
 import { runInFifoQueue, triggerProductionWorker } from "@/lib/server/production-worker";
@@ -63,9 +66,31 @@ export async function POST(
   }
 
   const db = getDatabase();
-  const stockRow = db
+  let stockRow = db
     .prepare("SELECT id, name FROM stock_videos WHERE project_id = ? AND (id = ? OR drive_file_id = ?)")
     .get(projectId, body.stockVideoId, body.stockVideoId) as { id: string; name: string } | undefined;
+
+  if (!stockRow && body.stockVideoId?.startsWith("studio_merge_")) {
+    const mergeIdStr = body.stockVideoId.replace("studio_merge_", "");
+    const studioDbPath = "/opt/data/sinematik-studio/data/huobao.sqlite3";
+    if (fs.existsSync(studioDbPath)) {
+      const sdb = new DatabaseSync(studioDbPath, { readOnly: true });
+      const mRow = sdb.prepare(`
+        SELECT m.id, e.episode_number, d.title as drama_title
+        FROM video_merges m
+        JOIN episodes e ON m.episode_id = e.id
+        JOIN dramas d ON m.drama_id = d.id
+        WHERE m.id = ? AND m.status = 'completed'
+      `).get(mergeIdStr) as unknown as { id: number; episode_number: number | null; drama_title: string | null } | undefined;
+      sdb.close();
+      if (mRow) {
+        stockRow = {
+          id: body.stockVideoId,
+          name: `${mRow.drama_title || "Sinematik"} - Bölüm ${mRow.episode_number || 1} (Tam Film)`,
+        };
+      }
+    }
+  }
 
   if (!stockRow) {
     return Response.json(
