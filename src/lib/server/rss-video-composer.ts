@@ -527,15 +527,37 @@ export async function processRssVideoJob(job: {
       const sc = scenes[i];
       const imgOutPath = path.join(tempDir, `scene_${i + 1}.png`);
 
-      // Eğer kullanıcı sahne önizlemesinde görseli zaten ürettiyse doğrudan onu kullan
-      const existingAssetId = sc.previewImageUrl?.match(/^\/api\/assets\/([a-f0-9-]{36})/i)?.[1];
-      const existingAssetPath = existingAssetId
-        ? path.join(/*turbopackIgnore: true*/ assetsDir, `${existingAssetId}.png`)
-        : "";
+      // 1. Eğer kullanıcı sahne önizlemesinde görseli zaten ürettiyse doğrudan onu kullan (Çifte token harcamayı engelle)
+      let foundExisting = false;
+      const existingAssetId = sc.previewImageUrl?.match(/\/api\/assets\/([a-f0-9-]{36})/i)?.[1];
+      if (existingAssetId) {
+        for (const ext of [".png", ".jpg", ".jpeg", ".webp"]) {
+          const candPath = path.join(/*turbopackIgnore: true*/ assetsDir, `${existingAssetId}${ext}`);
+          if (fs.existsSync(/*turbopackIgnore: true*/ candPath) && fs.statSync(candPath).size > 1000) {
+            fs.copyFileSync(/*turbopackIgnore: true*/ candPath, imgOutPath);
+            imagePaths.push(imgOutPath);
+            foundExisting = true;
+            break;
+          }
+        }
+      }
 
-      if (existingAssetPath && fs.existsSync(/*turbopackIgnore: true*/ existingAssetPath)) {
-        fs.copyFileSync(/*turbopackIgnore: true*/ existingAssetPath, imgOutPath);
-        imagePaths.push(imgOutPath);
+      if (!foundExisting && sc.previewImageUrl && sc.previewImageUrl.startsWith("http")) {
+        try {
+          const resp = await fetch(sc.previewImageUrl, { signal: AbortSignal.timeout(15_000) });
+          if (resp.ok) {
+            const buf = Buffer.from(await resp.arrayBuffer());
+            if (buf.length > 1000) {
+              const converted = await sharp(buf).png().toBuffer();
+              fs.writeFileSync(imgOutPath, converted);
+              imagePaths.push(imgOutPath);
+              foundExisting = true;
+            }
+          }
+        } catch {}
+      }
+
+      if (foundExisting) {
         continue;
       }
 

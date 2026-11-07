@@ -637,11 +637,12 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
 
   async function handleGenerateAllSceneImages() {
     if (!storyboard || !storyboard.scenes.length) return;
-    setMessage(`Tüm sahnelerin (${storyboard.scenes.length} sahne) görselleri üretiliyor...`);
-    for (let i = 0; i < storyboard.scenes.length; i++) {
-      await handleGenerateSceneImage(i);
-    }
-    setMessage("Tüm sahne görselleri hazır! Sağ önizleme alanından inceleyebilirsiniz.");
+    const total = storyboard.scenes.length;
+    setMessage(`Tüm sahnelerin (${total} sahne) görselleri birbirini beklemeden aynı anda (paralel) üretiliyor...`);
+    await Promise.allSettled(
+      storyboard.scenes.map((_, i) => handleGenerateSceneImage(i))
+    );
+    setMessage("Tüm sahne görsellerinin üretimi tamamlandı! Sağ önizleme alanından inceleyebilirsiniz.");
   }
 
   function handleClearStoryboard() {
