@@ -81,36 +81,16 @@ export function RssVideoGallery({
                   preload="none"
                   playsInline
                 />
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: "8px",
-                    flexWrap: "wrap",
-                  }}
-                >
+                <div className="rss-gallery-card-footer">
                   <span>
                     {styleBadge} • {video.title || "RSS Video"} • {video.durationSeconds || 30} sn
                   </span>
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <div className="rss-gallery-card-actions">
                     {video.storyboard ? (
                       <button
                         type="button"
                         onClick={() => onEditVideo(video)}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "4px",
-                          color: "#4f46e5",
-                          background: "#eef2ff",
-                          border: "1px solid #c7d2fe",
-                          padding: "3px 8px",
-                          borderRadius: "6px",
-                          fontWeight: 600,
-                          fontSize: "11px",
-                          cursor: "pointer",
-                        }}
+                        className="rss-gallery-load-btn"
                         title="Senaryoyu düzenleme paneline yükle"
                       >
                         <Pencil size={12} /> Senaryoyu Yükle
@@ -128,14 +108,7 @@ export function RssVideoGallery({
                     />
                     <Link
                       href={`/projects/${projectId}/publishing?assetId=${video.id}`}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "4px",
-                        color: "var(--accent, #612bd3)",
-                        fontWeight: 600,
-                        fontSize: "11px",
-                      }}
+                      className="rss-gallery-plan-link"
                     >
                       <Send size={13} /> Planla
                     </Link>
@@ -143,15 +116,7 @@ export function RssVideoGallery({
                       type="button"
                       onClick={() => onDeleteVideo(video.id)}
                       disabled={deletingId === video.id}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: "#dc2626",
-                        cursor: "pointer",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        padding: "2px",
-                      }}
+                      className="rss-gallery-delete-btn"
                       title="Videoyu sil"
                     >
                       {deletingId === video.id ? (

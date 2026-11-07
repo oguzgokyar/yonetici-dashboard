@@ -344,8 +344,6 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
         if (latestJob?.request?.storyboard?.scenes?.length) {
           const latestSb = latestJob.request.storyboard as RssStoryboard;
           setStoryboard((prev) => {
-            // Yalnızca ekranda senaryo varsa ve aynı videoya aitse görsel URL'lerini güncelle;
-            // Eğer prev null ise (kullanıcı yeni video için sıfırladıysa) eski senaryoyu ekrana zorla geri getirme!
             if (!prev) return null;
             if (prev.title !== latestSb.title || prev.scenes.length !== latestSb.scenes.length) {
               return prev;
@@ -592,9 +590,9 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
     setMessage(`Sahne ${sceneIndex + 1} senaryodan çıkarıldı (${filtered.length} sahne kaldı).`);
   }
 
-  async function handleGenerateSceneImage(sceneIndex: number) {
-    if (!storyboard || !storyboard.scenes[sceneIndex]) return;
-    if (generatingSceneImages[sceneIndex]) return;
+  async function handleGenerateSceneImage(sceneIndex: number): Promise<boolean> {
+    if (!storyboard || !storyboard.scenes[sceneIndex]) return false;
+    if (generatingSceneImages[sceneIndex]) return false;
 
     const targetScene = storyboard.scenes[sceneIndex];
     setGeneratingSceneImages((prev) => ({ ...prev, [sceneIndex]: true }));
@@ -628,8 +626,10 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
         };
       });
       setMessage(`Sahne ${sceneIndex + 1} görseli hazır.`);
+      return true;
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Sahne görseli üretilemedi.");
+      return false;
     } finally {
       setGeneratingSceneImages((prev) => ({ ...prev, [sceneIndex]: false }));
     }
@@ -638,11 +638,34 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
   async function handleGenerateAllSceneImages() {
     if (!storyboard || !storyboard.scenes.length) return;
     const total = storyboard.scenes.length;
-    setMessage(`Tüm sahnelerin (${total} sahne) görselleri birbirini beklemeden aynı anda (paralel) üretiliyor...`);
-    await Promise.allSettled(
-      storyboard.scenes.map((_, i) => handleGenerateSceneImage(i))
+    setMessage(`Sahne görselleri kontrollü eşzamanlılıkla (2'şerli grup) üretiliyor (0/${total})...`);
+
+    const indices = storyboard.scenes.map((_, i) => i);
+    const concurrency = 2;
+    let cursor = 0;
+    let completedCount = 0;
+
+    async function worker() {
+      while (cursor < indices.length) {
+        const idx = indices[cursor++];
+        const ok = await handleGenerateSceneImage(idx);
+        if (ok) completedCount++;
+      }
+    }
+
+    await Promise.all(
+      Array.from({ length: Math.min(concurrency, indices.length) }, () => worker())
     );
-    setMessage("Tüm sahne görsellerinin üretimi tamamlandı! Sağ önizleme alanından inceleyebilirsiniz.");
+
+    if (completedCount === total) {
+      setMessage(
+        `Tüm sahne görselleri (${completedCount}/${total}) başarıyla üretildi! Sağ önizleme alanından inceleyebilirsiniz.`
+      );
+    } else {
+      setMessage(
+        `${completedCount}/${total} sahne görseli üretildi. Eksik kalan sahneleri tekil olarak yeniden üretebilirsiniz.`
+      );
+    }
   }
 
   function handleClearStoryboard() {
@@ -688,57 +711,20 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px", width: "100%" }}>
-      <div
-        className="generation-studio"
-        style={{
-          display: "grid",
-          gridTemplateColumns: isControlsCollapsed ? "48px 1fr" : "380px 1fr",
-          gap: "20px",
-          transition: "grid-template-columns 0.2s ease",
-        }}
-      >
+    <div className="rss-studio-root">
+      <div className={`generation-studio rss-studio-grid ${isControlsCollapsed ? "is-collapsed" : ""}`}>
         {/* SOL PANEL: TEMEL AYARLAR */}
         {isControlsCollapsed ? (
-          <aside
-            style={{
-              background: "#ffffff",
-              border: "1px solid #e2e8f0",
-              borderRadius: "12px",
-              padding: "12px 6px",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: "12px",
-            }}
-          >
+          <aside className="rss-collapsed-rail">
             <button
               type="button"
               onClick={() => setIsControlsCollapsed(false)}
-              style={{
-                background: "#f1f5f9",
-                border: "1px solid #cbd5e1",
-                borderRadius: "8px",
-                padding: "8px",
-                cursor: "pointer",
-                color: "#334155",
-              }}
+              className="rss-rail-expand-btn"
               title="Ayarlar Panelini Aç"
             >
               <PanelLeftOpen size={18} />
             </button>
-            <span
-              style={{
-                writingMode: "vertical-rl",
-                transform: "rotate(180deg)",
-                fontSize: "11px",
-                fontWeight: 700,
-                color: "#64748b",
-                letterSpacing: "1px",
-              }}
-            >
-              TEMEL AYARLAR
-            </span>
+            <span className="rss-rail-vertical-label">TEMEL AYARLAR</span>
           </aside>
         ) : (
           <section className="generation-controls">
@@ -747,30 +733,24 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
                 <span>AI GÖRSEL • GEMINI 2.0 TTS • FFMPEG KURGU</span>
                 <h2>RSS &amp; Konu Videosu</h2>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <div className="rss-header-actions">
                 <button
                   type="button"
                   onClick={() => setIsControlsCollapsed(true)}
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    color: "#64748b",
-                    cursor: "pointer",
-                    padding: "4px",
-                  }}
+                  className="rss-collapse-btn"
                   title="Sol Paneli Daralt"
                 >
                   <PanelLeftClose size={18} />
                 </button>
-                <Rss size={20} color="#6366f1" />
+                <Rss size={20} />
               </div>
             </div>
 
             <div className="brand-concept-status">
-              <span style={{ background: "#4f46e5" }}>
+              <span className="rss-concept-badge">
                 <Sparkles size={13} />
               </span>
-              <div style={{ flex: 1 }}>
+              <div className="rss-concept-copy">
                 <strong>visual-skills Yönetmen &amp; Animatic Motoru</strong>
                 <small>
                   CliProxy derinlikli görselleri, Gemini 2.0 TTS ve FFmpeg xfade/ASS altyazı ile
@@ -781,78 +761,28 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
 
             {/* Aktif Üretim veya Hata Durum Kartı */}
             {activeJob && (
-              <div
-                style={{
-                  padding: "12px",
-                  borderRadius: "10px",
-                  background: "#eef2ff",
-                  border: "1px solid #c7d2fe",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "6px",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span
-                    style={{
-                      fontSize: "12px",
-                      fontWeight: 700,
-                      color: "#3730a3",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "6px",
-                    }}
-                  >
+              <div className="rss-job-banner active">
+                <div className="rss-job-banner-top">
+                  <span className="rss-job-banner-title">
                     <LoaderCircle className="spin" size={14} />
                     <span>Üretim Devam Ediyor (%{activeJob.progress?.percent || 10})</span>
                   </span>
                 </div>
-                <div
-                  style={{
-                    height: "6px",
-                    borderRadius: "99px",
-                    background: "#e0e7ff",
-                    overflow: "hidden",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: `${Math.min(100, Math.max(5, activeJob.progress?.percent || 10))}%`,
-                      height: "100%",
-                      background: "linear-gradient(90deg, #4f46e5, #7c3aed)",
-                      transition: "width 0.3s ease",
-                    }}
-                  />
-                </div>
-                <small style={{ fontSize: "11px", color: "#4338ca" }}>
+                <progress
+                  className="rss-job-progress-bar"
+                  max={100}
+                  value={Math.min(100, Math.max(5, activeJob.progress?.percent || 10))}
+                />
+                <small className="rss-job-detail">
                   {activeJob.progress?.detail || "FIFO sırasından işleniyor..."}
                 </small>
               </div>
             )}
 
             {lastErrorJob && (
-              <div
-                style={{
-                  padding: "12px",
-                  borderRadius: "10px",
-                  background: "#fef2f2",
-                  border: "1px solid #fecaca",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "6px",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span
-                    style={{
-                      fontSize: "12px",
-                      fontWeight: 700,
-                      color: "#b91c1c",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "5px",
-                    }}
-                  >
+              <div className="rss-job-banner error">
+                <div className="rss-job-banner-top">
+                  <span className="rss-job-banner-title">
                     <AlertTriangle size={14} />
                     <span>Üretim Başarısız Oldu</span>
                   </span>
@@ -868,19 +798,12 @@ export function RssVideoStudio({ projectId }: { projectId: string }) {
                       } catch {}
                       setLastErrorJob(null);
                     }}
-                    style={{
-                      background: "transparent",
-                      border: "none",
-                      color: "#991b1b",
-                      cursor: "pointer",
-                    }}
+                    className="rss-job-dismiss-btn"
                   >
                     <X size={14} />
                   </button>
                 </div>
-                <small style={{ fontSize: "11.5px", color: "#7f1d1d", lineHeight: 1.4 }}>
-                  {lastErrorJob.error}
-                </small>
+                <small className="rss-job-error-text">{lastErrorJob.error}</small>
               </div>
             )}
 

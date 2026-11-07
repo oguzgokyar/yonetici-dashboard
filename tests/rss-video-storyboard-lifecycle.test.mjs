@@ -33,17 +33,34 @@ test("2. Storyboard reset & pollActiveJobs non-resurrection guarantees", () => {
   assert.match(studioCode, /setStoryboard\(null\);\s*setTopicOrText\(""\);\s*setSourceUrl\(""\);/);
 });
 
-test("3. RssStoryboardDeck prompt mode cleanup, activeSceneTab reset, and planning banner", () => {
+test("3. RssStoryboardDeck & modular subcomponents: prompt mode cleanup, activeSceneTab reset, planning banner, and zero inline CSS", () => {
+  const studioCode = read("src/features/generation/rss-video-studio.tsx");
+  const briefCode = read("src/features/generation/rss-video/components/rss-brief-form.tsx");
   const deckCode = read("src/features/generation/rss-video/components/rss-storyboard-deck.tsx");
+  const researchCode = read("src/features/generation/rss-video/components/rss-research-panel.tsx");
+  const sceneCardCode = read("src/features/generation/rss-video/components/rss-scene-editor-card.tsx");
+  const galleryCode = read("src/features/generation/rss-video/components/rss-video-gallery.tsx");
 
-  // Prompt mode clears sourceUrl
-  assert.match(deckCode, /setSourceMode\("prompt"\);\s*setSourceUrl\(""\);/);
+  // Prompt mode clears sourceUrl in RssResearchPanel
+  assert.match(researchCode, /setSourceMode\("prompt"\);\s*setSourceUrl\(""\);/);
 
   // activeSceneTabIdx resets to 0 when storyboard title changes
   assert.match(deckCode, /useEffect\(\(\) => \{\s*setActiveSceneTabIdx\(0\);\s*\}, \[storyboard\?\.title\]\);/);
 
   // Planning loading banner appears when planning && !storyboard
   assert.match(deckCode, /planning \?\s*\(\s*<div[^>]*>[\s\S]*?Yeni Video Konusu Araştırılıyor &amp; Senaryo Kurgulanıyor\.\.\./);
+
+  // Zero inline CSS across all RSS Video frontend components
+  for (const [name, code] of [
+    ["rss-video-studio.tsx", studioCode],
+    ["rss-brief-form.tsx", briefCode],
+    ["rss-storyboard-deck.tsx", deckCode],
+    ["rss-research-panel.tsx", researchCode],
+    ["rss-scene-editor-card.tsx", sceneCardCode],
+    ["rss-video-gallery.tsx", galleryCode],
+  ]) {
+    assert.doesNotMatch(code, /style=\{\{/, `${name} should not contain inline style={{...}}`);
+  }
 });
 
 test("4. API routes protect user topic from unwanted URL re-scraping", () => {

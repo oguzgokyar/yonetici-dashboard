@@ -67,6 +67,16 @@ function imageFromParts(parts: GeminiPart[] = []): MediaInput | null {
   return null;
 }
 
+function sleepMs(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableUpstreamStatus(status: number, message: string): boolean {
+  if (status === 429 || status === 502 || status === 503 || status === 504) return true;
+  if (status === 500 && /internal error|auth_unavailable|exhausted|timeout/i.test(message)) return true;
+  return false;
+}
+
 export async function analyzeCreative(options: { baseUrl: string; apiKey: string; model: string; image: MediaInput; prompt: string }) {
   if (/gemini/i.test(options.model)) {
     const response = await fetch(`${endpointOrigin(options.baseUrl)}/v1beta/models/${encodeURIComponent(options.model)}:generateContent`, { method: "POST", headers: { Authorization: `Bearer ${options.apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: options.prompt }, { inlineData: { data: options.image.bytes.toString("base64"), mimeType: options.image.mimeType } }] }], generationConfig: { responseModalities: ["TEXT"], temperature: 0.1 } }), signal: AbortSignal.timeout(120_000) });
@@ -86,16 +96,37 @@ export async function renderCreative(options: { baseUrl: string; apiKey: string;
     const parts: GeminiPart[] = [{ text: prompt }];
     for (const reference of options.references || []) parts.push({ inlineData: { data: reference.bytes.toString("base64"), mimeType: reference.mimeType } });
     if (options.previous) parts.push({ inlineData: { data: options.previous.bytes.toString("base64"), mimeType: options.previous.mimeType } });
-    const response = await fetch(`${endpointOrigin(baseUrl)}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio: ratio } } }),
-      signal: AbortSignal.timeout(240_000),
-    });
-    if (!response.ok) throw new Error(await responseMessage(response));
-    const body = await response.json() as { candidates?: { content?: { parts?: GeminiPart[] } }[] };
-    const image = imageFromParts(body.candidates?.[0]?.content?.parts);
-    if (!image) throw new Error("Render modeli kullanılabilir görsel döndürmedi.");
-    return image;
+
+    const candidateModels = [model];
+    if (!/gemini-3-pro-image/i.test(model)) candidateModels.push("gemini-3-pro-image");
+    if (!/gemini-3\.1-flash-image/i.test(model)) candidateModels.push("gemini-3.1-flash-image");
+
+    let lastError = "Render modeli kullanılabilir görsel döndürmedi.";
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const targetModel = candidateModels[Math.min(attempt, candidateModels.length - 1)];
+      const response = await fetch(`${endpointOrigin(baseUrl)}/v1beta/models/${encodeURIComponent(targetModel)}:generateContent`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio: ratio } } }),
+        signal: AbortSignal.timeout(240_000),
+      });
+      if (response.ok) {
+        const body = await response.json() as { candidates?: { content?: { parts?: GeminiPart[] } }[] };
+        const image = imageFromParts(body.candidates?.[0]?.content?.parts);
+        if (image) return image;
+        lastError = "Render modeli kullanılabilir görsel döndürmedi.";
+      } else {
+        lastError = await responseMessage(response);
+        if (!isRetryableUpstreamStatus(response.status, lastError)) {
+          throw new Error(lastError);
+        }
+      }
+      if (attempt < 2) {
+        const jitter = Math.floor(Math.random() * 600);
+        await sleepMs(1600 * (attempt + 1) + jitter);
+      }
+    }
+    throw new Error(lastError);
   }
 
   if ((options.references?.length || options.previous) && /gpt-image/i.test(model)) {

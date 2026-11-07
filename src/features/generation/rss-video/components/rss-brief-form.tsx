@@ -86,26 +86,18 @@ export function RssBriefForm({
     RSS_NARRATIVE_STYLES.find((s) => s.key === narrativeStyle) || RSS_NARRATIVE_STYLES[0];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+    <div className="rss-brief-stack">
       {/* 1. Video Anlatım & Akış Stili Seçici */}
       <div className="control-section">
-        <div className="control-title" style={{ marginBottom: "8px" }}>
-          <label style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-            <Compass size={14} color="#6366f1" />
+        <div className="control-title rss-control-title-spaced">
+          <label className="rss-inline-label">
+            <Compass size={14} className="rss-icon-indigo" />
             <span>Anlatım &amp; Kurgu Stili</span>
           </label>
-          <span style={{ fontSize: "11px", color: "#6366f1", fontWeight: 600 }}>
-            {currentStyleMeta.badge}
-          </span>
+          <span className="rss-style-pill">{currentStyleMeta.badge}</span>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "6px",
-          }}
-        >
+        <div className="rss-style-grid">
           {RSS_NARRATIVE_STYLES.map((st) => {
             const isSelected = st.key === narrativeStyle;
             return (
@@ -113,69 +105,27 @@ export function RssBriefForm({
                 key={st.key}
                 type="button"
                 onClick={() => onSelectNarrativeStyle(st.key)}
-                style={{
-                  textAlign: "left",
-                  padding: "8px 10px",
-                  borderRadius: "8px",
-                  border: isSelected ? "1.5px solid #6366f1" : "1px solid #e2e8f0",
-                  background: isSelected ? "#eef2ff" : "#ffffff",
-                  cursor: "pointer",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "2px",
-                  transition: "all 0.15s ease",
-                }}
+                className={`rss-style-card ${isSelected ? "is-selected" : ""}`}
               >
-                <span
-                  style={{
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    color: isSelected ? "#3730a3" : "#1e293b",
-                  }}
-                >
-                  {st.badge}
-                </span>
-                <small
-                  style={{
-                    fontSize: "10.5px",
-                    color: isSelected ? "#4338ca" : "#64748b",
-                    lineHeight: 1.25,
-                  }}
-                >
-                  {st.label}
-                </small>
+                <span className="rss-style-card-badge">{st.badge}</span>
+                <small className="rss-style-card-label">{st.label}</small>
               </button>
             );
           })}
         </div>
 
-        <div
-          style={{
-            marginTop: "8px",
-            padding: "8px 10px",
-            borderRadius: "8px",
-            background: "#f8fafc",
-            border: "1px solid #e2e8f0",
-            fontSize: "11.5px",
-            color: "#475569",
-            lineHeight: 1.4,
-          }}
-        >
-          <strong style={{ color: "#1e293b", display: "block", marginBottom: "2px" }}>
-            {currentStyleMeta.label} Kurgusu:
-          </strong>
+        <div className="rss-style-summary-box">
+          <strong className="rss-style-summary-title">{currentStyleMeta.label} Kurgusu:</strong>
           {currentStyleMeta.desc}
-          <div style={{ marginTop: "4px", fontSize: "10.5px", color: "#6366f1", fontWeight: 600 }}>
-            Ritim: {currentStyleMeta.pacingRule}
-          </div>
+          <div className="rss-style-pacing">Ritim: {currentStyleMeta.pacingRule}</div>
         </div>
       </div>
 
       {/* 2. Görsel Tarz, Süre ve Boyut */}
       <div className="attribute-grid">
         <label className="select-field">
-          <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-            <Palette size={12} color="#6366f1" /> Görsel Tarz (CliProxy T2I)
+          <span className="rss-inline-label compact">
+            <Palette size={12} className="rss-icon-indigo" /> Görsel Tarz (CliProxy T2I)
           </span>
           <div>
             <select
@@ -239,56 +189,28 @@ export function RssBriefForm({
       </div>
 
       {/* 3. Gemini 2.0 TTS, Altyazı & Müzik Ayarları */}
-      <div
-        style={{
-          border: "1px solid #e2e8f0",
-          borderRadius: "8px",
-          overflow: "hidden",
-          background: "#f8fafc",
-        }}
-      >
+      <div className="rss-audio-accordion">
         <button
           type="button"
           onClick={() => setShowAudioSettings(!showAudioSettings)}
-          style={{
-            width: "100%",
-            padding: "9px 12px",
-            background: "transparent",
-            border: "none",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            cursor: "pointer",
-            fontSize: "12px",
-            fontWeight: 600,
-            color: "#334155",
-          }}
+          className="rss-audio-accordion-trigger"
         >
-          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-            <Volume2 size={14} color="#6366f1" />
+          <span className="rss-inline-label">
+            <Volume2 size={14} className="rss-icon-indigo" />
             <span>Gemini 2.0 TTS, Altyazı &amp; Fon Ayarları</span>
           </span>
-          <span style={{ fontSize: "11px", color: "#64748b" }}>
+          <span className="rss-audio-accordion-chevron">
             {showAudioSettings ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
           </span>
         </button>
 
         {showAudioSettings && (
-          <div
-            style={{
-              padding: "12px",
-              background: "#ffffff",
-              borderTop: "1px solid #e2e8f0",
-              display: "flex",
-              flexDirection: "column",
-              gap: "10px",
-            }}
-          >
+          <div className="rss-audio-accordion-body">
             {/* Gemini 2.0 TTS Aktör & Hız */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+            <div className="rss-two-col-grid">
               <label className="select-field">
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                  <Mic size={12} color="#7c3aed" /> Gemini 2.0 TTS Sesi
+                <span className="rss-inline-label compact">
+                  <Mic size={12} className="rss-icon-violet" /> Gemini 2.0 TTS Sesi
                 </span>
                 <div>
                   <select
@@ -341,10 +263,10 @@ export function RssBriefForm({
             </label>
 
             {/* Altyazı Stili & Vurgu Rengi */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+            <div className="rss-two-col-grid">
               <label className="select-field">
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                  <Subtitles size={12} color="#0284c7" /> Altyazı Animasyonu
+                <span className="rss-inline-label compact">
+                  <Subtitles size={12} className="rss-icon-sky" /> Altyazı Animasyonu
                 </span>
                 <div>
                   <select
@@ -379,10 +301,10 @@ export function RssBriefForm({
             </div>
 
             {/* Fon Müziği & Ducking */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+            <div className="rss-two-col-grid">
               <label className="select-field">
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                  <Music size={12} color="#059669" /> Fon Atmosferi
+                <span className="rss-inline-label compact">
+                  <Music size={12} className="rss-icon-emerald" /> Fon Atmosferi
                 </span>
                 <div>
                   <select
@@ -415,18 +337,10 @@ export function RssBriefForm({
               </label>
             </div>
 
-            <div
-              style={{
-                fontSize: "10.5px",
-                color: "#64748b",
-                background: "#f8fafc",
-                padding: "6px 8px",
-                borderRadius: "6px",
-                border: "1px dashed #cbd5e1",
-              }}
-            >
-              🔒 <strong>Saf Gemini 2.0 TTS Kuralı:</strong> Edge-TTS yedeği kapalıdır. Ses üretiminde
-              bir sorun oluşursa sistem sessizce yedek sese geçmez, doğrudan hatayı bildirir.
+            <div className="rss-tts-policy-note">
+              🔒 <strong>Saf Gemini 2.0 TTS Kuralı:</strong> Edge-TTS yedeği kapalıdır. Ses
+              üretiminde bir sorun oluşursa sistem sessizce yedek sese geçmez, doğrudan hatayı
+              bildirir.
             </div>
           </div>
         )}
