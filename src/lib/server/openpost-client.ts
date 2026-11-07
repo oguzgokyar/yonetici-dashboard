@@ -499,45 +499,61 @@ export async function createOpenPostPublication(
   const pubData = (await pubRes.json()) as { id: string; status: string; revision?: number };
   const publicationId = pubData.id;
 
-  // 2. If immediate publishing requested, call publish-now
+  // 2. If immediate publishing requested, wait for media analysis to settle then call publish-now
   if (params.type === "now") {
     const publishNowUrl = `${baseUrl}/api/v1/publications/${publicationId}/publish-now`;
-    const publishRes = await fetch(publishNowUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({ expected_revision: pubData.revision || 1 }),
-      signal: AbortSignal.timeout(30_000),
-    });
+    let lastErr = "";
+    for (let attempt = 1; attempt <= 6; attempt++) {
+      const publishRes = await fetch(publishNowUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ expected_revision: pubData.revision || 1 }),
+        signal: AbortSignal.timeout(30_000),
+      });
 
-    if (!publishRes.ok) {
-      const errText = await publishRes.text().catch(() => "");
-      throw new Error(`OpenPost anında yayınlama hatası (${publishRes.status}): ${errText}`);
+      if (publishRes.ok) {
+        return { publicationId, status: "publishing" };
+      }
+
+      lastErr = await publishRes.text().catch(() => "");
+      if (lastErr.includes("Video analysis must finish") && attempt < 6) {
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+      throw new Error(`OpenPost anında yayınlama hatası (${publishRes.status}): ${lastErr}`);
     }
-
-    return { publicationId, status: "publishing" };
+    throw new Error(`OpenPost anında yayınlama hatası: ${lastErr}`);
   } else if (params.type === "schedule") {
     const scheduleUrl = `${baseUrl}/api/v1/publications/${publicationId}/schedule`;
-    const schedRes = await fetch(scheduleUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({ expected_revision: pubData.revision || 1 }),
-      signal: AbortSignal.timeout(30_000),
-    });
+    let lastErr = "";
+    for (let attempt = 1; attempt <= 6; attempt++) {
+      const schedRes = await fetch(scheduleUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ expected_revision: pubData.revision || 1 }),
+        signal: AbortSignal.timeout(30_000),
+      });
 
-    if (!schedRes.ok) {
-      const errText = await schedRes.text().catch(() => "");
-      throw new Error(`OpenPost zamanlama hatası (${schedRes.status}): ${errText}`);
+      if (schedRes.ok) {
+        return { publicationId, status: "scheduled" };
+      }
+
+      lastErr = await schedRes.text().catch(() => "");
+      if (lastErr.includes("Video analysis must finish") && attempt < 6) {
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+      throw new Error(`OpenPost zamanlama hatası (${schedRes.status}): ${lastErr}`);
     }
-
-    return { publicationId, status: "scheduled" };
+    throw new Error(`OpenPost zamanlama hatası: ${lastErr}`);
   }
 
   return { publicationId, status: pubData.status || "draft" };
