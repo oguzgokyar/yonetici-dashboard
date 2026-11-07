@@ -421,6 +421,48 @@ export async function createOpenPostPublication(
 
   const mediaItems = (params.media || []).map((m) => ({ media_id: m.id }));
 
+  // Auto-resolve dynamic platform destination options (e.g. YouTube category & playlist)
+  const renditions: Array<Record<string, unknown>> = [];
+  for (const accId of params.accountIds) {
+    try {
+      const optRes = await fetch(`${baseUrl}/api/v1/accounts/${accId}/destination-options`, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          Accept: "application/json",
+        },
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (optRes.ok) {
+        const optData = (await optRes.json()) as {
+          options?: {
+            youtube_categories?: Array<{ value: string; label: string }>;
+            youtube_playlists?: Array<{ value: string; label: string }>;
+          };
+        };
+        const settings: Record<string, unknown> = {};
+        if (optData.options?.youtube_categories && optData.options.youtube_categories.length > 0) {
+          settings.category_id =
+            optData.options.youtube_categories.find((c) => c.value === "27")?.value ||
+            optData.options.youtube_categories[0].value;
+          settings.privacy = "public";
+        }
+        if (optData.options?.youtube_playlists && optData.options.youtube_playlists.length > 0) {
+          settings.playlist_id = optData.options.youtube_playlists[0].value;
+        }
+        if (Object.keys(settings).length > 0) {
+          renditions.push({
+            social_account_id: accId,
+            title: params.title || params.caption.slice(0, 50) || "Gönderi",
+            body: params.caption,
+            settings,
+          });
+        }
+      }
+    } catch {
+      // Non-blocking fallback to server defaults
+    }
+  }
+
   const payload: Record<string, unknown> = {
     workspace_id: targetWorkspaceId,
     title: params.title || params.caption.slice(0, 50) || "Gönderi",
@@ -429,6 +471,7 @@ export async function createOpenPostPublication(
     source_text: params.caption,
     social_account_ids: params.accountIds,
     media: mediaItems.length > 0 ? mediaItems : null,
+    ...(renditions.length > 0 ? { renditions } : {}),
   };
 
   if (params.type === "schedule" && params.date) {
@@ -453,7 +496,7 @@ export async function createOpenPostPublication(
     throw new Error(`OpenPost gönderi oluşturma hatası (${pubRes.status}): ${errorText}`);
   }
 
-  const pubData = (await pubRes.json()) as { id: string; status: string };
+  const pubData = (await pubRes.json()) as { id: string; status: string; revision?: number };
   const publicationId = pubData.id;
 
   // 2. If immediate publishing requested, call publish-now
@@ -466,7 +509,7 @@ export async function createOpenPostPublication(
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify({ workspace_id: targetWorkspaceId }),
+      body: JSON.stringify({ expected_revision: pubData.revision || 1 }),
       signal: AbortSignal.timeout(30_000),
     });
 
@@ -485,7 +528,7 @@ export async function createOpenPostPublication(
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify({ workspace_id: targetWorkspaceId }),
+      body: JSON.stringify({ expected_revision: pubData.revision || 1 }),
       signal: AbortSignal.timeout(30_000),
     });
 
