@@ -1,11 +1,13 @@
 import { getDatabase } from "@/lib/server/database";
 import { resolvePackageItemsForPublishing } from "@/lib/server/canva-package-service";
 import {
-  createPostizPost,
-  uploadMediaToPostiz,
   YouTubePostSettings,
   TikTokPostSettings,
 } from "@/lib/server/postiz-client";
+import {
+  createUnifiedSocialPost,
+  uploadSocialMedia,
+} from "@/lib/server/social-publisher";
 import { convertImagesToYouTubeVideo } from "@/lib/server/image-slideshow-service";
 import { appendMusicAttribution, resolveMusicAttribution } from "@/lib/music-attribution";
 import { uploadVideoViaTikTokBrowser } from "@/lib/server/tiktok-browser-service";
@@ -110,7 +112,7 @@ export async function POST(request: Request, context: Context) {
 
         const postizMediaList: Array<{ id: string; path: string }> = [];
         for (const pItem of packageItems) {
-          const uploaded = await uploadMediaToPostiz(pItem.buffer, pItem.filename, pItem.mimeType);
+          const uploaded = await uploadSocialMedia(pItem.buffer, pItem.filename, pItem.mimeType);
           postizMediaList.push({ id: uploaded.id, path: uploaded.path });
         }
 
@@ -148,7 +150,7 @@ export async function POST(request: Request, context: Context) {
               });
               if (videoRes.ok && videoRes.videoPath && fs.existsSync(videoRes.videoPath)) {
                 const vBuf = fs.readFileSync(videoRes.videoPath);
-                const vUploaded = await uploadMediaToPostiz(vBuf, path.basename(videoRes.videoPath), "video/mp4");
+                const vUploaded = await uploadSocialMedia(vBuf, path.basename(videoRes.videoPath), "video/mp4");
                 effectivePostizMediaList = [{ id: vUploaded.id, path: vUploaded.path }];
                 effectivePostType = "reel";
                 try { fs.unlinkSync(videoRes.videoPath); } catch {}
@@ -163,7 +165,7 @@ export async function POST(request: Request, context: Context) {
             const relPostId = target.relatedPostId || item.relatedPostId || null;
             const relVideoUrl = target.relatedVideoUrl || item.relatedVideoUrl || null;
 
-            const postizResult = await createPostizPost({
+            const postizResult = await createUnifiedSocialPost({
               type: targetScheduleType,
               date: targetScheduledAt,
               integrationId: target.integrationId,
@@ -344,7 +346,7 @@ export async function POST(request: Request, context: Context) {
       let postizMedia: { id: string; path: string } | null = null;
       if (!isOnlyTikTokBrowser) {
         try {
-          postizMedia = await uploadMediaToPostiz(fileBuffer, filename, mimeType);
+          postizMedia = await uploadSocialMedia(fileBuffer, filename, mimeType);
         } catch (err) {
           results.push({
             success: false,
@@ -522,9 +524,9 @@ export async function POST(request: Request, context: Context) {
 
         try {
           if (!postizMedia) {
-            postizMedia = await uploadMediaToPostiz(fileBuffer, filename, mimeType);
+            postizMedia = await uploadSocialMedia(fileBuffer, filename, mimeType);
           }
-          const postizResult = await createPostizPost({
+          const postizResult = await createUnifiedSocialPost({
             type: targetScheduleType,
             date: targetScheduledAt,
             integrationId: target.integrationId,

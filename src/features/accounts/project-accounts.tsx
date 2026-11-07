@@ -43,11 +43,16 @@ type AvailableIntegration = {
 
 type AccountsResponse = {
   ok: boolean;
+  activePublisher?: "openpost" | "postiz";
   connected: ConnectedAccount[];
   available: AvailableIntegration[];
-  postizConfigured: boolean;
+  publisherConfigured?: boolean;
+  publisherError?: string;
+  openPostConfigured?: boolean;
+  openPostWebUrl?: string;
+  postizConfigured?: boolean;
   postizError?: string;
-  postizWebUrl: string;
+  postizWebUrl?: string;
 };
 
 // Platform bilgilerini döndüren yardımcı fonksiyon
@@ -74,6 +79,14 @@ function getPlatformMeta(identifier: string): {
         bg: "#f0f0f0",
         icon: <Music2 size={18} />,
         description: "Video & Fotoğraf Karesi",
+      };
+    case "facebook":
+      return {
+        label: "Facebook",
+        color: "#1877f2",
+        bg: "#edf5ff",
+        icon: <Share2 size={18} />,
+        description: "Sayfa Gönderisi & Video",
       };
     case "instagram-standalone":
     case "instagram":
@@ -256,6 +269,13 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
     .map((id) => getPlatformMeta(id).label)
     .join(", ") || "—";
 
+  const isOp = data?.activePublisher === "openpost" || Boolean(data?.openPostConfigured);
+  const publisherName = isOp ? "OpenPost" : "Postiz";
+  const publisherConfigured = Boolean(isOp ? data?.openPostConfigured : data?.postizConfigured);
+  const publisherWebUrl = isOp
+    ? (data?.openPostWebUrl || "https://sm.atolyehanem.com")
+    : (data?.postizWebUrl || "http://postiz.43.131.47.253.sslip.io");
+
   // Desteklenen platformlar: YouTube ve TikTok bağlama kılavuzu
   const hasYoutube = (data?.available || []).some((a) => a.identifier === "youtube") ||
     (data?.connected || []).some((a) => a.identifier === "youtube");
@@ -268,7 +288,7 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
       <section className="page-intro">
         <div>
           <h2>Sosyal Medya Hesapları</h2>
-          <p>Bu markaya ait paylaşımların yayınlanacağı aktif kanalları yönetin ve Postiz ile senkronize edin.</p>
+          <p>Bu markaya ait paylaşımların yayınlanacağı aktif kanalları yönetin ve {publisherName} ile senkronize edin.</p>
         </div>
         <div style={{ display: "flex", gap: "8px" }}>
           <button
@@ -281,15 +301,15 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
             <RefreshCw size={15} className={loading ? "spin" : ""} />
             Yenile
           </button>
-          {data?.postizWebUrl && (
+          {publisherWebUrl && (
             <a
-              href={data.postizWebUrl}
+              href={publisherWebUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="button primary"
             >
               <ExternalLink size={15} />
-              Postiz Paneli ↗
+              {publisherName} Paneli ↗
             </a>
           )}
         </div>
@@ -318,9 +338,9 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
         <div className="metric-card">
           <div className="metric-icon green"><CheckCircle2 size={19} /></div>
           <div>
-            <span>Postiz API</span>
-            <strong>{data?.postizConfigured ? "Aktif" : "Eksik"}</strong>
-            <small>{data?.postizConfigured ? "VPS İçi Canlı" : "Anahtar Gerekli"}</small>
+            <span>{publisherName} API</span>
+            <strong>{publisherConfigured ? "Aktif" : "Eksik"}</strong>
+            <small>{publisherConfigured ? "sm.atolyehanem.com" : "Anahtar Gerekli"}</small>
           </div>
         </div>
 
@@ -329,13 +349,13 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
           <div>
             <span>Eşlenebilir</span>
             <strong>{unlinkedAvailable.length}</strong>
-            <small>Postiz Hesabı</small>
+            <small>{publisherName} Hesabı</small>
           </div>
         </div>
       </section>
 
-      {/* Postiz Not Configured Warning */}
-      {!data?.postizConfigured && (
+      {/* Publisher Not Configured Warning */}
+      {!publisherConfigured && (
         <section className="setup-banner" style={{ margin: "16px 0" }}>
           <div className="setup-icon" style={{ background: "#fff2e8", color: "#d67c34" }}>
             <CircleAlert size={20} />
@@ -474,18 +494,18 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
               <Share2 size={24} />
             </div>
             <strong>Henüz bir hesap bağlanmadı</strong>
-            <p>Aşağıdaki Postiz listesinden bir sosyal medya hesabını bu markayla eşleştirebilirsiniz.</p>
+            <p>Aşağıdaki {publisherName} listesinden bir sosyal medya hesabını bu markayla eşleştirebilirsiniz.</p>
           </div>
         )}
       </section>
 
-      {/* 4. Postiz'de Yetkilendirilmiş Kullanılabilir Hesaplar */}
-      {data?.postizConfigured && (
+      {/* 4. Yetkilendirilmiş Kullanılabilir Hesaplar */}
+      {publisherConfigured && (
         <section className="panel" style={{ marginTop: "18px" }}>
           <div className="panel-header">
             <div>
-              <h3>Postiz&apos;den Hesap Eşle</h3>
-              <p>Postiz hesabınızda tanımlı olan ancak bu projeye henüz atanmamış hesaplar</p>
+              <h3>{publisherName}&apos;den Hesap Eşle</h3>
+              <p>{publisherName} hesabınızda tanımlı olan ancak bu projeye henüz atanmamış hesaplar</p>
             </div>
             <span className="badge-pill info">
               {unlinkedAvailable.length} Kullanılabilir
@@ -546,22 +566,22 @@ export function ProjectAccounts({ projectId }: { projectId: string }) {
           ) : (
             <div className="panel-empty" style={{ minHeight: "160px" }}>
               <div><CheckCircle2 size={22} /></div>
-              <strong>{data.available.length === 0 ? "Postiz'de bağlı hesap bulunamadı" : "Tüm hesaplar eşleştirildi"}</strong>
+              <strong>{data.available.length === 0 ? `${publisherName}'ta bağlı hesap bulunamadı` : "Tüm hesaplar eşleştirildi"}</strong>
               <p>
                 {data.available.length === 0
-                  ? "Yeni bir hesap bağlamak için Postiz panelini açıp yetkilendirme yapın."
-                  : "Postiz'deki tüm hesaplar bu projeyle zaten eşleştirilmiş durumda."}
+                  ? `Yeni bir hesap bağlamak için ${publisherName} panelini açıp yetkilendirme yapın.`
+                  : `${publisherName}'taki tüm hesaplar bu projeyle zaten eşleştirilmiş durumda.`}
               </p>
-              {data.postizWebUrl && (
+              {publisherWebUrl && (
                 <a
-                  href={data.postizWebUrl}
+                  href={publisherWebUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="button secondary"
                   style={{ marginTop: "12px", height: "34px", fontSize: "11px" }}
                 >
                   <ExternalLink size={13} />
-                  Postiz&apos;de Yeni Hesap Bağla
+                  {publisherName}&apos;de Yeni Hesap Bağla
                 </a>
               )}
             </div>

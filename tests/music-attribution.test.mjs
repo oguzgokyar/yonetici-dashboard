@@ -12,10 +12,10 @@ const load = () => import('../src/lib/music-attribution.ts');
 async function routeHarness() {
   const db = new DatabaseSync(':memory:');
   db.exec(`CREATE TABLE generation_jobs (id TEXT, project_id TEXT, type TEXT, status TEXT, response_json TEXT);
-    CREATE TABLE project_social_accounts (project_id TEXT, integration_id TEXT, identifier TEXT);
+    CREATE TABLE project_social_accounts (project_id TEXT, integration_id TEXT, identifier TEXT, tiktok_method TEXT DEFAULT 'browser');
     CREATE TABLE content_posts (id TEXT, project_id TEXT, title TEXT, content_type TEXT, media_url TEXT, local_path TEXT DEFAULT '', caption TEXT, hashtags TEXT, status TEXT, schedule_type TEXT, scheduled_at TEXT, integration_id TEXT, post_type TEXT, postiz_post_id TEXT, postiz_media_id TEXT, media_package_id TEXT, media_json TEXT, error_message TEXT, created_at TEXT, updated_at TEXT);`);
   db.prepare('INSERT INTO generation_jobs VALUES (?, ?, ?, ?, ?)').run(videoId, 'project', 'video', 'complete', JSON.stringify({ metadata: { music: { attribution: credit } } }));
-  db.prepare('INSERT INTO project_social_accounts VALUES (?, ?, ?)').run('project', 'youtube-account', 'youtube');
+  db.prepare('INSERT INTO project_social_accounts (project_id, integration_id, identifier) VALUES (?, ?, ?)').run('project', 'youtube-account', 'youtube');
   const outgoing = [];
   const state = { failPublishing: false };
   const mocks = {
@@ -28,6 +28,23 @@ async function routeHarness() {
       uploadMediaToPostiz: async () => ({ id: 'uploaded', path: 'https://postiz.test/uploaded.mp4' }),
       createPostizPost: async params => { outgoing.push(params); if (state.failPublishing) throw new Error('Mock publisher failure'); return [{ postId: 'remote' }]; },
       deletePostizPost: async () => true,
+    },
+    '@/lib/server/social-publisher': {
+      uploadSocialMedia: async () => ({ id: 'uploaded', path: 'https://postiz.test/uploaded.mp4' }),
+      createUnifiedSocialPost: async params => { outgoing.push(params); if (state.failPublishing) throw new Error('Mock publisher failure'); return [{ postId: 'remote' }]; },
+      deleteUnifiedSocialPost: async () => true,
+    },
+    '@/lib/server/tiktok-browser-service': {
+      uploadVideoViaTikTokBrowser: async () => ({ ok: true }),
+    },
+    '@/lib/server/tiktok-exact-scheduler': {
+      scheduleExactTikTokPost: async () => ({ ok: true }),
+      cancelExactTikTokPost: async () => ({ ok: true }),
+      getTikTokQueueDir: () => '/tmp',
+      ensureTikTokSchedulersRehydrated: async () => {},
+    },
+    '@/lib/server/image-slideshow-service': {
+      convertImagesToYouTubeVideo: async () => ({ ok: false }),
     },
   };
   const source = fs.readFileSync(new URL('../src/app/api/projects/[projectId]/posts/route.ts', import.meta.url), 'utf8');

@@ -12,12 +12,14 @@ import {
 import { getDatabase } from "@/lib/server/database";
 import { resolvePackageItemsForPublishing } from "@/lib/server/canva-package-service";
 import {
-  createPostizPost,
-  deletePostizPost,
-  uploadMediaToPostiz,
   YouTubePostSettings,
   TikTokPostSettings,
 } from "@/lib/server/postiz-client";
+import {
+  createUnifiedSocialPost,
+  uploadSocialMedia,
+  deleteUnifiedSocialPost,
+} from "@/lib/server/social-publisher";
 import { convertImagesToYouTubeVideo } from "@/lib/server/image-slideshow-service";
 
 export const runtime = "nodejs";
@@ -230,7 +232,7 @@ export async function POST(request: Request, context: Context) {
     const postizMediaList: Array<{ id: string; path: string }> = [];
     try {
       for (const item of packageItems) {
-        const uploaded = await uploadMediaToPostiz(item.buffer, item.filename, item.mimeType);
+        const uploaded = await uploadSocialMedia(item.buffer, item.filename, item.mimeType);
         postizMediaList.push({ id: uploaded.id, path: uploaded.path });
       }
     } catch (error) {
@@ -281,7 +283,7 @@ export async function POST(request: Request, context: Context) {
           // Eğer dönüştürme yerel dosyalarla başarılı olduysa
           if (videoRes.ok && videoRes.videoPath && fs.existsSync(videoRes.videoPath)) {
             const vBuf = fs.readFileSync(videoRes.videoPath);
-            const vUploaded = await uploadMediaToPostiz(vBuf, path.basename(videoRes.videoPath), "video/mp4");
+            const vUploaded = await uploadSocialMedia(vBuf, path.basename(videoRes.videoPath), "video/mp4");
             effectivePostizMediaList = [{ id: vUploaded.id, path: vUploaded.path }];
             effectivePostType = "reel"; // YouTube Shorts
             try { fs.unlinkSync(videoRes.videoPath); } catch {}
@@ -292,7 +294,7 @@ export async function POST(request: Request, context: Context) {
       }
 
       try {
-        const postizResult = await createPostizPost({
+        const postizResult = await createUnifiedSocialPost({
           type: targetScheduleType,
           date: targetScheduledAt,
           integrationId: target.integrationId,
@@ -532,7 +534,7 @@ export async function POST(request: Request, context: Context) {
         }
       }
 
-      postizMedia = await uploadMediaToPostiz(uploadBuffer, uploadFilename, uploadMimeType);
+      postizMedia = await uploadSocialMedia(uploadBuffer, uploadFilename, uploadMimeType);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       return Response.json({ ok: false, message: `Medyayı Postiz'e yükleme başarısız: ${errMsg}` }, { status: 500 });
@@ -567,7 +569,7 @@ export async function POST(request: Request, context: Context) {
     }
 
     if (!isOnlyTikTokBrowser && !postizMedia) {
-      postizMedia = await uploadMediaToPostiz(fileBuffer, filename, mimeType);
+      postizMedia = await uploadSocialMedia(fileBuffer, filename, mimeType);
     }
 
     const targetCaption = appendMusicAttribution(
@@ -716,9 +718,9 @@ export async function POST(request: Request, context: Context) {
 
     try {
       if (!postizMedia) {
-        postizMedia = await uploadMediaToPostiz(fileBuffer, filename, mimeType);
+        postizMedia = await uploadSocialMedia(fileBuffer, filename, mimeType);
       }
-      const postizResult = await createPostizPost({
+      const postizResult = await createUnifiedSocialPost({
         type: targetScheduleType,
         date: targetScheduledAt,
         integrationId: target.integrationId,
@@ -911,7 +913,7 @@ export async function PATCH(request: Request, context: Context) {
         ? [{ id: existing.postiz_media_id as string, path: (existing.media_url as string) || "" }]
         : [];
 
-      const postizResult = await createPostizPost({
+      const postizResult = await createUnifiedSocialPost({
         type: scheduleType === "now" || scheduleType === "draft" ? scheduleType : "schedule",
         date: scheduledAt || (existing.scheduled_at as string | undefined),
         integrationId: existing.integration_id as string,
@@ -968,7 +970,7 @@ export async function PATCH(request: Request, context: Context) {
   ) {
     // If post date or content changed while scheduled in Postiz, re-sync with Postiz
     try {
-      await deletePostizPost(postizPostId).catch(() => false);
+      await deleteUnifiedSocialPost(postizPostId).catch(() => false);
 
       const targetAccount = database
         .prepare("SELECT identifier FROM project_social_accounts WHERE project_id=? AND integration_id=?")
@@ -995,7 +997,7 @@ export async function PATCH(request: Request, context: Context) {
         ? [{ id: existing.postiz_media_id as string, path: (existing.media_url as string) || "" }]
         : [];
 
-      const postizResult = await createPostizPost({
+      const postizResult = await createUnifiedSocialPost({
         type: scheduleType === "now" || scheduleType === "draft" ? scheduleType : "schedule",
         date: scheduledAt || (existing.scheduled_at as string | undefined),
         integrationId: existing.integration_id as string,
@@ -1130,7 +1132,7 @@ export async function DELETE(request: Request, context: Context) {
   await Promise.allSettled(
     postsToDelete
       .filter((p) => Boolean(p.postiz_post_id))
-      .map((p) => deletePostizPost(p.postiz_post_id!))
+      .map((p) => deleteUnifiedSocialPost(p.postiz_post_id!))
   );
 
   // Delete from SQLite and cancel any active exact timers

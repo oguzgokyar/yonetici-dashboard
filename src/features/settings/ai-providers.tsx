@@ -6,19 +6,21 @@ import { Bot, Check, CircleAlert, Eye, EyeOff, KeyRound, LoaderCircle, Network, 
 type Provider = { id: string; name: string; description: string; color: string; baseUrl: string; textModel: string; imageModel: string };
 type StoredProvider = { provider: string; enabled: boolean; baseUrl: string; hasApiKey: boolean; maskedKey: string; textModel: string; imageModel: string; visionModel: string; editModel: string; priority: number };
 type PostizState = { enabled: boolean; baseUrl: string; hasApiKey: boolean; maskedKey: string };
+type OpenPostState = { enabled: boolean; baseUrl: string; hasApiKey: boolean; maskedKey: string; defaultWorkspaceId?: string };
 type TelegramState = { configured: boolean; source: string; chatId: string; threadId: string; hasApiKey: boolean; maskedToken: string };
 
 const providers: Provider[] = [
   { id: "cliproxy", name: "CliProxyAPI", description: "Prompt, görsel ve video isteklerini özel dağıtım servisiniz üzerinden yönetin.", color: "#725cff", baseUrl: "", textModel: "", imageModel: "" },
   { id: "openai", name: "OpenAI", description: "Prompt geliştirme ve GPT Image modelleri için doğrudan bağlantı.", color: "#111827", baseUrl: "https://api.openai.com/v1", textModel: "", imageModel: "" },
   { id: "gemini", name: "Gemini", description: "Gemini TTS (Seslendirme), metin ve görsel üretim modellerini doğrudan Google API ile kullanın.", color: "#3b82f6", baseUrl: "https://generativelanguage.googleapis.com", textModel: "gemini-2.5-flash-preview-tts", imageModel: "" },
-  { id: "postiz", name: "Postiz", description: "Instagram, Reels, Hikâye ve çoklu kanal zamanlama motoru.", color: "#612bd3", baseUrl: "http://10.0.1.1:4007/api", textModel: "", imageModel: "" },
+  { id: "openpost", name: "OpenPost", description: "Hafif, çok markalı sosyal medya yayınlama, doğrudan medya yükleme ve zamanlama motoru.", color: "#f97316", baseUrl: "https://sm.atolyehanem.com", textModel: "", imageModel: "" },
+  { id: "postiz", name: "Postiz", description: "Instagram, Reels, Hikâye ve çoklu kanal zamanlama motoru (Eski Altyapı).", color: "#612bd3", baseUrl: "http://postiz.43.131.47.253.sslip.io", textModel: "", imageModel: "" },
   { id: "telegram", name: "Telegram Bot", description: "Üretilen medyaları doğrudan Telegram kanalınıza veya hesabınıza aktarın.", color: "#0284c7", baseUrl: "https://api.telegram.org", textModel: "", imageModel: "" },
 ];
 
 export function AiProviders() {
   const [active, setActive] = useState("cliproxy");
-  const [enabled, setEnabled] = useState<Record<string, boolean>>({ cliproxy: true, openai: false, gemini: false, postiz: true, telegram: true });
+  const [enabled, setEnabled] = useState<Record<string, boolean>>({ cliproxy: true, openai: false, gemini: false, openpost: true, postiz: false, telegram: true });
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [visible, setVisible] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -27,7 +29,8 @@ export function AiProviders() {
   const provider = providers.find((item) => item.id === active)!;
   const [baseUrls, setBaseUrls] = useState<Record<string, string>>(Object.fromEntries(providers.map((item) => [item.id, item.baseUrl])));
   const [stored, setStored] = useState<Record<string, StoredProvider>>({});
-  const [postizConfig, setPostizConfig] = useState<PostizState>({ enabled: false, baseUrl: "http://10.0.1.1:4007/api", hasApiKey: false, maskedKey: "" });
+  const [openPostConfig, setOpenPostConfig] = useState<OpenPostState>({ enabled: true, baseUrl: "https://sm.atolyehanem.com", hasApiKey: false, maskedKey: "", defaultWorkspaceId: "" });
+  const [postizConfig, setPostizConfig] = useState<PostizState>({ enabled: false, baseUrl: "http://postiz.43.131.47.253.sslip.io", hasApiKey: false, maskedKey: "" });
   const [telegramConfig, setTelegramConfig] = useState<TelegramState>({ configured: false, source: "none", chatId: "", threadId: "", hasApiKey: false, maskedToken: "" });
   const [tgChatId, setTgChatId] = useState("");
   const [tgThreadId, setTgThreadId] = useState("");
@@ -53,7 +56,20 @@ export function AiProviders() {
       })
       .catch(() => undefined);
 
-    // 2. Fetch Postiz Config
+    // 2. Fetch OpenPost Config
+    fetch("/api/settings/openpost")
+      .then((response) => response.json())
+      .then((data: OpenPostState) => {
+        if (!data) return;
+        setOpenPostConfig(data);
+        setEnabled((current) => ({ ...current, openpost: data.enabled }));
+        if (data.baseUrl) {
+          setBaseUrls((current) => ({ ...current, openpost: data.baseUrl }));
+        }
+      })
+      .catch(() => undefined);
+
+    // 3. Fetch Postiz Config
     fetch("/api/settings/postiz")
       .then((response) => response.json())
       .then((data: PostizState) => {
@@ -66,7 +82,7 @@ export function AiProviders() {
       })
       .catch(() => undefined);
 
-    // 3. Fetch Telegram Config
+    // 4. Fetch Telegram Config
     fetch("/api/settings/telegram")
       .then((response) => response.json())
       .then((data: TelegramState) => {
@@ -103,6 +119,22 @@ export function AiProviders() {
           hasApiKey: Boolean(keys.telegram?.trim() || prev.hasApiKey),
         }));
         setKeys((current) => ({ ...current, telegram: "" }));
+      } else if (active === "openpost") {
+        const response = await fetch("/api/settings/openpost", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            enabled: enabled.openpost,
+            baseUrl: baseUrls.openpost,
+            apiKey: keys.openpost?.trim() || undefined,
+            defaultWorkspaceId: openPostConfig.defaultWorkspaceId || undefined,
+          }),
+        });
+        if (!response.ok) throw new Error("openpost save failed");
+        const result = (await response.json()) as OpenPostState;
+        setOpenPostConfig(result);
+        setKeys((current) => ({ ...current, openpost: "" }));
+        setSaved(true);
       } else if (active === "postiz") {
         const response = await fetch("/api/settings/postiz", {
           method: "PUT",
@@ -177,6 +209,17 @@ export function AiProviders() {
         });
         const res = await response.json();
         setTestResult(res);
+      } else if (active === "openpost") {
+        const response = await fetch("/api/settings/openpost/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            baseUrl: baseUrls.openpost,
+            apiKey: keys.openpost?.trim() || undefined,
+          }),
+        });
+        const res = await response.json();
+        setTestResult(res);
       } else if (active === "postiz") {
         const response = await fetch("/api/settings/postiz/test", {
           method: "POST",
@@ -207,10 +250,23 @@ export function AiProviders() {
     }
   }
 
+  const isOpenPost = active === "openpost";
   const isPostiz = active === "postiz";
   const isTelegram = active === "telegram";
-  const hasKey = isTelegram ? telegramConfig.hasApiKey : isPostiz ? postizConfig.hasApiKey : stored[active]?.hasApiKey;
-  const maskedKeyDisplay = isTelegram ? telegramConfig.maskedToken : isPostiz ? postizConfig.maskedKey : stored[active]?.maskedKey;
+  const hasKey = isTelegram
+    ? telegramConfig.hasApiKey
+    : isOpenPost
+    ? openPostConfig.hasApiKey
+    : isPostiz
+    ? postizConfig.hasApiKey
+    : stored[active]?.hasApiKey;
+  const maskedKeyDisplay = isTelegram
+    ? telegramConfig.maskedToken
+    : isOpenPost
+    ? openPostConfig.maskedKey
+    : isPostiz
+    ? postizConfig.maskedKey
+    : stored[active]?.maskedKey;
 
   return (
     <div className="provider-settings">
@@ -222,9 +278,16 @@ export function AiProviders() {
         </div>
         <nav>
           {providers.map((item) => {
+            const isItemOpenPost = item.id === "openpost";
             const isItemPostiz = item.id === "postiz";
             const isItemTelegram = item.id === "telegram";
-            const itemHasKey = isItemTelegram ? telegramConfig.hasApiKey : isItemPostiz ? postizConfig.hasApiKey : stored[item.id]?.hasApiKey;
+            const itemHasKey = isItemTelegram
+              ? telegramConfig.hasApiKey
+              : isItemOpenPost
+              ? openPostConfig.hasApiKey
+              : isItemPostiz
+              ? postizConfig.hasApiKey
+              : stored[item.id]?.hasApiKey;
             const itemEnabled = enabled[item.id];
             return (
               <button
@@ -237,7 +300,7 @@ export function AiProviders() {
                 }}
               >
                 <i style={{ background: item.color }}>
-                  {isItemTelegram ? <Send size={16} /> : isItemPostiz ? <Share2 size={16} /> : <Bot size={16} />}
+                  {isItemTelegram ? <Send size={16} /> : (isItemOpenPost || isItemPostiz) ? <Share2 size={16} /> : <Bot size={16} />}
                 </i>
                 <span>
                   <strong>{item.name}</strong>
@@ -259,7 +322,7 @@ export function AiProviders() {
       <section className="provider-card">
         <div className="provider-heading">
           <div className="provider-logo" style={{ background: provider.color }}>
-            {isTelegram ? <Send size={20} /> : isPostiz ? <Share2 size={20} /> : <Sparkles size={20} />}
+            {isTelegram ? <Send size={20} /> : (isOpenPost || isPostiz) ? <Share2 size={20} /> : <Sparkles size={20} />}
           </div>
           <div>
             <h2>{provider.name}</h2>
@@ -277,15 +340,20 @@ export function AiProviders() {
 
         <div className="provider-form">
           <label className="field-label full">
-            {isPostiz ? "Postiz API Base URL" : isTelegram ? "Telegram Bot API Base URL" : "Base URL"}
+            {isOpenPost ? "OpenPost API Base URL" : isPostiz ? "Postiz API Base URL" : isTelegram ? "Telegram Bot API Base URL" : "Base URL"}
             <div className="input-with-icon">
               <Network size={16} />
               <input
                 value={baseUrls[active]}
                 onChange={(e) => setBaseUrls((current) => ({ ...current, [active]: e.target.value }))}
-                placeholder={isPostiz ? "http://10.0.1.1:4007/api" : isTelegram ? "https://api.telegram.org" : "https://api.servisiniz.com/v1"}
+                placeholder={isOpenPost ? "https://sm.atolyehanem.com" : isPostiz ? "http://10.0.1.1:4007/api" : isTelegram ? "https://api.telegram.org" : "https://api.servisiniz.com/v1"}
               />
             </div>
+            {isOpenPost && (
+              <small className="field-note">
+                Standart OpenPost servis adresi: <code>https://sm.atolyehanem.com</code>
+              </small>
+            )}
             {isPostiz && (
               <small className="field-note">
                 VPS içi doğrudan hızlı erişim: <code>http://10.0.1.1:4007/api</code> (veya genel URL: <code>https://sm.atolyehanem.com/api</code>)
@@ -299,7 +367,7 @@ export function AiProviders() {
           </label>
 
           <label className="field-label full">
-            {isPostiz ? "Postiz API Anahtarı (API Key)" : isTelegram ? "Telegram Bot Token" : "API anahtarı"}
+            {isOpenPost ? "OpenPost API Token (Bearer Token)" : isPostiz ? "Postiz API Anahtarı (API Key)" : isTelegram ? "Telegram Bot Token" : "API anahtarı"}
             <div className="input-with-icon">
               <KeyRound size={16} />
               <input
@@ -309,6 +377,8 @@ export function AiProviders() {
                 placeholder={
                   hasKey
                     ? maskedKeyDisplay || "Kayıtlı anahtarı değiştirmek için yenisini girin"
+                    : isOpenPost
+                    ? "op_cli_..."
                     : isPostiz
                     ? "Postiz API anahtarını girin"
                     : isTelegram
@@ -323,6 +393,10 @@ export function AiProviders() {
             <small className="field-note">
               {hasKey
                 ? "Token şifreli olarak kayıtlı. Değiştirmek istemiyorsanız alanı boş bırakın."
+                : isOpenPost
+                ? "OpenPost'tan aldığınız op_cli_... API tokenini buraya girin."
+                : isPostiz
+                ? "Postiz API anahtarını girin."
                 : "BotFather'dan aldığınız HTTP API bot tokenini buraya girin."}
             </small>
           </label>
@@ -352,6 +426,13 @@ export function AiProviders() {
                 <span><Check size={14} />Sıfır dış port gereksinimi</span>
               </div>
             </>
+          ) : isOpenPost ? (
+            <div className="capabilities full">
+              <span><Check size={14} />YouTube (Video & Shorts)</span>
+              <span><Check size={14} />Instagram (Reels & Gönderi)</span>
+              <span><Check size={14} />Facebook (Sayfa Paylaşımları)</span>
+              <span><Check size={14} />100 Marka / Çoklu Çalışma Alanı</span>
+            </div>
           ) : isPostiz ? (
             <div className="capabilities full">
               <span><Check size={14} />Instagram Gönderi</span>
