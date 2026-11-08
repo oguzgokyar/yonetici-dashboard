@@ -82,29 +82,52 @@ async function waitForCanvaCompletion(jobId: string): Promise<void> {
 }
 
 export async function runCanvaLifetime(job: Parameters<typeof processCanvaJob>[0], resume = false): Promise<void> {
-  const jobId = `canva:${job.id}`;
-  const claim = `dashboard:${job.id}`;
-  await acquireHeavyJob(jobId, claim);
-  try {
-    if (!resume) await processCanvaJob(job);
-    await waitForCanvaCompletion(job.id);
-  } finally {
-    const status = getDatabase().prepare('SELECT status FROM generation_jobs WHERE id=?').get(job.id) as {status: string} | undefined;
-    if (status && ['complete', 'failed'].includes(status.status)) await releaseHeavyJob(jobId, claim);
+  // Canva operations execute concurrently via cloud API without blocking host heavy jobs
+  if (!resume) {
+    await processCanvaJob(job);
   }
 }
 
-/** Callback routes release this persistent claim only AFTER all work incl video export stops. */
+/** Callback routes call this to trigger next cycles */
 export async function finishCanvaCoordination(jobId: string): Promise<void> {
-  await releaseHeavyJob(`canva:${jobId}`, `dashboard:${jobId}`);
+  triggerCanvaWorker();
   triggerProductionWorker();
 }
 
 /**
- * Triggers the database-backed FIFO worker for background jobs (Stock Video & Canva)
+ * Triggers parallel dispatch for queued Canva jobs.
+ * Canva jobs run concurrently via Canva Cloud API without FIFO blocking.
+ */
+export function triggerCanvaWorker(): void {
+  try {
+    const db = getDatabase();
+    if (!db) return;
+
+    const queuedCanvaJobs = db.prepare(`
+      SELECT id, project_id, type, provider, model, prompt, request_json, created_at
+      FROM generation_jobs
+      WHERE status = 'queued' AND type = 'canva'
+      ORDER BY created_at ASC
+    `).all() as unknown as Parameters<typeof processCanvaJob>[0][];
+
+    for (const cJob of queuedCanvaJobs) {
+      void processCanvaJob(cJob).catch(err => {
+        console.error(`[Canva Direct Worker] Error processing job ${cJob.id}:`, err);
+      });
+    }
+  } catch (err) {
+    console.error('[Canva Worker Error]:', err);
+  }
+}
+
+/**
+ * Triggers the database-backed FIFO worker for background jobs (Stock Video & Google Vids)
  * that are stored with status = 'queued' in `generation_jobs`.
  */
 export function triggerProductionWorker(): void {
+  // Always trigger Canva worker immediately for concurrent non-blocking execution
+  triggerCanvaWorker();
+
   const state = globalFifo.__fifoProductionQueue!;
   if (state.isDrainingDb) return;
   state.isDrainingDb = true;
@@ -115,24 +138,11 @@ export function triggerProductionWorker(): void {
       if (!db) return;
 
       while (true) {
-        // Resume waiting after process restart; active async work has no arbitrary age expiry.
-        const activeCanva = db.prepare(`
-          SELECT id, project_id, prompt, request_json FROM generation_jobs
-          WHERE type = 'canva'
-            AND status IN ('dispatching', 'running', 'exporting', 'uploading', 'video_exporting', 'coordination_uncertain')
-          ORDER BY created_at ASC LIMIT 1
-        `).get() as Parameters<typeof processCanvaJob>[0] | undefined;
-
-        if (activeCanva) {
-          await runCanvaLifetime(activeCanva, true);
-          continue;
-        }
-
-        // Fetch the oldest queued background job (Stock Video, Canva, or Google Vids)
+        // Fetch the oldest queued heavy background job (Stock Video or Google Vids)
         const nextJob = db.prepare(`
           SELECT id, project_id, type, provider, model, prompt, request_json, created_at
           FROM generation_jobs
-          WHERE status = 'queued' AND type IN ('video', 'canva', 'google-vids')
+          WHERE status = 'queued' AND type IN ('video', 'google-vids')
           ORDER BY created_at ASC
           LIMIT 1
         `).get() as {
@@ -174,8 +184,6 @@ export function triggerProductionWorker(): void {
           } else {
             await withHeavyJob(`google-vids:${nextJob.id}`, `dashboard:${randomUUID()}`, () => processGoogleVidsJob(nextJob));
           }
-        } else if (nextJob.type === "canva") {
-          await runCanvaLifetime(nextJob);
         }
       }
     } finally {

@@ -1,7 +1,7 @@
 import { createJobCallbackToken, getCanvaConfig, isCanvaStudioEnabled } from "@/lib/server/canva-config";
 import { getDatabase } from "@/lib/server/database";
 import { getCanvaPoolSummary } from "@/lib/server/canva-account-pool";
-import { triggerProductionWorker, runCanvaLifetime } from "@/lib/server/production-worker";
+import { triggerProductionWorker, triggerCanvaWorker } from "@/lib/server/production-worker";
 import {
   HERMES_CANVA_PIPELINE_VERSION,
   buildHermesCanvaTaskPrompt,
@@ -220,7 +220,8 @@ export async function POST(request: Request, context: Context) {
     `)
     .run(jobId, projectId, validatedInput.prompt, requestJson, progressJson, now);
 
-  // Arka plan işçisini uyararak görevi sıraya al ve işlet
+  // Arka plan işçisini uyararak görevi anında paralel başlat (sıfır FIFO beklemesi)
+  triggerCanvaWorker();
   triggerProductionWorker();
 
   return Response.json({

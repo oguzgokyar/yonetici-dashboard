@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { isCanvaStudioEnabled } from "@/lib/server/canva-config";
 import { getDatabase } from "@/lib/server/database";
-import { triggerProductionWorker, runCanvaLifetime } from "@/lib/server/production-worker";
+import { triggerProductionWorker, triggerCanvaWorker } from "@/lib/server/production-worker";
 
 export const runtime = "nodejs";
 
@@ -91,6 +91,7 @@ export async function POST(request: Request, context: Context) {
     );
 
   // 3. Trigger background worker and return immediately
+  triggerCanvaWorker();
   triggerProductionWorker();
 
   return Response.json(
