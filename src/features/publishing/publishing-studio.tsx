@@ -25,7 +25,6 @@ import {
   Youtube,
   Eye,
   Layers,
-  Zap,
 } from "lucide-react";
 import { extractStockPublishingMetadata } from "@/lib/stock-publishing-metadata";
 import { useProjects } from "@/features/projects/projects-context";
@@ -3500,55 +3499,23 @@ export function PublishingStudio({
               </div>
             </div>
 
-            {/* 5. AI Hız & Eşzamanlılık Ayarı */}
-            <div className="composer-section" style={{ background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: "10px", padding: "10px 12px" }}>
-              <div className="composer-section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                <span style={{ display: "flex", alignItems: "center", gap: "5px", fontWeight: 700, fontSize: "11px", color: "var(--text)" }}>
-                  <Zap size={13} style={{ color: "#f59e0b" }} />
-                  <span>5. AI İşlem Hızı (Eşzamanlı Üretim)</span>
-                </span>
-                <span style={{ fontSize: "10px", color: "#10b981", fontWeight: 600 }}>
-                  ✓ Kaliteden ödün vermez
-                </span>
+            {/* 5. AI İşlem Hızı */}
+            <div className="composer-section">
+              <div className="composer-section-title">
+                <span>5. AI İşlem Hızı</span>
               </div>
-              <div style={{ display: "flex", gap: "5px", alignItems: "center" }}>
-                {[
-                  { count: 1, label: "1x", desc: "Sıralı" },
-                  { count: 2, label: "2x", desc: "Hızlı" },
-                  { count: 3, label: "3x", desc: "Dengeli", rec: true },
-                  { count: 4, label: "4x", desc: "Ultra" },
-                  { count: 5, label: "5x", desc: "Maks" },
-                ].map((item) => (
-                  <button
-                    key={item.count}
-                    type="button"
-                    onClick={() => setBulkConcurrency(item.count)}
-                    className={`button compact ${bulkConcurrency === item.count ? "primary" : "ghost"}`}
-                    style={{
-                      flex: 1,
-                      height: "30px",
-                      fontSize: "11px",
-                      padding: "0 2px",
-                      fontWeight: bulkConcurrency === item.count ? 700 : 500,
-                      display: "flex",
-                      flexDirection: "column",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      lineHeight: "1.1",
-                      border: bulkConcurrency === item.count ? "1px solid var(--primary)" : "1px solid #e2e8f0",
-                      background: bulkConcurrency === item.count ? "var(--primary)" : "white",
-                      color: bulkConcurrency === item.count ? "white" : "var(--text)",
-                      borderRadius: "6px",
-                    }}
-                    title={`${item.count} eşzamanlı paralel istek - ${item.desc}${item.rec ? " (Önerilen varsayılan)" : ""}`}
-                  >
-                    <span>{item.label}</span>
-                    <span style={{ fontSize: "8px", opacity: bulkConcurrency === item.count ? 0.9 : 0.65 }}>
-                      {item.desc}
-                    </span>
-                  </button>
-                ))}
-              </div>
+              <select
+                value={bulkConcurrency}
+                onChange={(e) => setBulkConcurrency(Number(e.target.value))}
+                className="custom-select"
+                style={{ height: "32px", fontSize: "11px", width: "100%" }}
+              >
+                <option value={1}>1x — Sıralı (Tek tek istek)</option>
+                <option value={2}>2x — Hızlı (2 eşzamanlı istek)</option>
+                <option value={3}>3x — Dengeli &amp; Önerilen (3 eşzamanlı istek)</option>
+                <option value={4}>4x — Ultra Hızlı (4 eşzamanlı istek)</option>
+                <option value={5}>5x — Maksimum Hız (5 eşzamanlı istek)</option>
+              </select>
             </div>
 
             {/* AKSİYON 1: YAYINA HAZIRLA BUTONU */}
@@ -3564,13 +3531,13 @@ export function PublishingStudio({
                   <>
                     <LoaderCircle size={16} className="spin" />
                     <span>
-                      AI ile Hazırlanıyor... ({bulkPrepareProgress?.current || 0}/{bulkPrepareProgress?.total || 0}) [{bulkConcurrency}x Eşzamanlı]
+                      AI ile Hazırlanıyor... ({bulkPrepareProgress?.current || 0}/{bulkPrepareProgress?.total || 0})
                     </span>
                   </>
                 ) : (
                   <>
                     <Sparkles size={16} />
-                    <span>✨ Yayına Hazırla ({bulkSelectedAssets.length} Medya &bull; {bulkConcurrency}x Hız)</span>
+                    <span>✨ Yayına Hazırla ({bulkSelectedAssets.length} Medya)</span>
                   </>
                 )}
               </button>
