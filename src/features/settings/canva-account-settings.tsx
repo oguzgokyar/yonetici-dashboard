@@ -15,6 +15,7 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronUp,
+  X,
 } from "lucide-react";
 import type { CanvaAccount, CanvaPoolSummary } from "@/lib/server/canva-account-pool";
 
@@ -28,6 +29,7 @@ export function CanvaAccountSettings() {
 
   // New account modal state
   const [showAddModal, setShowAddModal] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
   const [newDisplayName, setNewDisplayName] = useState("");
   const [pastedCallbackInput, setPastedCallbackInput] = useState("");
   const [showManualJson, setShowManualJson] = useState(false);
@@ -41,7 +43,8 @@ export function CanvaAccountSettings() {
   const [reconnectWindowOpened, setReconnectWindowOpened] = useState(false);
   const [isSubmittingReconnect, setIsSubmittingReconnect] = useState(false);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (isManualRefresh = false) => {
+    setLoading(true);
     try {
       const res = await fetch("/api/system/canva/accounts", { cache: "no-store" });
       if (res.ok) {
@@ -49,15 +52,28 @@ export function CanvaAccountSettings() {
         if (data.ok) {
           setAccounts(data.accounts || []);
           setSummary(data.summary || null);
+          if (isManualRefresh) {
+            setActionMessage({
+              type: "success",
+              text: "✓ Canva hesap havuzu ve bağlantı durumları güncellendi.",
+            });
+          }
         }
       }
-    } catch {} finally {
+    } catch {
+      if (isManualRefresh) {
+        setActionMessage({
+          type: "error",
+          text: "Havuz durumu güncellenirken hata oluştu.",
+        });
+      }
+    } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadData();
+    void loadData(false);
 
     // Check URL parameters for OAuth return notifications
     if (typeof window !== "undefined") {
@@ -87,7 +103,7 @@ export function CanvaAccountSettings() {
   // Handle direct OAuth initiation in a popup window
   async function handleStartOAuth(targetAccountId?: string, customName?: string) {
     try {
-      const name = customName || newDisplayName || "Canva Hesabı";
+      const name = customName || newDisplayName || newEmail || "Canva Hesabı";
       const query = new URLSearchParams({
         json: "1",
         ...(targetAccountId ? { accountId: targetAccountId } : {}),
@@ -124,12 +140,14 @@ export function CanvaAccountSettings() {
     setIsSubmittingOAuth(true);
     setActionMessage(null);
     try {
+      const name = newDisplayName.trim() || newEmail.trim() || undefined;
       const res = await fetch("/api/system/canva/oauth/callback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           url: input,
-          displayName: newDisplayName.trim() || undefined,
+          displayName: name,
+          email: newEmail.trim() || undefined,
         }),
       });
 
@@ -140,13 +158,14 @@ export function CanvaAccountSettings() {
 
       setActionMessage({
         type: "success",
-        text: `Canva hesabı başarıyla eklendi! (${data.displayName || newDisplayName || "Aktif"})`,
+        text: `Canva hesabı başarıyla eklendi! (${data.displayName || newDisplayName || newEmail || "Aktif"})`,
       });
       setShowAddModal(false);
+      setNewEmail("");
       setNewDisplayName("");
       setPastedCallbackInput("");
       setOauthWindowOpened(false);
-      await loadData();
+      await loadData(false);
     } catch (err) {
       setActionMessage({
         type: "error",
@@ -173,6 +192,7 @@ export function CanvaAccountSettings() {
         body: JSON.stringify({
           url: input,
           displayName: reconnectAccount.displayName,
+          email: reconnectAccount.email || undefined,
         }),
       });
 
@@ -188,7 +208,7 @@ export function CanvaAccountSettings() {
       setReconnectAccount(null);
       setReconnectCallbackInput("");
       setReconnectWindowOpened(false);
-      await loadData();
+      await loadData(false);
     } catch (err) {
       setActionMessage({
         type: "error",
@@ -207,11 +227,13 @@ export function CanvaAccountSettings() {
     setIsSubmittingOAuth(true);
     setActionMessage(null);
     try {
+      const name = newDisplayName.trim() || newEmail.trim() || "Canva Hesabı";
       const res = await fetch("/api/system/canva/accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          displayName: newDisplayName.trim() || "Canva Hesabı",
+          displayName: name,
+          email: newEmail.trim() || undefined,
           tokenJson: newTokenJson.trim(),
         }),
       });
@@ -220,9 +242,10 @@ export function CanvaAccountSettings() {
 
       setActionMessage({ type: "success", text: "Canva hesabı başarıyla eklendi." });
       setShowAddModal(false);
+      setNewEmail("");
       setNewDisplayName("");
       setNewTokenJson("");
-      await loadData();
+      await loadData(false);
     } catch (err) {
       setActionMessage({
         type: "error",
@@ -251,7 +274,7 @@ export function CanvaAccountSettings() {
           text: data.message || "Belirteç yenilenemedi, yeniden yetkilendirme gerekebilir.",
         });
       }
-      await loadData();
+      await loadData(false);
     } catch (err) {
       setActionMessage({
         type: "error",
@@ -281,7 +304,7 @@ export function CanvaAccountSettings() {
           text: data.message || "Hesap testi başarısız oldu.",
         });
       }
-      await loadData();
+      await loadData(false);
     } catch (err) {
       setActionMessage({
         type: "error",
@@ -300,7 +323,7 @@ export function CanvaAccountSettings() {
         body: JSON.stringify({ id: account.id, isActive: !account.isActive }),
       });
       if (res.ok) {
-        await loadData();
+        await loadData(false);
       }
     } catch {}
   }
@@ -314,7 +337,7 @@ export function CanvaAccountSettings() {
       });
       if (res.ok) {
         setActionMessage({ type: "success", text: "Hesabın kota durumu 'Müsait' olarak sıfırlandı." });
-        await loadData();
+        await loadData(false);
       }
     } catch {}
   }
@@ -329,7 +352,7 @@ export function CanvaAccountSettings() {
       });
       if (res.ok) {
         setActionMessage({ type: "success", text: "Hesap havuzdan kaldırıldı." });
-        await loadData();
+        await loadData(false);
       }
     } catch {}
   }
@@ -387,7 +410,8 @@ export function CanvaAccountSettings() {
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <button
             type="button"
-            onClick={() => void loadData()}
+            onClick={() => void loadData(true)}
+            disabled={loading}
             className="button secondary"
             style={{
               height: "34px",
@@ -396,11 +420,12 @@ export function CanvaAccountSettings() {
               display: "flex",
               alignItems: "center",
               gap: "6px",
+              cursor: loading ? "wait" : "pointer",
             }}
             title="Havuz durumunu yenile"
           >
             <RefreshCw size={13} className={loading ? "spin" : ""} />
-            Yenile
+            {loading ? "Yenileniyor..." : "Yenile"}
           </button>
           <button
             type="button"
@@ -579,8 +604,8 @@ export function CanvaAccountSettings() {
                   {/* Başlık ve Tek Durum Rozeti */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
                     <div>
-                      <div style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a" }}>
-                        {acc.displayName}
+                      <div style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a", wordBreak: "break-all" }}>
+                        {acc.displayName || acc.email || "Canva Hesabı"}
                       </div>
                       <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
                         {acc.email || "OAuth Oturumu"}
@@ -825,6 +850,7 @@ export function CanvaAccountSettings() {
         >
           <div
             style={{
+              position: "relative",
               background: "white",
               borderRadius: "14px",
               padding: "24px",
@@ -833,6 +859,29 @@ export function CanvaAccountSettings() {
               boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.15)",
             }}
           >
+            {/* Kapat Butonu (X) */}
+            <button
+              type="button"
+              onClick={() => setShowAddModal(false)}
+              style={{
+                position: "absolute",
+                top: "16px",
+                right: "16px",
+                background: "none",
+                border: "none",
+                color: "#64748b",
+                cursor: "pointer",
+                padding: "4px",
+                borderRadius: "6px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              title="Kapat"
+            >
+              <X size={18} />
+            </button>
+
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
               <div
                 style={{
@@ -858,15 +907,21 @@ export function CanvaAccountSettings() {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              {/* Otomatik E-posta & Hesap Etiketi */}
               <div>
                 <label style={{ fontSize: "12px", fontWeight: 600, color: "#334155", display: "block", marginBottom: "4px" }}>
-                  Hesap Etiketi / Takma Adı
+                  Canva Hesap E-postası (Hesap Adı) *
                 </label>
                 <input
-                  type="text"
-                  placeholder="Örn: Canva Ana Hesap, Ekip 2, Kişisel Pro"
-                  value={newDisplayName}
-                  onChange={(e) => setNewDisplayName(e.target.value)}
+                  type="email"
+                  required
+                  placeholder="Örn: oguz@atolyehanem.com"
+                  value={newEmail}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewEmail(val);
+                    setNewDisplayName(val);
+                  }}
                   style={{
                     width: "100%",
                     padding: "8px 12px",
@@ -875,6 +930,9 @@ export function CanvaAccountSettings() {
                     fontSize: "13px",
                   }}
                 />
+                <div style={{ fontSize: "11px", color: "#64748b", marginTop: "3px" }}>
+                  Hesap kartı etiketi otomatik olarak bu e-posta adresi olacaktır.
+                </div>
               </div>
 
               {/* 1. Adım: Canva Yetkilendirmesi Başlat */}
@@ -894,7 +952,7 @@ export function CanvaAccountSettings() {
                 </p>
                 <button
                   type="button"
-                  onClick={() => void handleStartOAuth(undefined, newDisplayName)}
+                  onClick={() => void handleStartOAuth(undefined, newDisplayName || newEmail)}
                   style={{
                     width: "100%",
                     padding: "9px 14px",
@@ -1060,6 +1118,7 @@ export function CanvaAccountSettings() {
         >
           <div
             style={{
+              position: "relative",
               background: "white",
               borderRadius: "14px",
               padding: "24px",
@@ -1068,6 +1127,29 @@ export function CanvaAccountSettings() {
               boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.15)",
             }}
           >
+            {/* Kapat Butonu (X) */}
+            <button
+              type="button"
+              onClick={() => setReconnectAccount(null)}
+              style={{
+                position: "absolute",
+                top: "16px",
+                right: "16px",
+                background: "none",
+                border: "none",
+                color: "#64748b",
+                cursor: "pointer",
+                padding: "4px",
+                borderRadius: "6px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              title="Kapat"
+            >
+              <X size={18} />
+            </button>
+
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "14px" }}>
               <div
                 style={{

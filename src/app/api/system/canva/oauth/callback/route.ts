@@ -35,6 +35,7 @@ export async function POST(request: Request) {
     let state = (body.state || "").trim();
     const pastedUrl = (body.url || body.redirectUrl || "").trim();
     const displayName = (body.displayName || "").trim();
+    const email = (body.email || "").trim();
 
     if (pastedUrl) {
       try {
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
       } catch {}
     }
 
-    return handleCallback(request, { code, state, displayName, isApi: true });
+    return handleCallback(request, { code, state, displayName, email, isApi: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Geçersiz istek gövdesi.";
     return NextResponse.json({ ok: false, message }, { status: 400 });
@@ -58,10 +59,11 @@ async function handleCallback(
     state?: string;
     error?: string;
     displayName?: string;
+    email?: string;
     isApi?: boolean;
   }
 ) {
-  const { code, state, error, displayName: customName, isApi } = params;
+  const { code, state, error, displayName: customName, email: customEmail, isApi } = params;
 
   if (error) {
     if (isApi) {
@@ -121,20 +123,24 @@ async function handleCallback(
     });
 
     // 2. Fetch account profile
+    let email = customEmail || "";
     let accountName = customName || session.display_name;
     let externalId = "";
-    let email = "";
     try {
       const details = await fetchCanvaAccountDetails(tokenResponse.access_token);
       externalId = details.id;
-      if (!accountName && details.name) {
+      if (!email && details.email) {
+        email = details.email;
+      }
+      if (!accountName && email) {
+        accountName = email;
+      } else if (!accountName && details.name) {
         accountName = details.name;
         if (details.teamId) accountName += ` (${details.teamId.slice(-4)})`;
       }
-      email = details.email || "";
     } catch {}
 
-    accountName = accountName || "Canva Hesabı";
+    accountName = accountName || email || "Canva Hesabı";
     const accountId =
       session.account_id ||
       (externalId ? `canva_${externalId}` : `canva_${Date.now().toString(36)}`);
