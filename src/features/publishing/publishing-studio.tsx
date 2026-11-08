@@ -25,6 +25,7 @@ import {
   Youtube,
   Eye,
   Layers,
+  Zap,
 } from "lucide-react";
 import { extractStockPublishingMetadata } from "@/lib/stock-publishing-metadata";
 import { useProjects } from "@/features/projects/projects-context";
@@ -244,6 +245,7 @@ export function PublishingStudio({
   const [bulkDailySlots, setBulkDailySlots] = useState<string[]>(["12:00", "18:00", "15:00", "21:00"]);
   const [bulkStartDate, setBulkStartDate] = useState<string>("");
   const [bulkActivePlatform, setBulkActivePlatform] = useState<HashtagSet["platform"]>("instagram");
+  const [bulkConcurrency, setBulkConcurrency] = useState<number>(3); // 1, 2, 3, 4, 5
   const [bulkItems, setBulkItems] = useState<Array<{
     id: string;
     asset: RecentAsset;
@@ -1132,95 +1134,113 @@ export function PublishingStudio({
     if (!platforms.length) platforms.push("instagram");
 
     const brandName = currentProject?.brand.brandName || currentProject?.name;
-    const initialList: typeof bulkItems = [];
+    const totalAssets = bulkSelectedAssets.length;
+    const concurrency = Math.min(Math.max(1, bulkConcurrency || 3), totalAssets);
+    const results: (typeof bulkItems[number])[] = new Array(totalAssets);
+    let completedCount = 0;
+    let nextIndex = 0;
 
-    try {
-      for (let i = 0; i < bulkSelectedAssets.length; i++) {
-        const asset = bulkSelectedAssets[i];
-        setBulkPrepareProgress({ current: i + 1, total: bulkSelectedAssets.length });
+    async function processAsset(index: number) {
+      const asset = bulkSelectedAssets[index];
+      const fallbackTitle = asset.idea?.title || asset.sourceTopic || (asset.prompt ? asset.prompt.split("\n")[0].trim() : "");
+      const fallbackDesc = asset.idea?.concept || asset.sourceTopic || fallbackTitle;
+      const extracted = extractStockPublishingMetadata(asset.metadata, {
+        title: fallbackTitle,
+        topic: fallbackDesc,
+        brandName,
+      });
 
-        const fallbackTitle = asset.idea?.title || asset.sourceTopic || (asset.prompt ? asset.prompt.split("\n")[0].trim() : "");
-        const fallbackDesc = asset.idea?.concept || asset.sourceTopic || fallbackTitle;
-        const extracted = extractStockPublishingMetadata(asset.metadata, {
-          title: fallbackTitle,
-          topic: fallbackDesc,
-          brandName,
-        });
+      const rawTitle = extracted.title || fallbackTitle;
+      const rawDesc = extracted.description || fallbackDesc;
+      const rawKeywords = extracted.hashtags ? extracted.hashtags.split(/\s+/) : [];
+      const scheduledTime = calculateBulkItemTime(index, bulkStartDate || scheduledAt);
 
-        const rawTitle = extracted.title || fallbackTitle;
-        const rawDesc = extracted.description || fallbackDesc;
-        const rawKeywords = extracted.hashtags ? extracted.hashtags.split(/\s+/) : [];
-        const scheduledTime = calculateBulkItemTime(i, bulkStartDate || scheduledAt);
+      // Platform-specific content records
+      const isPackage = asset.category === "canva_package";
+      const isVideo = asset.type === "video" || asset.url.endsWith(".mp4");
+      const resolvedFormat = isPackage ? "carousel" : isVideo ? "reel" : "post";
 
-        // Platform-specific content records
-        const isPackage = asset.category === "canva_package";
-        const isVideo = asset.type === "video" || asset.url.endsWith(".mp4");
-        const resolvedFormat = isPackage ? "carousel" : isVideo ? "reel" : "post";
-
-        const platformData: Record<string, { title: string; caption: string; hashtags: string; tags?: string[] }> = {};
-        for (const p of platforms) {
-          platformData[p] = {
-            title: rawTitle,
-            caption: rawDesc || rawTitle,
-            hashtags: extracted.hashtags || "",
-            tags: [],
-          };
-        }
-
-        try {
-          const aiRes = await fetch("/api/ai/posts/generate-copy", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              projectId,
-              platforms,
-              format: resolvedFormat,
-              itemCount: isPackage ? asset.itemCount || 5 : 1,
-              style: aiStyle,
-              idea: asset.idea,
-              sourceTopic: rawTitle || rawDesc,
-              includeHashtagSets,
-              selectedHashtagSetIds,
-              stockVideoMeta:
-                rawTitle || rawDesc || rawKeywords.length > 0
-                  ? { rawTitle, rawDescription: rawDesc, keywords: Array.isArray(rawKeywords) ? rawKeywords : [] }
-                  : undefined,
-            }),
-          });
-
-          if (aiRes.ok) {
-            const aiData = await aiRes.json();
-            const copies = (aiData.copies || {}) as Record<string, { title?: string; caption?: string; hashtags?: string; tags?: string[] }>;
-            for (const p of platforms) {
-              const copy = copies[p] || (p === platforms[0] ? aiData.copy : undefined);
-              if (copy) {
-                platformData[p] = {
-                  title: copy.title ? copy.title.slice(0, 100) : rawTitle,
-                  caption: copy.caption || rawDesc || rawTitle,
-                  hashtags: copy.hashtags || extracted.hashtags || "",
-                  tags: Array.isArray(copy.tags) ? copy.tags : [],
-                };
-              }
-            }
-          }
-        } catch {
-          // AI isteğinde hata olursa ham meta ile devam etsin
-        }
-
-        initialList.push({
-          id: `bulk_${asset.id}_${Date.now()}_${i}`,
-          asset,
-          scheduledAt: scheduledTime,
-          isPrepared: true,
-          platformData,
-        });
+      const platformData: Record<string, { title: string; caption: string; hashtags: string; tags?: string[] }> = {};
+      for (const p of platforms) {
+        platformData[p] = {
+          title: rawTitle,
+          caption: rawDesc || rawTitle,
+          hashtags: extracted.hashtags || "",
+          tags: [],
+        };
       }
 
-      setBulkItems(initialList);
+      try {
+        const aiRes = await fetch("/api/ai/posts/generate-copy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId,
+            platforms,
+            format: resolvedFormat,
+            itemCount: isPackage ? asset.itemCount || 5 : 1,
+            style: aiStyle,
+            idea: asset.idea,
+            sourceTopic: rawTitle || rawDesc,
+            includeHashtagSets,
+            selectedHashtagSetIds,
+            stockVideoMeta:
+              rawTitle || rawDesc || rawKeywords.length > 0
+                ? { rawTitle, rawDescription: rawDesc, keywords: Array.isArray(rawKeywords) ? rawKeywords : [] }
+                : undefined,
+          }),
+        });
+
+        if (aiRes.ok) {
+          const aiData = await aiRes.json();
+          const copies = (aiData.copies || {}) as Record<string, { title?: string; caption?: string; hashtags?: string; tags?: string[] }>;
+          for (const p of platforms) {
+            const copy = copies[p] || (p === platforms[0] ? aiData.copy : undefined);
+            if (copy) {
+              platformData[p] = {
+                title: copy.title ? copy.title.slice(0, 100) : rawTitle,
+                caption: copy.caption || rawDesc || rawTitle,
+                hashtags: copy.hashtags || extracted.hashtags || "",
+                tags: Array.isArray(copy.tags) ? copy.tags : [],
+              };
+            }
+          }
+        }
+      } catch {
+        // AI isteğinde hata olursa ham meta ile devam etsin
+      }
+
+      results[index] = {
+        id: `bulk_${asset.id}_${Date.now()}_${index}`,
+        asset,
+        scheduledAt: scheduledTime,
+        isPrepared: true,
+        platformData,
+      };
+
+      completedCount++;
+      setBulkPrepareProgress({ current: completedCount, total: totalAssets });
+      // Canlı önizleme: Tamamlanan kartları orijinal sırasıyla ekrana yansıt
+      setBulkItems([...results.filter(Boolean)]);
+    }
+
+    async function worker() {
+      while (nextIndex < totalAssets) {
+        const currentIndex = nextIndex++;
+        await processAsset(currentIndex);
+      }
+    }
+
+    try {
+      const workers = Array.from({ length: concurrency }, () => worker());
+      await Promise.all(workers);
+
+      const finalItems = results.filter(Boolean);
+      setBulkItems(finalItems);
       if (platforms.length > 0 && !platforms.includes(bulkActivePlatform)) {
         setBulkActivePlatform(platforms[0]);
       }
-      setSuccess(`${initialList.length} içerik AI ile incelendi ve sağ panelde önizlemeye hazırlandı.`);
+      setSuccess(`${finalItems.length} içerik AI ile incelendi ve sağ panelde önizlemeye hazırlandı.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -3480,6 +3500,57 @@ export function PublishingStudio({
               </div>
             </div>
 
+            {/* 5. AI Hız & Eşzamanlılık Ayarı */}
+            <div className="composer-section" style={{ background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: "10px", padding: "10px 12px" }}>
+              <div className="composer-section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                <span style={{ display: "flex", alignItems: "center", gap: "5px", fontWeight: 700, fontSize: "11px", color: "var(--text)" }}>
+                  <Zap size={13} style={{ color: "#f59e0b" }} />
+                  <span>5. AI İşlem Hızı (Eşzamanlı Üretim)</span>
+                </span>
+                <span style={{ fontSize: "10px", color: "#10b981", fontWeight: 600 }}>
+                  ✓ Kaliteden ödün vermez
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: "5px", alignItems: "center" }}>
+                {[
+                  { count: 1, label: "1x", desc: "Sıralı" },
+                  { count: 2, label: "2x", desc: "Hızlı" },
+                  { count: 3, label: "3x", desc: "Dengeli", rec: true },
+                  { count: 4, label: "4x", desc: "Ultra" },
+                  { count: 5, label: "5x", desc: "Maks" },
+                ].map((item) => (
+                  <button
+                    key={item.count}
+                    type="button"
+                    onClick={() => setBulkConcurrency(item.count)}
+                    className={`button compact ${bulkConcurrency === item.count ? "primary" : "ghost"}`}
+                    style={{
+                      flex: 1,
+                      height: "30px",
+                      fontSize: "11px",
+                      padding: "0 2px",
+                      fontWeight: bulkConcurrency === item.count ? 700 : 500,
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      lineHeight: "1.1",
+                      border: bulkConcurrency === item.count ? "1px solid var(--primary)" : "1px solid #e2e8f0",
+                      background: bulkConcurrency === item.count ? "var(--primary)" : "white",
+                      color: bulkConcurrency === item.count ? "white" : "var(--text)",
+                      borderRadius: "6px",
+                    }}
+                    title={`${item.count} eşzamanlı paralel istek - ${item.desc}${item.rec ? " (Önerilen varsayılan)" : ""}`}
+                  >
+                    <span>{item.label}</span>
+                    <span style={{ fontSize: "8px", opacity: bulkConcurrency === item.count ? 0.9 : 0.65 }}>
+                      {item.desc}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* AKSİYON 1: YAYINA HAZIRLA BUTONU */}
             <div style={{ marginTop: "6px" }}>
               <button
@@ -3493,13 +3564,13 @@ export function PublishingStudio({
                   <>
                     <LoaderCircle size={16} className="spin" />
                     <span>
-                      AI ile Hazırlanıyor... ({bulkPrepareProgress?.current || 0}/{bulkPrepareProgress?.total || 0})
+                      AI ile Hazırlanıyor... ({bulkPrepareProgress?.current || 0}/{bulkPrepareProgress?.total || 0}) [{bulkConcurrency}x Eşzamanlı]
                     </span>
                   </>
                 ) : (
                   <>
                     <Sparkles size={16} />
-                    <span>✨ Yayına Hazırla ({bulkSelectedAssets.length} Medya)</span>
+                    <span>✨ Yayına Hazırla ({bulkSelectedAssets.length} Medya &bull; {bulkConcurrency}x Hız)</span>
                   </>
                 )}
               </button>
