@@ -917,7 +917,7 @@ export function CanvaGenerationStudio({
                 </a>
               )}
               <Link
-                href="/settings"
+                href="/settings?tab=canva"
                 style={{
                   padding: "4px 10px",
                   background: "#fee2e2",

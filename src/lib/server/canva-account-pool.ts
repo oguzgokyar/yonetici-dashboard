@@ -2,10 +2,72 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { getDatabase } from "@/lib/server/database";
+import { refreshCanvaAccessToken } from "@/lib/canva-oauth";
 
-export const DEFAULT_CANVA_RECONNECT_URL = "https://www.canva.com/settings/your-account";
+export const DEFAULT_CANVA_RECONNECT_URL = "/api/system/canva/oauth/start";
 const MCP_TOKEN_PATH = "/opt/data/mcp-tokens/canva.json";
 const HERMES_CONFIG_PATH = "/opt/data/config.yaml";
+
+export async function refreshAccountTokenIfNeeded(accountId: string): Promise<boolean> {
+  const db = getDatabase();
+  const row = db
+    .prepare("SELECT id, token_json FROM canva_accounts WHERE id = ?")
+    .get(accountId) as { id: string; token_json: string } | undefined;
+
+  if (!row || !row.token_json || row.token_json === "{}" || row.token_json.trim() === "") {
+    return false;
+  }
+
+  try {
+    const token = JSON.parse(row.token_json);
+    if (!token.refresh_token) return false;
+
+    const exp = token.expires_at;
+    const expMs = typeof exp === "number" ? (exp > 1e11 ? exp : exp * 1000) : Date.parse(exp);
+    const bufferMs = 15 * 60 * 1000; // 15 mins buffer
+
+    // Only refresh if expired or about to expire in 15 minutes
+    if (Number.isFinite(expMs) && Date.now() < expMs - bufferMs) {
+      return false; // Still comfortably valid
+    }
+
+    const refreshed = await refreshCanvaAccessToken(token.refresh_token);
+    const nowIso = new Date().toISOString();
+    const tokenJsonStr = JSON.stringify(refreshed);
+
+    db.prepare(`
+      UPDATE canva_accounts
+      SET token_json = ?,
+          quota_status = 'available',
+          quota_exhausted_at = NULL,
+          last_error = NULL,
+          updated_at = ?
+      WHERE id = ?
+    `).run(tokenJsonStr, nowIso, accountId);
+
+    syncActiveTokenToDisk(tokenJsonStr);
+    return true;
+  } catch (error) {
+    console.error(`[Canva Token Refresh Error for ${accountId}]:`, error);
+    return false;
+  }
+}
+
+export async function refreshAllExpiredTokens(): Promise<number> {
+  const db = getDatabase();
+  let refreshedCount = 0;
+  try {
+    const rows = db
+      .prepare("SELECT id FROM canva_accounts WHERE is_active = 1")
+      .all() as unknown as { id: string }[];
+
+    for (const r of rows) {
+      const ok = await refreshAccountTokenIfNeeded(r.id);
+      if (ok) refreshedCount++;
+    }
+  } catch {}
+  return refreshedCount;
+}
 
 export function syncActiveTokenToDisk(tokenJson: string): void {
   try {

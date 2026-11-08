@@ -135,6 +135,17 @@ function runMigrations(database: DatabaseSync) {
       updated_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_canva_accounts_status ON canva_accounts(is_active, quota_status);
+    CREATE TABLE IF NOT EXISTS canva_oauth_sessions (
+      state TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL DEFAULT '',
+      display_name TEXT NOT NULL DEFAULT '',
+      code_verifier TEXT NOT NULL,
+      redirect_uri TEXT NOT NULL,
+      return_to TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_canva_oauth_sessions_expiry ON canva_oauth_sessions(expires_at);
     CREATE TABLE IF NOT EXISTS content_posts (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,

@@ -5,12 +5,14 @@ import {
   updateCanvaAccount,
   deleteCanvaAccount,
   getCanvaPoolSummary,
+  refreshAllExpiredTokens,
 } from "@/lib/server/canva-account-pool";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   try {
+    await refreshAllExpiredTokens().catch(() => {});
     const accounts = listCanvaAccounts();
     const summary = getCanvaPoolSummary();
     return NextResponse.json({ ok: true, accounts, summary, reconnectUrl: summary.reconnectUrl });

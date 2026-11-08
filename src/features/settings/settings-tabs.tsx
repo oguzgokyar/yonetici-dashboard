@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Bot, Settings2, Server, Palette, Music2, Video, Activity, Zap } from "lucide-react";
 import { AiProviders } from "@/features/settings/ai-providers";
 import { CanvaAccountSettings } from "@/features/settings/canva-account-settings";
@@ -20,6 +20,21 @@ export function SettingsTabs() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("api");
   const [apiSubTab, setApiSubTab] = useState<ApiSubTab>("ai_postiz");
   const [serverSubTab, setServerSubTab] = useState<ServerSubTab>("monitor");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get("tab");
+    if (tab === "canva") {
+      setActiveTab("api");
+      setApiSubTab("canva");
+    } else if (tab === "google_vids" || tab === "music") {
+      setActiveTab("api");
+      setApiSubTab(tab as ApiSubTab);
+    } else if (tab === "server" || tab === "system") {
+      setActiveTab(tab as SettingsTab);
+    }
+  }, []);
 
   return (
     <div className="system-settings">

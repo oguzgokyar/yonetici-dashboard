@@ -9,6 +9,7 @@ import {
   getNextAvailableCanvaAccount,
   markCanvaAccountExhausted,
   updateCanvaAccount,
+  refreshAllExpiredTokens,
 } from "@/lib/server/canva-account-pool";
 
 export const runtime = "nodejs";
@@ -50,6 +51,7 @@ export async function GET(
   }
 
   const { projectId } = await context.params;
+  await refreshAllExpiredTokens().catch(() => {});
   const pool = getCanvaPoolSummary();
   const now = new Date();
   const todayStartUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
