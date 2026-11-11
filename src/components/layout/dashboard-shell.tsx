@@ -4,9 +4,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import {
-  Bell, ChevronDown, Clapperboard, Compass, Film, FolderKanban, Image, LayoutDashboard, PanelsTopLeft,
+  Bell, ChevronDown, ChevronRight, Clapperboard, Compass, Film, FolderKanban, Image, LayoutDashboard, PanelsTopLeft,
   Menu, Palette, PanelLeftClose, PanelLeftOpen, Pin, Plus, Search, Send, Settings, Share2, Sparkles, X,
-  Layers, Bot, PhoneCall, Video, LogOut, FileText,
+  Layers, Bot, PhoneCall, Video, LogOut, FileText, Wrench, TrendingUp,
 } from "lucide-react";
  import { useProjects } from "@/features/projects/projects-context";
  import { ProductionQueueDrawer } from "./production-queue-drawer";
@@ -43,6 +43,14 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
   const [ideasDrawerOpen, setIdeasDrawerOpen] = useState(false);
   const [totalIdeasCount, setTotalIdeasCount] = useState(0);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [devToolsOpen, setDevToolsOpen] = useState(true);
+
+  const isDevToolsRoute =
+    pathname.startsWith("/developer-tools") ||
+    pathname === "/growth-archive" ||
+    pathname === "/meeting" ||
+    pathname === "/teklif" ||
+    pathname === "/instagram-growth";
 
   async function handleLogout() {
     try {
@@ -108,34 +116,130 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
         <Link href="/projects" className={`nav-item ${pathname === "/projects" ? "active" : ""}`} title="Projeler">
           <FolderKanban size={19} /><span>Projeler</span>
         </Link>
-        <a 
-          href="http://43.131.47.253:8080/library/" 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          className="nav-item" 
-          title="Büyüme & Strateji Arşivi"
-        >
-          <Sparkles size={19} /><span>Büyüme Arşivi ↗</span>
-        </a>
-        <a 
-          href="http://43.131.47.253:8080/meeting/" 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          className="nav-item" 
-          title="Toplantı Asistanı & Arşiv Portalı"
-        >
-          <Video size={19} /><span>Toplantı Asistanı ↗</span>
-        </a>
 
-        <a 
-          href="https://teklif.43.131.47.253.sslip.io/teklif/" 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          className="nav-item" 
-          title="Aysar Teklif Yöneticisi"
-        >
-          <FileText size={19} /><span>Teklif Yöneticisi ↗</span>
-        </a>
+        {/* Geliştirici Araçları Açılır Menüsü */}
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <div
+            className={`nav-item ${isDevToolsRoute ? "active" : ""}`}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingRight: "8px",
+            }}
+          >
+            <Link
+              href="/developer-tools"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "11px",
+                flex: 1,
+                color: "inherit",
+                textDecoration: "none",
+              }}
+              onClick={() => setMobileOpen(false)}
+              title="Geliştirici Araçları"
+            >
+              <Wrench size={19} />
+              <span>Geliştirici Araçları</span>
+            </Link>
+
+            {!collapsed && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setDevToolsOpen(!devToolsOpen);
+                }}
+                className="icon-button"
+                style={{
+                  width: "24px",
+                  height: "24px",
+                  display: "grid",
+                  placeItems: "center",
+                  color: "inherit",
+                  opacity: 0.75,
+                  padding: 0,
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                }}
+                title={devToolsOpen ? "Daralt" : "Genişlet"}
+                aria-label={devToolsOpen ? "Geliştirici Araçlarını Daralt" : "Geliştirici Araçlarını Genişlet"}
+              >
+                <ChevronDown
+                  size={15}
+                  style={{
+                    transform: devToolsOpen ? "rotate(0deg)" : "rotate(-90deg)",
+                    transition: "transform 0.18s ease",
+                  }}
+                />
+              </button>
+            )}
+          </div>
+
+          {/* Açılır Alt Menü */}
+          {devToolsOpen && !collapsed && (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "2px",
+                paddingLeft: "18px",
+                marginTop: "2px",
+                marginBottom: "4px",
+                borderLeft: "2px solid rgba(99, 102, 241, 0.15)",
+                marginLeft: "18px",
+              }}
+            >
+              <Link
+                href="/growth-archive"
+                className={`nav-item ${pathname === "/growth-archive" ? "active" : ""}`}
+                style={{ minHeight: "36px", fontSize: "13px", padding: "6px 10px", gap: "9px" }}
+                onClick={() => setMobileOpen(false)}
+                title="Büyüme & Strateji Arşivi"
+              >
+                <Sparkles size={16} />
+                <span>Büyüme Arşivi</span>
+              </Link>
+
+              <Link
+                href="/meeting"
+                className={`nav-item ${pathname === "/meeting" ? "active" : ""}`}
+                style={{ minHeight: "36px", fontSize: "13px", padding: "6px 10px", gap: "9px" }}
+                onClick={() => setMobileOpen(false)}
+                title="Toplantı Asistanı"
+              >
+                <Video size={16} />
+                <span>Toplantı Asistanı</span>
+              </Link>
+
+              <Link
+                href="/teklif"
+                className={`nav-item ${pathname === "/teklif" ? "active" : ""}`}
+                style={{ minHeight: "36px", fontSize: "13px", padding: "6px 10px", gap: "9px" }}
+                onClick={() => setMobileOpen(false)}
+                title="Teklif Aracı"
+              >
+                <FileText size={16} />
+                <span>Teklif Aracı</span>
+              </Link>
+
+              <Link
+                href="/instagram-growth"
+                className={`nav-item ${pathname === "/instagram-growth" ? "active" : ""}`}
+                style={{ minHeight: "36px", fontSize: "13px", padding: "6px 10px", gap: "9px" }}
+                onClick={() => setMobileOpen(false)}
+                title="Instagram Growth"
+              >
+                <TrendingUp size={16} />
+                <span>Instagram Growth</span>
+              </Link>
+            </div>
+          )}
+        </div>
 
         {projectId && <>
           <p className="nav-label">PROJE</p>

@@ -18,6 +18,36 @@ const nextConfig: NextConfig = {
         destination: "/projects",
         permanent: false,
       },
+      {
+        source: "/developer-tools/growth-archive",
+        destination: "/growth-archive",
+        permanent: false,
+      },
+      {
+        source: "/developer-tools/library",
+        destination: "/growth-archive",
+        permanent: false,
+      },
+      {
+        source: "/developer-tools/meeting",
+        destination: "/meeting",
+        permanent: false,
+      },
+      {
+        source: "/developer-tools/teklif",
+        destination: "/teklif",
+        permanent: false,
+      },
+      {
+        source: "/developer-tools/instagram-growth",
+        destination: "/instagram-growth",
+        permanent: false,
+      },
+      {
+        source: "/developer-tools/growth-agent",
+        destination: "/instagram-growth",
+        permanent: false,
+      },
     ];
   },
 };
