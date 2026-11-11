@@ -14,6 +14,8 @@ export async function middleware(request: NextRequest) {
     pathname === "/api/health" ||
     pathname === "/api/auth/login" ||
     pathname === "/api/auth/session" ||
+    pathname.startsWith("/api/voice/") ||
+    pathname === "/call" ||
     pathname.startsWith("/api/internal/") ||
     pathname.startsWith("/api/integrations/")
   ) {

@@ -43,7 +43,7 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
   const [ideasDrawerOpen, setIdeasDrawerOpen] = useState(false);
   const [totalIdeasCount, setTotalIdeasCount] = useState(0);
   const [assistantOpen, setAssistantOpen] = useState(false);
-  const [devToolsOpen, setDevToolsOpen] = useState(true);
+  const [devToolsOpen, setDevToolsOpen] = useState(false);
 
   const isDevToolsRoute =
     pathname.startsWith("/developer-tools") ||
@@ -119,122 +119,106 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
 
         {/* Geliştirici Araçları Açılır Menüsü */}
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <div
+          <button
+            type="button"
+            onClick={() => setDevToolsOpen(!devToolsOpen)}
             className={`nav-item ${isDevToolsRoute ? "active" : ""}`}
             style={{
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              paddingRight: "8px",
+              width: "100%",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              textAlign: "left",
             }}
+            title="Geliştirici Araçları"
+            aria-expanded={devToolsOpen}
           >
-            <Link
-              href="/developer-tools"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "11px",
-                flex: 1,
-                color: "inherit",
-                textDecoration: "none",
-              }}
-              onClick={() => setMobileOpen(false)}
-              title="Geliştirici Araçları"
-            >
+            <div style={{ display: "flex", alignItems: "center", gap: "11px" }}>
               <Wrench size={19} />
-              <span>Geliştirici Araçları</span>
-            </Link>
+              {!collapsed && <span>Geliştirici Araçları</span>}
+            </div>
 
             {!collapsed && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setDevToolsOpen(!devToolsOpen);
-                }}
-                className="icon-button"
+              <ChevronDown
+                size={15}
                 style={{
-                  width: "24px",
-                  height: "24px",
-                  display: "grid",
-                  placeItems: "center",
-                  color: "inherit",
+                  transform: devToolsOpen ? "rotate(0deg)" : "rotate(-90deg)",
+                  transition: "transform 0.2s ease",
                   opacity: 0.75,
-                  padding: 0,
-                  background: "transparent",
-                  border: "none",
-                  cursor: "pointer",
                 }}
-                title={devToolsOpen ? "Daralt" : "Genişlet"}
-                aria-label={devToolsOpen ? "Geliştirici Araçlarını Daralt" : "Geliştirici Araçlarını Genişlet"}
-              >
-                <ChevronDown
-                  size={15}
-                  style={{
-                    transform: devToolsOpen ? "rotate(0deg)" : "rotate(-90deg)",
-                    transition: "transform 0.18s ease",
-                  }}
-                />
-              </button>
+              />
             )}
-          </div>
+          </button>
 
-          {/* Açılır Alt Menü */}
+          {/* Açılır Alt Menü (Tıklayınca Açılır) */}
           {devToolsOpen && !collapsed && (
             <div
               style={{
                 display: "flex",
                 flexDirection: "column",
                 gap: "2px",
-                paddingLeft: "18px",
+                paddingLeft: "16px",
                 marginTop: "2px",
                 marginBottom: "4px",
-                borderLeft: "2px solid rgba(99, 102, 241, 0.15)",
+                borderLeft: "2px solid rgba(99, 102, 241, 0.2)",
                 marginLeft: "18px",
               }}
             >
               <Link
+                href="/developer-tools"
+                className={`nav-item ${pathname === "/developer-tools" ? "active" : ""}`}
+                style={{ minHeight: "34px", fontSize: "12.5px", padding: "6px 10px", gap: "9px" }}
+                onClick={() => setMobileOpen(false)}
+                title="Tüm Araçlar Merkezi"
+              >
+                <PanelsTopLeft size={15} />
+                <span>Tüm Araçlar (Merkez)</span>
+              </Link>
+
+              <Link
                 href="/growth-archive"
                 className={`nav-item ${pathname === "/growth-archive" ? "active" : ""}`}
-                style={{ minHeight: "36px", fontSize: "13px", padding: "6px 10px", gap: "9px" }}
+                style={{ minHeight: "34px", fontSize: "12.5px", padding: "6px 10px", gap: "9px" }}
                 onClick={() => setMobileOpen(false)}
                 title="Büyüme & Strateji Arşivi"
               >
-                <Sparkles size={16} />
+                <Sparkles size={15} />
                 <span>Büyüme Arşivi</span>
               </Link>
 
               <Link
                 href="/meeting"
                 className={`nav-item ${pathname === "/meeting" ? "active" : ""}`}
-                style={{ minHeight: "36px", fontSize: "13px", padding: "6px 10px", gap: "9px" }}
+                style={{ minHeight: "34px", fontSize: "12.5px", padding: "6px 10px", gap: "9px" }}
                 onClick={() => setMobileOpen(false)}
                 title="Toplantı Asistanı"
               >
-                <Video size={16} />
+                <Video size={15} />
                 <span>Toplantı Asistanı</span>
               </Link>
 
               <Link
                 href="/teklif"
                 className={`nav-item ${pathname === "/teklif" ? "active" : ""}`}
-                style={{ minHeight: "36px", fontSize: "13px", padding: "6px 10px", gap: "9px" }}
+                style={{ minHeight: "34px", fontSize: "12.5px", padding: "6px 10px", gap: "9px" }}
                 onClick={() => setMobileOpen(false)}
                 title="Teklif Aracı"
               >
-                <FileText size={16} />
+                <FileText size={15} />
                 <span>Teklif Aracı</span>
               </Link>
 
               <Link
                 href="/instagram-growth"
                 className={`nav-item ${pathname === "/instagram-growth" ? "active" : ""}`}
-                style={{ minHeight: "36px", fontSize: "13px", padding: "6px 10px", gap: "9px" }}
+                style={{ minHeight: "34px", fontSize: "12.5px", padding: "6px 10px", gap: "9px" }}
                 onClick={() => setMobileOpen(false)}
                 title="Instagram Growth"
               >
-                <TrendingUp size={16} />
+                <TrendingUp size={15} />
                 <span>Instagram Growth</span>
               </Link>
             </div>
