@@ -5,8 +5,8 @@ export default function MeetingPage() {
     <EmbeddedToolView
       title="Toplantı Asistanı & Arşiv"
       eyebrow="Geliştirici Araçları"
-      iframeSrc="http://43.131.47.253:8080/meeting/"
-      externalUrl="http://43.131.47.253:8080/meeting/"
+      iframeSrc="https://teklif.43.131.47.253.sslip.io/meeting/"
+      externalUrl="https://teklif.43.131.47.253.sslip.io/meeting/"
       description="Google Meet / Zoom toplantı ses kaydı, canlı transkript, Gemini toplantı özetleri."
     />
   );

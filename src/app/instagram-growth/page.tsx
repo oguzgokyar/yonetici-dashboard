@@ -5,9 +5,9 @@ export default function InstagramGrowthPage() {
     <EmbeddedToolView
       title="Instagram Growth & Takipçi Masası"
       eyebrow="Geliştirici Araçları"
-      iframeSrc="http://43.131.47.253:8090/"
-      externalUrl="http://43.131.47.253:8090/"
-      description="Headless Instagram büyüme botu, otopilot seansları, beyaz liste ve takipçi çıkarma havuzu (:8090)."
+      iframeSrc="https://growth.43.131.47.253.sslip.io/"
+      externalUrl="https://growth.43.131.47.253.sslip.io/"
+      description="Headless Instagram büyüme botu, otopilot seansları, beyaz liste ve takipçi çıkarma havuzu."
     />
   );
 }

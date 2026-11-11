@@ -108,7 +108,7 @@ export default function DeveloperToolsPage() {
             {/* 1. Büyüme Arşivi */}
             <ToolCard
               href="/growth-archive"
-              externalUrl="http://43.131.47.253:8080/library/"
+              externalUrl="https://teklif.43.131.47.253.sslip.io/library/"
               icon={<Sparkles size={22} className="text-indigo-600" />}
               title="Büyüme &amp; Strateji Arşivi"
               badge="Kütüphane"
@@ -120,7 +120,7 @@ export default function DeveloperToolsPage() {
             {/* 2. Toplantı Asistanı */}
             <ToolCard
               href="/meeting"
-              externalUrl="http://43.131.47.253:8080/meeting/"
+              externalUrl="https://teklif.43.131.47.253.sslip.io/meeting/"
               icon={<Video size={22} className="text-purple-600" />}
               title="Toplantı Asistanı &amp; Arşiv"
               badge="Canlı Bot"
@@ -144,10 +144,10 @@ export default function DeveloperToolsPage() {
             {/* 4. Instagram Growth */}
             <ToolCard
               href="/instagram-growth"
-              externalUrl="http://43.131.47.253:8090/"
+              externalUrl="https://growth.43.131.47.253.sslip.io/"
               icon={<TrendingUp size={22} className="text-rose-600" />}
               title="Instagram Growth &amp; Takipçi Masası"
-              badge="Otopilot :8090"
+              badge="Otopilot"
               badgeColor="rose"
               tag="Otomasyon &amp; Filtre"
               description="Otopilot etkileşim, beyaz liste koruması ve yabancı takipçileri çıkarma havuzu."

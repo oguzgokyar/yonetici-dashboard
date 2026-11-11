@@ -5,8 +5,8 @@ export default function GrowthArchivePage() {
     <EmbeddedToolView
       title="Büyüme & Strateji Arşivi"
       eyebrow="Geliştirici Araçları"
-      iframeSrc="http://43.131.47.253:8080/library/"
-      externalUrl="http://43.131.47.253:8080/library/"
+      iframeSrc="https://teklif.43.131.47.253.sslip.io/library/"
+      externalUrl="https://teklif.43.131.47.253.sslip.io/library/"
       description="Pazarlama dökümanları, büyüme stratejisi rehberleri ve referans PDF kitaplığı."
     />
   );
