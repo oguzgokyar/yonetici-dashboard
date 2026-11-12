@@ -41,7 +41,7 @@ export function VidsVideoGallery({
             <Clapperboard size={16} />
           </span>
           <div>
-            <h2>Üretilen Google Vids Videoları</h2>
+            <h2>Üretilen Google Videoları</h2>
             <p>Tamamlanan AI videoları burada saklanır ve tek tıkla Paylaşım Planına aktarılır.</p>
           </div>
         </div>
@@ -82,7 +82,7 @@ export function VidsVideoGallery({
                 }}
               >
                 <span>
-                  {video.title || "Google Vids"} • {video.durationSeconds || 30} sn
+                  {video.title || "Google Video"} • {video.durationSeconds || 30} sn
                 </span>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   {video.storyboard ? (
@@ -175,7 +175,7 @@ export function VidsVideoGallery({
       ) : (
         <div className="history-empty">
           <Clapperboard size={23} />
-          <span>Henüz Google Vids ile üretilmiş video bulunmuyor.</span>
+          <span>Henüz Google ile üretilmiş video bulunmuyor.</span>
         </div>
       )}
     </section>

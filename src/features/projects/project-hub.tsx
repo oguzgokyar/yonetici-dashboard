@@ -169,12 +169,12 @@ export function ProjectHub({ projectId }: { projectId: string }) {
               text="Kreatif reklam afişleri, Canva karosel ve story tasarımları."
             />
 
-            {/* 3. Google Vids Video Stüdyosu */}
+            {/* 3. Google Video Stüdyosu (Flow & Vids) */}
             <WorkflowCard
-              href={`/projects/${projectId}/video-generation?tab=vids`}
+              href={`/projects/${projectId}/video-generation?studio=vids`}
               icon={<Clapperboard size={20} />}
-              title="Google Vids Video"
-              text="Karakter DNA'sı, sinematik sahneler, dış ses ve altyazılı video."
+              title="Google Video"
+              text="Google Flow ve Google Vids ile sinematik sahneler, diyaloglar ve altyazılı video."
             />
 
             {/* 4. Remotion Hareketli Video */}

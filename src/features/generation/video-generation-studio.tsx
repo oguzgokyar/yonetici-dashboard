@@ -52,11 +52,13 @@ export function VideoGenerationStudio({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const requested = params.get("studio");
+    const requested = params.get("studio") || params.get("tab");
     if (requested === "vids" || requested === "google" || requested === "flow") {
       setActiveStudioTab("vids");
     } else if (requested === "rss") {
       setActiveStudioTab("rss");
+    } else if (requested === "motion") {
+      setActiveStudioTab("motion");
     }
   }, []);
 
