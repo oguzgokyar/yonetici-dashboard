@@ -152,7 +152,26 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
     } catch {}
   }, [projectId, topic, visualMood, targetDuration, aspectRatio, narrativeMode, includeMusic, storyboard]);
 
+  // Video Galerisini Yükle
+  const loadVideos = useCallback(async () => {
+    setLoadingVideos(true);
+    try {
+      const res = await fetch(`/api/videos?projectId=${encodeURIComponent(projectId)}`, {
+        cache: "no-store",
+      });
+      const data = (await res.json()) as { ok: boolean; videos?: RenderedVideo[] };
+      if (data.ok && data.videos) {
+        setVideos(data.videos.filter((v) => v.isGoogleVids));
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingVideos(false);
+    }
+  }, [projectId]);
+
   // Aktif Google Vids İşlerini Sorgula (İzole Edilmiş & Hafifletilmiş Sorgu)
+  const prevActiveJobIdRef = useRef<string | null>(null);
   const pollActiveJobs = useCallback(async () => {
     try {
       // origin=marka_motoru parametresi ile Sinematik Stüdyo dizi işleri filtrelenir
@@ -165,6 +184,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
           setAccountsPool(data.accounts as PoolAccount[]);
         }
         if (data.activeJob) {
+          prevActiveJobIdRef.current = data.activeJob.id;
           setActiveJob(data.activeJob);
           setLastErrorJob(null);
           // Yalnızca Marka Motoru'na ait aktif iş varsa ve ekranda senaryo boşsa geri yükle
@@ -186,6 +206,10 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
             if (data.activeJob.request.topic) setTopic(data.activeJob.request.topic);
           }
         } else {
+          if (prevActiveJobIdRef.current) {
+            prevActiveJobIdRef.current = null;
+            void loadVideos();
+          }
           setActiveJob(null);
           const failed = googleVidsFailureNotification(data.jobs || []);
           if (failed && failed.id !== dismissedErrorIdRef.current) {
@@ -196,7 +220,7 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
         }
       }
     } catch {}
-  }, [projectId, storyboard]);
+  }, [projectId, storyboard, loadVideos]);
 
   useEffect(() => {
     void pollActiveJobs();
@@ -205,24 +229,6 @@ export function GoogleVidsStudio({ projectId }: { projectId: string }) {
     }, 4000);
     return () => clearInterval(interval);
   }, [pollActiveJobs]);
-
-  // Video Galerisini Yükle
-  const loadVideos = useCallback(async () => {
-    setLoadingVideos(true);
-    try {
-      const res = await fetch(`/api/videos?projectId=${encodeURIComponent(projectId)}`, {
-        cache: "no-store",
-      });
-      const data = (await res.json()) as { ok: boolean; videos?: RenderedVideo[] };
-      if (data.ok && data.videos) {
-        setVideos(data.videos.filter((v) => v.isGoogleVids));
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLoadingVideos(false);
-    }
-  }, [projectId]);
 
   useEffect(() => {
     void loadVideos();

@@ -50,12 +50,18 @@ function localUrlToDataUrl(url: string | undefined) {
 export async function GET(request: Request) {
   const projectId = new URL(request.url).searchParams.get("projectId")?.trim();
   if (!projectId) return Response.json({ ok: false, message: "Proje gerekli." }, { status: 400 });
-  const rows = getDatabase().prepare("SELECT id, type, model, request_json, response_json, created_at, completed_at FROM generation_jobs WHERE project_id=? AND type IN ('video', 'google-vids', 'flow-video') AND status='complete' ORDER BY created_at DESC LIMIT 50").all(projectId) as unknown as (VideoJobRow & { type?: string; model?: string })[];
+  const rows = getDatabase().prepare("SELECT id, type, model, status, request_json, response_json, created_at, completed_at FROM generation_jobs WHERE project_id=? AND type IN ('video', 'google-vids', 'flow-video') AND status='complete' ORDER BY created_at DESC LIMIT 50").all(projectId) as unknown as (VideoJobRow & { type?: string; model?: string; status?: string })[];
   const validRows = rows.filter((row) => {
     try {
       const req = JSON.parse(row.request_json || "{}");
       // Sinematik Stüdyo sahne kesitleri ve ara klipler bölüm videosuna dönüşmeden arşivde listelenmez
-      if (req.isSceneClip || req.scope === "scene_clip" || req.isDraftScene) return false;
+      if (req.isSceneClip || req.scope === "scene_clip") return false;
+      // isDraftScene yalnızca iş henüz tamamlanmamışsa filtrelenir; tamamlanmış Flow videoları arşivde listelenir
+      if (req.isDraftScene && row.status !== "complete") return false;
+      if (req.isDraftScene && req.engine === "flow") {
+        const resObj = JSON.parse(row.response_json || "{}");
+        if (!resObj.masterVideoUrl && !(resObj.readyScenes > 0)) return false;
+      }
     } catch { /* ignore */ }
     return true;
   });
@@ -157,10 +163,15 @@ export async function GET(request: Request) {
       } catch {}
     }
 
+    const requestState = JSON.parse(row.request_json || "{}");
+    const isFlowMaster = isGoogleVids && (requestState.engine === "flow" || row.model === "flow-omni" || responseState.engine === "flow");
+    const resolvedUrl = responseState.url || responseState.masterVideoUrl || `/api/videos/${row.id}`;
+    const resolvedTitle = responseState.title || requestState.title || (isFlowMaster ? "Google Flow Video" : isGoogleVids ? "Google Vids Video" : isFlowVideo ? "Flow Video (Veo)" : isRssVideo ? "RSS Video" : isStockRender ? "Stok Üretim Video" : undefined);
+
     return {
       id: row.id,
-      url: responseState.url || `/api/videos/${row.id}`,
-      title: responseState.title || (isGoogleVids ? "Google Vids Video" : isFlowVideo ? "Flow Video (Veo)" : isRssVideo ? "RSS Video" : isStockRender ? "Stok Üretim Video" : undefined),
+      url: resolvedUrl,
+      title: resolvedTitle,
       isStockRender,
       isRssVideo: isRssVideo || Boolean(responseState.isRssVideo),
       isGoogleVids: isGoogleVids || Boolean(responseState.isGoogleVids),

@@ -15,10 +15,22 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const isThumb = url.searchParams.get("thumb") === "1";
   const videoRendersDir = path.join(process.cwd(), ".data", "video-renders");
   const thumbPath = path.join(videoRendersDir, `${id}_thumb.webp`);
+  const flowSceneDir = path.join(process.cwd(), ".data", "flow-scenes", id);
+  const flowThumbPath = path.join(flowSceneDir, "master_full_thumb.webp");
+  const flowScene1ThumbPath = path.join(flowSceneDir, "scene-1_thumb.webp");
+
+  let videoPath = path.join(videoRendersDir, `${id}.mp4`);
+  if (!fs.existsSync(videoPath)) {
+    const flowMaster = path.join(flowSceneDir, "master_full.mp4");
+    const flowScene1 = path.join(flowSceneDir, "scene-1.mp4");
+    if (fs.existsSync(flowMaster)) videoPath = flowMaster;
+    else if (fs.existsSync(flowScene1)) videoPath = flowScene1;
+  }
 
   if (isThumb) {
-    if (fs.existsSync(thumbPath)) {
-      const bytes = fs.readFileSync(thumbPath);
+    const existingThumb = [thumbPath, flowThumbPath, flowScene1ThumbPath].find((p) => fs.existsSync(p));
+    if (existingThumb) {
+      const bytes = fs.readFileSync(existingThumb);
       return new Response(bytes, {
         headers: {
           "Content-Type": "image/webp",
@@ -52,7 +64,6 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       }
     }
 
-    const videoPath = path.join(videoRendersDir, `${id}.mp4`);
     if (fs.existsSync(videoPath)) {
       try {
         execSync(
@@ -74,7 +85,6 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     }
   }
 
-  const videoPath = path.join(videoRendersDir, `${id}.mp4`);
   if (!fs.existsSync(videoPath)) {
     return new Response("Not found", { status: 404 });
   }
