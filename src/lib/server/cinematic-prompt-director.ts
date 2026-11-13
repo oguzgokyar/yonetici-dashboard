@@ -256,7 +256,15 @@ export function bindReferenceChipsToPrompt(
         res = res.trim() + ` Central focus on ${cleanObj}.`;
       }
     } else if (kind === "location") {
-      const cleanLoc = name || "environment";
+      let cleanLoc = name || "environment";
+      // Strip brand/channel phrases that trick Veo into rendering logos or channel bugs
+      cleanLoc = cleanLoc
+        .replace(/\b(atölye|atolye)\s*hanem\b/gi, "")
+        .replace(/\baydınlık\s*maker\b/gi, "")
+        .replace(/\b(maker\s*stüdyosu|maker\s*studio)\b/gi, "creative workshop")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!cleanLoc) cleanLoc = "creative sunlit workshop";
       if (!res.toLowerCase().includes(cleanLoc.toLowerCase())) {
         res = `Set at ${cleanLoc}, ` + res.trim();
       }
@@ -266,7 +274,7 @@ export function bindReferenceChipsToPrompt(
   // Strip any accidental @ symbols from final prompt to guarantee clean frame
   res = res.replace(/@([a-z0-9_]+)/gi, "$1");
   if (!res.toLowerCase().includes("zero watermarks") && !res.toLowerCase().includes("no text overlays")) {
-    res += " Clean photographic frame, strictly no text overlays, zero watermarks, zero handles, zero subtitles.";
+    res += " Clean cinematic photographic frame, strictly zero text overlays, zero logos, zero corner badges, zero watermarks, zero handles, zero subtitles, no letters or numbers on screen.";
   }
 
   return res;
@@ -423,7 +431,7 @@ MANDATORY LAWS FROM THE VISUAL-SKILLS REPOSITORY:
     - Also maintain 'characterAnchor' for legacy compatibility.
     - STRICT PROHIBITION OF '@' SYMBOLS & SOCIAL MEDIA HANDLES IN promptEn (CRITICAL):
       * NEVER use '@' symbols or handle names in promptEn (e.g. write 'the young artisan chef', NOT '@genc_sef'; write 'the combination lock box', NOT '@akilli_kasa').
-      * In EVERY scene prompt, explicitly enforce: 'Clean photographic frame, strictly zero text overlays, zero watermarks, zero @ handles, zero subtitles, no letters or numbers on screen.'
+      * In EVERY scene prompt, explicitly enforce: 'Clean cinematic frame, strictly zero text overlays, zero logos, zero corner badges, zero watermarks, zero @ handles, zero subtitles, no letters or numbers on screen.'
 
 11. "DEDICATED VISUAL PRODUCTION TYPE & SHOT FLOW":
 ${isDiyCraft ? `    * SPECIAL MULTI-SHOT & MULTI-ACTION DIRECTIVE ACTIVE FOR THIS STORYBOARD:
