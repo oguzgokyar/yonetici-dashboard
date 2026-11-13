@@ -10,7 +10,7 @@ import {
   markVidsAccountQuotaExhausted,
 } from "@/lib/server/google-vids-account-pool";
 import type { ScriptScenePlan, AudioProductionSettings } from "@/features/generation/google-vids/types";
-import { stitchFlowScenesMaster } from "@/lib/server/flow-post-production";
+import { stitchFlowScenesMaster, postProcessFlowScene } from "@/lib/server/flow-post-production";
 
 export interface FlowEngineJobRequest {
   title: string;
@@ -20,6 +20,7 @@ export interface FlowEngineJobRequest {
   durationSeconds: number;
   visualMood: string;
   narrativeMode?: string;
+  audioSettings?: Partial<AudioProductionSettings>;
   scenes: ScriptScenePlan[];
   preferredAuthuser?: number;
   preferredAccountId?: string;
@@ -320,6 +321,25 @@ export async function processFlowEngineJob(job: {
         fs.writeFileSync(stateFile, JSON.stringify(sceneStates, null, 2), "utf-8");
       }
 
+      // Post-production: Dış ses, altyazı ve ekran kanca metnini sahneye uygula
+      const rawBackupPath = path.join(scenesDir, `raw_scene-${sIndex}.mp4`);
+      if (!fs.existsSync(rawBackupPath) && fs.existsSync(targetMp4) && fs.statSync(targetMp4).size > 1000) {
+        fs.copyFileSync(targetMp4, rawBackupPath);
+      }
+      try {
+        await postProcessFlowScene({
+          sceneVideoPath: rawBackupPath,
+          outputVideoPath: targetMp4,
+          voiceoverTr: sc.voiceoverTr,
+          onScreenTextTr: sc.onScreenTextTr,
+          durationSeconds: sc.durationSeconds || 5,
+          narrativeMode: req.narrativeMode,
+          audioSettings: req.audioSettings,
+        });
+      } catch (postErr) {
+        console.warn(`[FlowEngine] Sahne ${sIndex} post-prodüksiyon uyarısı:`, postErr);
+      }
+
       recordVidsAccountRenderSuccess(authuserIndex, profileDir);
 
     } catch (sceneErr: unknown) {
@@ -346,10 +366,12 @@ export async function processFlowEngineJob(job: {
     // Sahneleri otomatik olarak tek bir Reels master videosuna bağla
     const masterVideoPath = path.join(scenesDir, "master_full.mp4");
     try {
-      stitchFlowScenesMaster({
+      await stitchFlowScenesMaster({
         scenesDir,
         masterVideoPath,
-        audioSettings: (req as Record<string, unknown>).audioSettings as Partial<AudioProductionSettings> | undefined,
+        scenes: req.scenes,
+        narrativeMode: req.narrativeMode,
+        audioSettings: req.audioSettings,
       });
     } catch (stitchErr) {
       console.warn("[FlowEngine] Master video ön birleştirmesi atlandı:", stitchErr);
@@ -381,7 +403,20 @@ export async function processFlowEngineJob(job: {
       job.id
     );
   } else if (readyCount > 0) {
-    // Partial completion
+    // Partial completion: Mevcut hazır sahneleri master video olarak bağla
+    const masterVideoPath = path.join(scenesDir, "master_full.mp4");
+    try {
+      await stitchFlowScenesMaster({
+        scenesDir,
+        masterVideoPath,
+        scenes: req.scenes,
+        narrativeMode: req.narrativeMode,
+        audioSettings: req.audioSettings,
+      });
+    } catch (stitchErr) {
+      console.warn("[FlowEngine] Kısmi master video ön birleştirmesi atlandı:", stitchErr);
+    }
+
     db.prepare(`
       UPDATE generation_jobs
       SET status = 'complete',
@@ -402,6 +437,7 @@ export async function processFlowEngineJob(job: {
         readyScenes: readyCount,
         totalScenes,
         sceneStates,
+        masterVideoUrl: `/api/projects/${job.project_id}/flow-engine/scenes/${job.id}/master`,
       }),
       now,
       job.id
