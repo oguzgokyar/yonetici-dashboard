@@ -154,16 +154,20 @@ export async function POST(request: Request, context: Context) {
     if (body.anchorType === "person") {
       const subjectName = body.name ? body.name.trim() : "Character";
       const subjectDesc = body.descriptionTr ? `${body.descriptionTr.trim()}. ` : "";
-      enhancedPrompt = `Professional 3-view character turnaround model sheet of ${subjectName}. ${subjectDesc}${promptEn}. Layout: 3-panel comprehensive model sheet showing 1) clean front silhouette and full attire, 2) three-quarter dynamic action or crafting angle, 3) macro close-up detail of hands and expressive facial features. ${styleLock}. ${antiDriftDirective} Consistent facial features, exact clothing colors, neutral clean background, no text labels, no watermarks, no blurry limbs.`;
+      if (isAnim) {
+        enhancedPrompt = `Character reference sheet of ${subjectName}. ${subjectDesc}${promptEn}. Composition layout: left side a front-face portrait close-up with head and shoulders fully in frame; right side three equal-height full-body views side by side showing front, 90-degree side profile, and back. Neutral relaxed A-pose, equal in height, side by side, tops of heads and soles of feet aligned on the exact same horizontal line. The face, hairstyle, clothing, and accessories of the portrait close-up and the three views are completely identical. Isolated on a pure white background, soft uniform studio light. ${styleLock}. ${antiDriftDirective} Strictly zero other people, zero props in hand, zero dynamic action poses, no text labels, no watermarks, full body completely in frame with margins.`;
+      } else {
+        enhancedPrompt = `Character reference sheet of ${subjectName}. ${subjectDesc}${promptEn}. Composition layout: left side a front-face portrait close-up with head and shoulders fully in frame; right side three equal-height full-body views side by side showing front, 90-degree side profile, and back. Neutral relaxed A-pose, equal in height, side by side, tops of heads and soles of feet aligned on the exact same horizontal line. The face, hairstyle, clothing, and accessories of the portrait close-up and the three views are completely identical. Isolated on a pure white background, soft uniform studio light. ${styleLock}. ${antiDriftDirective} Strictly zero other people, zero props in hand, zero dynamic action poses, no text labels, no watermarks, full body completely in frame with margins.`;
+      }
     } else if (body.anchorType === "location") {
       const locName = body.name ? body.name.trim() : "Environment";
       const locDesc = body.descriptionTr ? `${body.descriptionTr.trim()}. ` : "";
-      enhancedPrompt = `Cinematic environment reference photograph of ${locName}. ${locDesc}${promptEn}. Strict environmental anchor: ${styleLock}. ${antiDriftDirective} strictly unmanned workstation, zero people, zero human figures, zero hands, no logos, no text labels.`;
+      enhancedPrompt = `Fixed-camera wide-angle establishing shot of ${locName}. ${locDesc}${promptEn}. Three-layer spatial composition: 1) foreground framing elements providing optical depth, 2) midground primary functional space with key architectural fixtures, 3) background spatial depth with defined walls and windows. Architectural entrance and exit points clearly visible. Spatial structure continuous, self-consistent and realistic. ${styleLock}. ${antiDriftDirective} Strictly empty scene, strictly zero people, zero human figures, zero human silhouettes, zero hands, no logos, no text overlays, no watermarks.`;
     } else {
-      // object / maket / prototype
-      const objName = body.name ? body.name.trim() : "Prototype Device";
+      // object / maket / prototype / prop
+      const objName = body.name ? body.name.trim() : "Prop Item";
       const objDesc = body.descriptionTr ? `${body.descriptionTr.trim()}. ` : "";
-      enhancedPrompt = `Professional 3-angle technical prototype and mechanism reference sheet of ${objName}. ${objDesc}${promptEn}. 3-panel engineering turnaround sheet showing: 1) 45-degree isometric assembled view showing full 3D spatial layout, 2) orthographic front profile showing complete component arrangement, 3) macro cutaway close-up showing moving mechanical joints, axles, or connections in sharp focus. ${styleLock}. ${antiDriftDirective} Zero floating parts, complete spatial permanence, no text labels, no watermarks, crisp edge definition.`;
+      enhancedPrompt = `Single-item commercial product photography shot of ${objName}. ${objDesc}${promptEn}. Standard product-photography viewpoint: slightly high-angle 3/4 perspective showing top and side dimensionality, centered and 100% complete in frame with generous margins on all four sides, edges complete with zero cropping. Accurate physical proportions and authentic material textures. Isolated on a pure white background, clean backdrop carrying zero narrative content, no other objects, no environment, strictly zero people, zero hands holding the item. Soft even studio lighting, faint natural contact shadow underneath, high micro-detail. ${styleLock}. ${antiDriftDirective} No text labels, no watermarks.`;
     }
 
     db.prepare(

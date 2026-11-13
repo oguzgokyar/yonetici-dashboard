@@ -105,7 +105,7 @@ export function ensureVisualAnchors(
         visualPromptEn:
           sb.characterAnchor.masterVisualPromptEn ||
           sb.characterAnchor.fixedTraitsEn ||
-          `Professional 3-view character turnaround model sheet for ${title}. ${firstSceneSummary}. Consistent facial features, distinctive wardrobe, natural ambient lighting.`,
+          `Character reference sheet of ${sb.characterAnchor.name || "protagonist"} for ${title}. ${firstSceneSummary}. Left side front-face portrait close-up; right side three equal-height full-body views (front, 90-degree profile, back) in neutral A-pose. Isolated on pure white background, soft uniform studio light.`,
         imageUrl: sb.characterAnchor.referenceImageUrl || anchors.person?.imageUrl,
       };
     } else {
@@ -114,7 +114,7 @@ export function ensureVisualAnchors(
         descriptionTr: anchors.person?.descriptionTr || "Hikaye karakteri",
         visualPromptEn:
           anchors.person?.visualPromptEn ||
-          `Professional 3-view character turnaround model sheet for ${title}. ${firstSceneSummary}. Consistent facial features, distinctive wardrobe, natural ambient lighting.`,
+          `Character reference sheet of protagonist for ${title}. ${firstSceneSummary}. Left side front-face portrait close-up; right side three equal-height full-body views (front, 90-degree profile, back) in neutral A-pose. Isolated on pure white background, soft uniform studio light.`,
         imageUrl: anchors.person?.imageUrl,
       };
     }
@@ -123,11 +123,11 @@ export function ensureVisualAnchors(
   // 2. Location
   if (!anchors.location || !anchors.location.visualPromptEn) {
     anchors.location = {
-      name: anchors.location?.name || "Mekan / Atölye",
-      descriptionTr: anchors.location?.descriptionTr || "Ahşap atölye masası, yeşil kesim matı ve sıcak stüdyo ışığı",
+      name: anchors.location?.name || "Ana Çevre / Mekan",
+      descriptionTr: anchors.location?.descriptionTr || "Hikayenin geçtiği 3 katmanlı mekan atmosferi (insansız)",
       visualPromptEn:
         anchors.location?.visualPromptEn ||
-        `Authentic cozy maker workshop workbench for ${title}, dark green metric grid cutting mat, neatly arranged brass tools, clean craft setting, warm natural sunlight.`,
+        `Fixed-camera wide-angle establishing shot of the primary setting for ${title}. ${firstSceneSummary}. Three-layer spatial composition with foreground framing, functional midground space, and background depth. Strictly empty scene, zero people.`,
       imageUrl: anchors.location?.imageUrl,
     };
   }
@@ -135,11 +135,11 @@ export function ensureVisualAnchors(
   // 3. Object
   if (!anchors.object || !anchors.object.visualPromptEn) {
     anchors.object = {
-      name: anchors.object?.name || "Maket / Proje Düzeneği",
-      descriptionTr: anchors.object?.descriptionTr || "Montajı tamamlanmış çalışan mekanizma",
+      name: anchors.object?.name || "Merkezi Öğe / Donatı",
+      descriptionTr: anchors.object?.descriptionTr || "Hikayede öne çıkan araç, ürün veya obje",
       visualPromptEn:
         anchors.object?.visualPromptEn ||
-        `Crisp macro photograph of the assembled ${title} working prototype mechanism. ${firstSceneSummary}. Perfectly fitted components, tightly connected tubing, authentic DIY cardboard and acrylic craft aesthetic, sharp focus.`,
+        `Single-item commercial product photography shot of the key item in ${title}. ${firstSceneSummary}. Standard 3/4 perspective, centered and fully in frame with generous margins, isolated on pure white background, zero hands, soft studio light, high detail.`,
       imageUrl: anchors.object?.imageUrl,
     };
   }
