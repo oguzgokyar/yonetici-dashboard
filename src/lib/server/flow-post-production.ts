@@ -75,7 +75,8 @@ export function hexToAssBgr(hex: string, alphaHex = "00"): string {
 }
 
 /**
- * Marka kimliği ve video görsel temasına özgü dinamik başlık (Title / Hook) stili üretir.
+ * Marka kimliği ve video görsel temasına özgü sinematik başlık (Title / Hook) stili üretir.
+ * Sert kutu yerine derin gölgeli, ferah harf aralıklı ve üst güvenli alanda (MarginV: 95) durur.
  */
 export function getThemeTitleStyle(visualMood?: string, brandConcept?: Record<string, string>) {
   // Eğer markanın özel renkleri tanımlıysa marka kimliğini önceliklendir
@@ -86,14 +87,16 @@ export function getThemeTitleStyle(visualMood?: string, brandConcept?: Record<st
       : "&H00FFFFFF";
     return {
       fontName: "DejaVu Sans",
-      fontSize: 27,
-      primaryColor: accentBgr,
-      backColor: "&H95151520",
-      outlineColor: brandBgr,
+      fontSize: 28,
+      primaryColor: "&H00FFFFFF",
+      accentColor: accentBgr || brandBgr,
+      outlineColor: "&H00000000",
+      backColor: "&H80000000",
       outlineSize: 2,
-      borderStyle: 3,
-      spacing: 1.2,
-      marginV: 135,
+      shadowSize: 2.5,
+      borderStyle: 1, // Kutu yok, organik gölgeli metin
+      spacing: 1.5,
+      marginV: 95,    // Ekranın en üstünde güvenli alan
     };
   }
 
@@ -101,88 +104,76 @@ export function getThemeTitleStyle(visualMood?: string, brandConcept?: Record<st
     case "stylized_3d":
       return {
         fontName: "DejaVu Sans",
-        fontSize: 27,
+        fontSize: 28,
         primaryColor: "&H00FFFFFF",
-        backColor: "&H95182845",    // Sıcak zengin indigo/mavi transparan hap
-        outlineColor: "&H0020B0F5", // Canlı altın/turkuaz vurgu bordürü
+        accentColor: "&H0020D8FF", // Parlak altın / kehribar sarısı
+        outlineColor: "&H00101820",
+        backColor: "&H90000000",
         outlineSize: 2,
-        borderStyle: 3,
-        spacing: 1.2,
-        marginV: 135,
+        shadowSize: 3,
+        borderStyle: 1,
+        spacing: 1.5,
+        marginV: 95,
       };
     case "golden_hour":
       return {
         fontName: "DejaVu Sans",
-        fontSize: 27,
-        primaryColor: "&H00E8FFFF", // Sıcak bal sarısı
-        backColor: "&H950A1A2E",    // Gün batımı amber-kahve zemin
-        outlineColor: "&H00158AE0", // Amber parıltı
-        outlineSize: 1.5,
-        borderStyle: 3,
+        fontSize: 28,
+        primaryColor: "&H00FFFFFF",
+        accentColor: "&H0032C4FF", // Sıcak güneş turuncusu
+        outlineColor: "&H00081018",
+        backColor: "&H90050810",
+        outlineSize: 2,
+        shadowSize: 3,
+        borderStyle: 1,
         spacing: 1.5,
-        marginV: 135,
+        marginV: 95,
       };
     case "moody_chiaroscuro":
       return {
         fontName: "DejaVu Sans",
-        fontSize: 26,
-        primaryColor: "&H00F0F4F8", // Soğuk gümüş
-        backColor: "&HA0080808",    // Derin koyu obsidyen
-        outlineColor: "&H00454545",
-        outlineSize: 1,
-        borderStyle: 3,
+        fontSize: 27,
+        primaryColor: "&H00FFFFFF",
+        accentColor: "&H00E0E0E0", // Soğuk gümüş
+        outlineColor: "&H00000000",
+        backColor: "&HA0000000",
+        outlineSize: 2,
+        shadowSize: 3.5,
+        borderStyle: 1,
         spacing: 2.0,
-        marginV: 135,
+        marginV: 95,
       };
     case "retro_vintage_80s":
       return {
         fontName: "DejaVu Sans",
         fontSize: 28,
-        primaryColor: "&H0000FFFF", // Neon sarı
-        backColor: "&HA0400030",    // 80s koyu macenta
-        outlineColor: "&H00C50075", // Synthwave mor
-        outlineSize: 2.5,
-        borderStyle: 3,
-        spacing: 1.5,
-        marginV: 135,
-      };
-    case "documentary_nature":
-      return {
-        fontName: "DejaVu Sans",
-        fontSize: 26,
-        primaryColor: "&H00F5FFF5",
-        backColor: "&H95122B16",    // Yosun yeşili
-        outlineColor: "&H00326436",
-        outlineSize: 1,
-        borderStyle: 3,
-        spacing: 1.3,
-        marginV: 135,
+        primaryColor: "&H00FFFFFF",
+        accentColor: "&H0000FFFF", // Neon sarı
+        outlineColor: "&H004A0035",
+        backColor: "&H90200015",
+        outlineSize: 2,
+        shadowSize: 3,
+        borderStyle: 1,
+        spacing: 1.8,
+        marginV: 95,
       };
     case "diy_craft_macro":
-      return {
-        fontName: "DejaVu Sans",
-        fontSize: 27,
-        primaryColor: "&H00FFFFFF",
-        backColor: "&H95142B3E",    // Kraft ahşap koyu lacivert
-        outlineColor: "&H003C88BD", // Bal rengi vurgu
-        outlineSize: 2,
-        borderStyle: 3,
-        spacing: 1.1,
-        marginV: 135,
-      };
+    case "documentary_nature":
     case "minimal_commercial":
     case "cinematic_photoreal":
     default:
       return {
         fontName: "DejaVu Sans",
-        fontSize: 27,
+        fontSize: 28,
         primaryColor: "&H00FFFFFF",
-        backColor: "&HA0121212",    // Mat şık antrasit
-        outlineColor: "&H00383838",
-        outlineSize: 1,
-        borderStyle: 3,
+        accentColor: "&H0000D0FF", // Canlı altın sarısı
+        outlineColor: "&H00000000",
+        backColor: "&H90000000",
+        outlineSize: 2,
+        shadowSize: 3,
+        borderStyle: 1,
         spacing: 1.5,
-        marginV: 135,
+        marginV: 95,
       };
   }
 }
@@ -228,9 +219,9 @@ PlayResY: ${height}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: HookTitle,${titleStyle.fontName},${titleStyle.fontSize},${titleStyle.primaryColor},&H000000FF,${titleStyle.outlineColor},${titleStyle.backColor},-1,0,0,0,100,100,${titleStyle.spacing},0,${titleStyle.borderStyle},${titleStyle.outlineSize},2,8,30,30,${titleStyle.marginV},1
-Style: TikTok,DejaVu Sans,32,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,-1,0,0,0,100,100,1,0,1,3,1,2,30,30,260,1
-Style: Classic,DejaVu Sans,28,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,-1,0,0,0,100,100,1,0,1,2,1,2,30,30,240,1
+Style: HookTitle,${titleStyle.fontName},${titleStyle.fontSize},${titleStyle.primaryColor},&H000000FF,${titleStyle.outlineColor},${titleStyle.backColor},-1,0,0,0,100,100,${titleStyle.spacing},0,${titleStyle.borderStyle},${titleStyle.outlineSize},${titleStyle.shadowSize},8,30,30,${titleStyle.marginV},1
+Style: TikTok,DejaVu Sans,30,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,-1,0,0,0,100,100,1,0,1,2.5,1.5,2,30,30,175,1
+Style: Classic,DejaVu Sans,26,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,-1,0,0,0,100,100,1,0,1,2,1,2,30,30,165,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -246,11 +237,19 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
   const events: string[] = [];
 
-  // 1. Ekran Metni (On-Screen Text / Hook Title) - Temaya özgü stil
+  // 1. Ekran Metni (On-Screen Text / Hook Title) - Sinematik ilk kelime vurgulu
   if (onScreenText && onScreenText.trim()) {
-    const cleanHook = onScreenText.trim().replace(/[\r\n]+/g, " ");
+    const rawClean = onScreenText.trim().replace(/[\r\n]+/g, " ");
+    const words = rawClean.split(/\s+/);
+    let styledHook = rawClean;
+    if (words.length > 1 && titleStyle.accentColor) {
+      // İlk kelimeyi veya ilk iki kelimeyi vurgu rengiyle parlat, kalanı beyaz
+      const accentPart = words[0];
+      const restPart = words.slice(1).join(" ");
+      styledHook = `{\\c${titleStyle.accentColor}}${accentPart}{\\r\\c${titleStyle.primaryColor}} ${restPart}`;
+    }
     const hookEnd = Math.min(Math.max(durationSeconds, 3.5), 4.5);
-    events.push(`Dialogue: 1,0:00:00.00,${fmtTs(hookEnd)},HookTitle,,0,0,0,,${cleanHook}`);
+    events.push(`Dialogue: 1,0:00:00.00,${fmtTs(hookEnd)},HookTitle,,0,0,0,,${styledHook}`);
   }
 
   // 2. Altyazı (TikTok veya Klasik) - Sesle milisaniyelik senkron

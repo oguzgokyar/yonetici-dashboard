@@ -351,7 +351,19 @@ MANDATORY LAWS FROM THE VISUAL-SKILLS REPOSITORY:
    - If 'silent_captions': STRICTLY NO SPOKEN VOICEOVER OR DIALOGUE ('voiceoverTr' and 'dialogueTr' MUST BE EMPTY).
      * Designed for silent viewing with bold on-screen text overlays ('onScreenTextTr').
      * Focus 100% on visual clarity and powerful, readable Turkish on-screen text cards and steps!
-   - Always provide 'onScreenTextTr' for every scene as a visual anchor.
+   - 3-STAGE VIRAL ON-SCREEN TEXT ARCHITECTURE ('onScreenTextTr' RULES):
+     * NEVER duplicate or echo 'voiceoverTr' inside 'onScreenTextTr'! The on-screen text sits at the top of the screen as a punchy banner, while 'voiceoverTr' flows as spoken audio and subtitles at the bottom. Duplicating the exact same words causes severe on-screen text collision and ruins viewer retention!
+     * SCENE 1 (THE VIRAL HOOK TITLE):
+       - MUST be an irresistible, curiosity-sparking, high-impact headline (max 3-6 Turkish words, UPPERCASE).
+       - Examples: "0 TL'YE KENDİ ROBOTUNU YAP!", "PAHALI OYUNCAKLARA SON!", "3 DAKİKADA OTONOM ROBOT", "ÇÖP FIRÇASINDAN BİLİM DENEYİ".
+       - This catches the viewer's eye in the first 2 seconds and stops the scroll!
+     * MIDDLE SCENES (STEP & PROGRESS HOOKS):
+       - Dynamic, concise action or micro-step indicator (2-4 words, UPPERCASE).
+       - Examples: "ADIM 1: GÖVDE VE MOTOR", "TİTREŞİM VE GÜÇ TESTİ", "PÜF NOKTASI BURADA".
+     * FINAL SCENE (ENGAGEMENT & CTA ENDING BADGE):
+       - MUST be a high-converting, natural engagement call-to-action (CTA) that makes viewers save, share, or comment without feeling annoyed.
+       - Examples: "HAFTA SONU İÇİN KAYDET 📌", "YORUMA 'ROBOT' YAZ LİSTE GELSİN 🤖", "DENEYECEK ARKADAŞINA GÖNDER 🚀", "PARÇA LİSTESİ İÇİN KAYDET".
+   - Always provide 'onScreenTextTr' for every scene following this exact 3-stage viral architecture.
 
 6. "VISUAL-SKILLS MUSIC DIRECTION (camera-lighting-vocabulary.md §8)":
    - If includeMusic is active, analyze the core emotional spine of the story and design 'musicSpec'.
@@ -494,7 +506,7 @@ Return ONLY a valid JSON object matching this schema (no markdown fences, no con
       "cameraSetup": "Wide angle 35mm, slow steady tracking",
       "lightingSetup": "Warm sunset backlight with natural dust haze",
       "summaryTr": "Sahne 1 Türkçe kısa özeti",
-      "onScreenTextTr": "Ekranda büyük ve net görünecek Türkçe kanca veya adım metni (örn: Adım 1: Gövdeyi Kes)",
+      "onScreenTextTr": "Sahne 1 için ekranın en üstünde belirecek çarpıcı viral kanca başlığı (asla voiceover ile aynı olmamalı! Örn: 0 TL'YE KENDİ ROBOTUNU YAP!)",
       "voiceoverTr": "Etkili, akıcı ve hikayeyi anlatan Türkçe dış ses metni (diy_asmr veya silent_captions modunda boş bırakın)",
       "dialogueTr": "Varsa karakterin Türkçe repliği veya boş string",
       "audioCueEn": "Audio: flowing mountain creek, wind through weeping willows",
