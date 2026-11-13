@@ -8,7 +8,7 @@ import {
 } from "@/lib/server/cinematic-prompt-director";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 180;
 
 type Context = { params: Promise<{ projectId: string }> };
 
