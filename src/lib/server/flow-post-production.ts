@@ -107,10 +107,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
 
   const fmtTs = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
     const cs = Math.floor((seconds - Math.floor(seconds)) * 100);
-    return `${m}:${s < 10 ? "0" : ""}${s}.${cs < 10 ? "0" : ""}${cs}`;
+    return `${h}:${m < 10 ? "0" : ""}${m}:${s < 10 ? "0" : ""}${s}.${cs < 10 ? "0" : ""}${cs}`;
   };
 
   const events: string[] = [];
