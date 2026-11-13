@@ -108,6 +108,14 @@ export async function processFlowEngineJob(job: {
     profileDir = acc.profileDirectory || "Default";
   } catch {}
 
+  let projectBrandConcept: Record<string, string> | undefined;
+  try {
+    const projRow = db.prepare("SELECT brand_concept_json FROM projects WHERE id=?").get(job.project_id) as { brand_concept_json?: string } | undefined;
+    if (projRow?.brand_concept_json) {
+      projectBrandConcept = JSON.parse(projRow.brand_concept_json);
+    }
+  } catch {}
+
   const pythonBin = fs.existsSync("/opt/hermes/.venv/bin/python")
     ? "/opt/hermes/.venv/bin/python"
     : "python3";
@@ -334,6 +342,8 @@ export async function processFlowEngineJob(job: {
           onScreenTextTr: sc.onScreenTextTr,
           durationSeconds: sc.durationSeconds || 5,
           narrativeMode: req.narrativeMode,
+          visualMood: req.visualMood,
+          brandConcept: projectBrandConcept,
           audioSettings: req.audioSettings,
         });
       } catch (postErr) {
@@ -371,6 +381,8 @@ export async function processFlowEngineJob(job: {
         masterVideoPath,
         scenes: req.scenes,
         narrativeMode: req.narrativeMode,
+        visualMood: req.visualMood,
+        brandConcept: projectBrandConcept,
         audioSettings: req.audioSettings,
       });
     } catch (stitchErr) {
@@ -411,6 +423,8 @@ export async function processFlowEngineJob(job: {
         masterVideoPath,
         scenes: req.scenes,
         narrativeMode: req.narrativeMode,
+        visualMood: req.visualMood,
+        brandConcept: projectBrandConcept,
         audioSettings: req.audioSettings,
       });
     } catch (stitchErr) {

@@ -23,8 +23,9 @@ export interface TimedWord {
 
 /**
  * Türkçe fonetik hece ve noktalama ağırlıklı kelime zamanlama dağıtıcısı (0 CPU).
+ * Konuşma süresiyle (spokenDurationSeconds) birebir senkronize çalışır.
  */
-export function alignTurkishPhonetics(text: string, durationSeconds: number): TimedWord[] {
+export function alignTurkishPhonetics(text: string, spokenDurationSeconds: number): TimedWord[] {
   const rawWords = text.trim().split(/\s+/);
   if (!rawWords.length || !rawWords[0]) return [];
 
@@ -37,13 +38,13 @@ export function alignTurkishPhonetics(text: string, durationSeconds: number): Ti
       if (vowels.has(ch)) sylCount++;
     }
     sylCount = Math.max(1, sylCount);
-    const pauseBonus = /[.!?]$/.test(w) ? 0.4 : /[,;:]$/.test(w) ? 0.2 : 0;
-    weights.push(sylCount + pauseBonus * 1.5);
+    const pauseBonus = /[.!?]$/.test(w) ? 0.45 : /[,;:]$/.test(w) ? 0.25 : 0;
+    weights.push(sylCount + pauseBonus * 1.6);
   }
 
   const totalWeight = weights.reduce((acc, val) => acc + val, 0);
-  const effectiveDur = Math.max(durationSeconds - 0.4, 1.0);
-  let startTime = 0.2;
+  const effectiveDur = Math.max(spokenDurationSeconds - 0.2, 0.8);
+  let startTime = 0.1;
 
   const timedWords: TimedWord[] = [];
   for (let i = 0; i < rawWords.length; i++) {
@@ -62,6 +63,130 @@ export function alignTurkishPhonetics(text: string, durationSeconds: number): Ti
   return timedWords;
 }
 
+export function hexToAssBgr(hex: string, alphaHex = "00"): string {
+  const clean = hex.replace("#", "").trim();
+  if (clean.length === 6) {
+    const r = clean.slice(0, 2);
+    const g = clean.slice(2, 4);
+    const b = clean.slice(4, 6);
+    return `&H${alphaHex}${b}${g}${r}`.toUpperCase();
+  }
+  return `&H${alphaHex}FFFFFF`;
+}
+
+/**
+ * Marka kimliği ve video görsel temasına özgü dinamik başlık (Title / Hook) stili üretir.
+ */
+export function getThemeTitleStyle(visualMood?: string, brandConcept?: Record<string, string>) {
+  // Eğer markanın özel renkleri tanımlıysa marka kimliğini önceliklendir
+  if (brandConcept?.primaryColor && /^#[0-9a-fA-F]{6}$/.test(brandConcept.primaryColor)) {
+    const brandBgr = hexToAssBgr(brandConcept.primaryColor, "00");
+    const accentBgr = brandConcept.accentColor && /^#[0-9a-fA-F]{6}$/.test(brandConcept.accentColor)
+      ? hexToAssBgr(brandConcept.accentColor, "00")
+      : "&H00FFFFFF";
+    return {
+      fontName: "DejaVu Sans",
+      fontSize: 27,
+      primaryColor: accentBgr,
+      backColor: "&H95151520",
+      outlineColor: brandBgr,
+      outlineSize: 2,
+      borderStyle: 3,
+      spacing: 1.2,
+      marginV: 135,
+    };
+  }
+
+  switch (visualMood) {
+    case "stylized_3d":
+      return {
+        fontName: "DejaVu Sans",
+        fontSize: 27,
+        primaryColor: "&H00FFFFFF",
+        backColor: "&H95182845",    // Sıcak zengin indigo/mavi transparan hap
+        outlineColor: "&H0020B0F5", // Canlı altın/turkuaz vurgu bordürü
+        outlineSize: 2,
+        borderStyle: 3,
+        spacing: 1.2,
+        marginV: 135,
+      };
+    case "golden_hour":
+      return {
+        fontName: "DejaVu Sans",
+        fontSize: 27,
+        primaryColor: "&H00E8FFFF", // Sıcak bal sarısı
+        backColor: "&H950A1A2E",    // Gün batımı amber-kahve zemin
+        outlineColor: "&H00158AE0", // Amber parıltı
+        outlineSize: 1.5,
+        borderStyle: 3,
+        spacing: 1.5,
+        marginV: 135,
+      };
+    case "moody_chiaroscuro":
+      return {
+        fontName: "DejaVu Sans",
+        fontSize: 26,
+        primaryColor: "&H00F0F4F8", // Soğuk gümüş
+        backColor: "&HA0080808",    // Derin koyu obsidyen
+        outlineColor: "&H00454545",
+        outlineSize: 1,
+        borderStyle: 3,
+        spacing: 2.0,
+        marginV: 135,
+      };
+    case "retro_vintage_80s":
+      return {
+        fontName: "DejaVu Sans",
+        fontSize: 28,
+        primaryColor: "&H0000FFFF", // Neon sarı
+        backColor: "&HA0400030",    // 80s koyu macenta
+        outlineColor: "&H00C50075", // Synthwave mor
+        outlineSize: 2.5,
+        borderStyle: 3,
+        spacing: 1.5,
+        marginV: 135,
+      };
+    case "documentary_nature":
+      return {
+        fontName: "DejaVu Sans",
+        fontSize: 26,
+        primaryColor: "&H00F5FFF5",
+        backColor: "&H95122B16",    // Yosun yeşili
+        outlineColor: "&H00326436",
+        outlineSize: 1,
+        borderStyle: 3,
+        spacing: 1.3,
+        marginV: 135,
+      };
+    case "diy_craft_macro":
+      return {
+        fontName: "DejaVu Sans",
+        fontSize: 27,
+        primaryColor: "&H00FFFFFF",
+        backColor: "&H95142B3E",    // Kraft ahşap koyu lacivert
+        outlineColor: "&H003C88BD", // Bal rengi vurgu
+        outlineSize: 2,
+        borderStyle: 3,
+        spacing: 1.1,
+        marginV: 135,
+      };
+    case "minimal_commercial":
+    case "cinematic_photoreal":
+    default:
+      return {
+        fontName: "DejaVu Sans",
+        fontSize: 27,
+        primaryColor: "&H00FFFFFF",
+        backColor: "&HA0121212",    // Mat şık antrasit
+        outlineColor: "&H00383838",
+        outlineSize: 1,
+        borderStyle: 3,
+        spacing: 1.5,
+        marginV: 135,
+      };
+  }
+}
+
 /**
  * TikTok / Reels tarzı kelime kelime sarı/yeşil vurgulu ve ekran kanca metinli ASS Altyazı Şablonu üretir.
  */
@@ -71,6 +196,8 @@ export function generateTikTokAssScript(options: {
   onScreenText?: string;
   durationSeconds?: number;
   captionStyle?: CaptionStyleOption;
+  visualMood?: string;
+  brandConcept?: Record<string, string>;
   width?: number;
   height?: number;
 }): string {
@@ -80,6 +207,8 @@ export function generateTikTokAssScript(options: {
     onScreenText,
     durationSeconds = 5,
     captionStyle = "tiktok",
+    visualMood,
+    brandConcept,
     width = 720,
     height = 1280,
   } = options;
@@ -90,6 +219,7 @@ export function generateTikTokAssScript(options: {
     cyan: "&H00FFFF00",
   };
   const highlightColor = colorMap[color] || "&H0000FFFF";
+  const titleStyle = getThemeTitleStyle(visualMood, brandConcept);
 
   const header = `[Script Info]
 ScriptType: v4.00+
@@ -98,9 +228,9 @@ PlayResY: ${height}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: HookTitle,DejaVu Sans,32,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,-1,0,0,0,100,100,1,0,3,8,2,8,40,40,140,1
-Style: TikTok,DejaVu Sans,42,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,1,0,1,4,2,2,30,30,260,1
-Style: Classic,DejaVu Sans,36,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,1,0,1,3,1,2,30,30,240,1
+Style: HookTitle,${titleStyle.fontName},${titleStyle.fontSize},${titleStyle.primaryColor},&H000000FF,${titleStyle.outlineColor},${titleStyle.backColor},-1,0,0,0,100,100,${titleStyle.spacing},0,${titleStyle.borderStyle},${titleStyle.outlineSize},2,8,30,30,${titleStyle.marginV},1
+Style: TikTok,DejaVu Sans,32,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,-1,0,0,0,100,100,1,0,1,3,1,2,30,30,260,1
+Style: Classic,DejaVu Sans,28,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,-1,0,0,0,100,100,1,0,1,2,1,2,30,30,240,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -116,14 +246,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
   const events: string[] = [];
 
-  // 1. Ekran Metni (On-Screen Text / Hook Title)
+  // 1. Ekran Metni (On-Screen Text / Hook Title) - Temaya özgü stil
   if (onScreenText && onScreenText.trim()) {
     const cleanHook = onScreenText.trim().replace(/[\r\n]+/g, " ");
     const hookEnd = Math.min(Math.max(durationSeconds, 3.5), 4.5);
-    events.push(`Dialogue: 1,0:00.00,${fmtTs(hookEnd)},HookTitle,,0,0,0,,${cleanHook}`);
+    events.push(`Dialogue: 1,0:00:00.00,${fmtTs(hookEnd)},HookTitle,,0,0,0,,${cleanHook}`);
   }
 
-  // 2. Altyazı (TikTok veya Klasik)
+  // 2. Altyazı (TikTok veya Klasik) - Sesle milisaniyelik senkron
   if (captionStyle !== "off" && timedWords.length > 0) {
     if (captionStyle === "classic") {
       const chunkSize = 5;
@@ -147,7 +277,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           for (let j = 0; j < chunk.length; j++) {
             const item = chunk[j];
             if (j === activeIdx) {
-              lineParts.push(`{\\c${highlightColor}\\fscx115\\fscy115}${item.word}{\\r\\c&H00FFFFFF}`);
+              lineParts.push(`{\\c${highlightColor}\\fscx112\\fscy112}${item.word}{\\r\\c&H00FFFFFF}`);
             } else {
               lineParts.push(item.word);
             }
@@ -269,6 +399,8 @@ export async function postProcessFlowScene(options: {
   onScreenTextTr?: string;
   durationSeconds: number;
   narrativeMode?: string;
+  visualMood?: string;
+  brandConcept?: Record<string, string>;
   audioSettings?: Partial<AudioProductionSettings>;
 }): Promise<boolean> {
   const {
@@ -278,6 +410,8 @@ export async function postProcessFlowScene(options: {
     onScreenTextTr,
     durationSeconds,
     narrativeMode = "voiceover_only",
+    visualMood,
+    brandConcept,
     audioSettings,
   } = options;
 
@@ -308,11 +442,26 @@ export async function postProcessFlowScene(options: {
     }
   }
 
+  // Ses dosyasının net konuşma süresini oku (Altyazıyı seslendirmeyle tam senkronize et)
+  let spokenDuration = durationSeconds;
+  if (hasVoiceover && fs.existsSync(tempVoPath)) {
+    try {
+      const durOut = execSync(
+        `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${tempVoPath}"`,
+        { encoding: "utf-8", timeout: 8000 }
+      ).trim();
+      const numDur = parseFloat(durOut);
+      if (Number.isFinite(numDur) && numDur > 0.4) {
+        spokenDuration = Math.min(numDur, durationSeconds);
+      }
+    } catch {}
+  }
+
   // 2. Altyazı ve Ekran Metni ASS Dosyası
   const captionStyle = audioSettings?.captionStyle || "tiktok";
   const captionColor = audioSettings?.captionColor || "yellow";
   const timedWords = hasVoiceover || (voiceoverTr && captionStyle !== "off")
-    ? alignTurkishPhonetics(voiceoverTr || "", durationSeconds)
+    ? alignTurkishPhonetics(voiceoverTr || "", spokenDuration)
     : [];
 
   const hasAss = Boolean(
@@ -327,8 +476,10 @@ export async function postProcessFlowScene(options: {
       onScreenText: onScreenTextTr,
       durationSeconds,
       captionStyle,
+      visualMood,
+      brandConcept,
     });
-    fs.writeFileSync(tempAssPath, assScript, "utf-8");
+    fs.writeFileSync(tempAssPath, assScript, { mode: 0o666, encoding: "utf-8" });
   }
 
   // 3. FFmpeg ile Birleştirme & Miksaj
@@ -397,10 +548,12 @@ export async function stitchFlowScenesMaster(options: {
     durationSeconds?: number;
   }>;
   narrativeMode?: string;
+  visualMood?: string;
+  brandConcept?: Record<string, string>;
   audioSettings?: Partial<AudioProductionSettings>;
 }): Promise<boolean> {
   try {
-    const { scenesDir, masterVideoPath, scenes, narrativeMode, audioSettings } = options;
+    const { scenesDir, masterVideoPath, scenes, narrativeMode, visualMood, brandConcept, audioSettings } = options;
     if (!fs.existsSync(scenesDir)) return false;
 
     // Sahnelerin post-prodüksiyon ile işlenmiş olduğundan emin ol
@@ -420,6 +573,8 @@ export async function stitchFlowScenesMaster(options: {
             onScreenTextTr: sc.onScreenTextTr,
             durationSeconds: sc.durationSeconds || 5,
             narrativeMode,
+            visualMood,
+            brandConcept,
             audioSettings,
           });
         }
