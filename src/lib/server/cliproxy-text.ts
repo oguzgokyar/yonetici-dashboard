@@ -16,59 +16,39 @@ export async function completeText(
   if (!provider?.base_url || !provider.encrypted_api_key) throw new Error("Önce Sistem Ayarları'ndan CliProxyAPI bağlantısını kaydedin.");
   const apiKey = decryptSecret(provider.encrypted_api_key);
   const baseUrl = provider.base_url.replace(/\/+$/, "");
-  let model = options?.model || provider.text_model || "gemini-3-flash";
+  const model = options?.model || provider.text_model;
+  if (!model) throw new Error("Kullanılabilir prompt modeli tanımlı değil.");
 
   const timeoutMs = options?.timeoutMs ?? 180_000;
 
-  // Primary model, with fast fallback if deep reasoning model times out
-  const modelsToTry = [model];
-  if (!modelsToTry.includes("gemini-3-flash")) {
-    modelsToTry.push("gemini-3-flash");
-  }
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      temperature: options?.temperature ?? 0.6,
+      max_tokens: options?.maxTokens ?? 2500,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: prompt },
+      ],
+    }),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
 
-  let lastError: unknown;
-  for (let i = 0; i < modelsToTry.length; i++) {
-    const currentModel = modelsToTry[i];
-    try {
-      const perModelTimeout = modelsToTry.length > 1 && i === 0 && currentModel.includes("-high")
-        ? 65_000
-        : timeoutMs;
+  const body = (await response.json()) as {
+    model?: string;
+    choices?: { message?: { content?: string } }[];
+    error?: { message?: string };
+  };
 
-      const response = await fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: currentModel,
-          temperature: options?.temperature ?? 0.6,
-          max_tokens: options?.maxTokens ?? 2200,
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: prompt },
-          ],
-        }),
-        signal: AbortSignal.timeout(perModelTimeout),
-      });
-
-      const body = (await response.json()) as {
-        model?: string;
-        choices?: { message?: { content?: string } }[];
-        error?: { message?: string };
-      };
-
-      if (!response.ok) throw new Error(body.error?.message || `AI isteği tamamlanamadı (${response.status})`);
-      const content = body.choices?.[0]?.message?.content?.trim();
-      if (!content) throw new Error("AI kullanılabilir bir yanıt üretmedi.");
-      return { content, model: body.model || currentModel };
-    } catch (err) {
-      lastError = err;
-      console.warn(`[CliProxyText] Model ${currentModel} başarısız veya zaman aşımı, yedek modele geçiliyor:`, err);
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  if (!response.ok) throw new Error(body.error?.message || `AI isteği tamamlanamadı (${response.status})`);
+  const content = body.choices?.[0]?.message?.content?.trim();
+  if (!content) throw new Error("AI kullanılabilir bir yanıt üretmedi.");
+  return { content, model: body.model || model };
 }
 
 export function parseJsonResponse<T>(text: string): T {
