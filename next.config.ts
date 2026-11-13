@@ -48,6 +48,11 @@ const nextConfig: NextConfig = {
         destination: "/instagram-growth",
         permanent: false,
       },
+      {
+        source: "/developer-tools/zihin",
+        destination: "/zihin",
+        permanent: false,
+      },
     ];
   },
 };

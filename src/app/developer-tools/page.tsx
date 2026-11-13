@@ -13,6 +13,7 @@ import {
   Layers,
   Activity,
   Cpu,
+  Brain,
 } from "lucide-react";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 
@@ -151,6 +152,18 @@ export default function DeveloperToolsPage() {
               badgeColor="rose"
               tag="Otomasyon &amp; Filtre"
               description="Otopilot etkileşim, beyaz liste koruması ve yabancı takipçileri çıkarma havuzu."
+            />
+
+            {/* 5. Dijital Zihin */}
+            <ToolCard
+              href="/zihin"
+              externalUrl="https://zihin.43.131.47.253.sslip.io/"
+              icon={<Brain size={22} className="text-cyan-600" />}
+              title="Dijital Zihin &amp; Kurumsal Hafıza"
+              badge="Canlı Arşiv"
+              badgeColor="blue"
+              tag="Zeka &amp; Sentez"
+              description="Kurumsal bilgi tabanı, bülten kayıtları, anlamsal arama ve AI sentez motoru."
             />
           </div>
         </div>

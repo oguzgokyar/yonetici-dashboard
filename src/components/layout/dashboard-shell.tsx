@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import {
   Bell, ChevronDown, ChevronRight, Clapperboard, Compass, Film, FolderKanban, Image, LayoutDashboard, PanelsTopLeft,
   Menu, Palette, PanelLeftClose, PanelLeftOpen, Pin, Plus, Search, Send, Settings, Share2, Sparkles, X,
-  Layers, Bot, PhoneCall, Video, LogOut, FileText, Wrench, TrendingUp,
+  Layers, Bot, PhoneCall, Video, LogOut, FileText, Wrench, TrendingUp, Brain,
 } from "lucide-react";
  import { useProjects } from "@/features/projects/projects-context";
  import { ProductionQueueDrawer } from "./production-queue-drawer";
@@ -50,7 +50,8 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
     pathname === "/growth-archive" ||
     pathname === "/meeting" ||
     pathname === "/teklif" ||
-    pathname === "/instagram-growth";
+    pathname === "/instagram-growth" ||
+    pathname === "/zihin";
 
   async function handleLogout() {
     try {
@@ -220,6 +221,17 @@ export function DashboardShell({ children, projectId, title, eyebrow }: Dashboar
               >
                 <TrendingUp size={15} />
                 <span>Instagram Growth</span>
+              </Link>
+
+              <Link
+                href="/zihin"
+                className={`nav-item ${pathname === "/zihin" ? "active" : ""}`}
+                style={{ minHeight: "34px", fontSize: "12.5px", padding: "6px 10px", gap: "9px" }}
+                onClick={() => setMobileOpen(false)}
+                title="Dijital Zihin & Kurumsal Hafıza"
+              >
+                <Brain size={15} />
+                <span>Dijital Zihin</span>
               </Link>
             </div>
           )}
