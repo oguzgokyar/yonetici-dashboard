@@ -166,6 +166,7 @@ export async function POST(request: Request, context: Context) {
             const relVideoUrl = target.relatedVideoUrl || item.relatedVideoUrl || null;
 
             const postizResult = await createUnifiedSocialPost({
+              title: target.title || itemTitle,
               type: targetScheduleType,
               date: targetScheduledAt,
               integrationId: target.integrationId,
@@ -460,9 +461,12 @@ export async function POST(request: Request, context: Context) {
           const tmpVideoPath = path.join("/tmp", `tiktok_upload_${postId}.mp4`);
           try {
             fs.writeFileSync(tmpVideoPath, fileBuffer);
+            const effectiveTikTokCaption = targetTitle && !fullCaption.startsWith(targetTitle)
+              ? `${targetTitle}\n\n${fullCaption}`
+              : fullCaption;
             const browserRes = await uploadVideoViaTikTokBrowser({
               videoPath: tmpVideoPath,
-              caption: fullCaption,
+              caption: effectiveTikTokCaption,
               visibility: targetScheduleType === "draft" ? "SELF_ONLY" : "PUBLIC",
               isAiGenerated: isAi === 1,
             });
@@ -527,6 +531,7 @@ export async function POST(request: Request, context: Context) {
             postizMedia = await uploadSocialMedia(fileBuffer, filename, mimeType);
           }
           const postizResult = await createUnifiedSocialPost({
+            title: target.title || itemTitle,
             type: targetScheduleType,
             date: targetScheduledAt,
             integrationId: target.integrationId,

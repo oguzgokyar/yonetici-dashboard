@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   mergePlatformHashtags,
   normalizeHashtagList,
+  normalizeSearchTagList,
   platformVisibleHashtagLimit,
   sampleHashtags,
   type SocialPlatform,
@@ -109,4 +110,21 @@ test("categorized sets prioritize brand tags before AI and topic tags", () => {
   assert.ok(result.visible.includes("#ViralReels"));
   assert.equal(result.setAdded, 3);
   assert.equal(result.aiAdded, 2);
+});
+
+test("normalizeSearchTagList preserves spaces in multi-word search queries", () => {
+  const tags = normalizeSearchTagList([
+    "#çocuklar için robotik",
+    "evde kolay bilim deneyi",
+    "  #su basınçlı araba yapımı  ",
+    "#Shorts",
+    "robotik",
+  ]);
+  assert.deepEqual(tags, [
+    "çocuklar için robotik",
+    "evde kolay bilim deneyi",
+    "su basınçlı araba yapımı",
+    "Shorts",
+    "robotik",
+  ]);
 });

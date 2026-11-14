@@ -14,6 +14,7 @@ import {
   fetchPostizIntegrations,
   uploadMediaToPostiz,
   createPostizPost,
+  deletePostizPost,
   PostizIntegration,
   CreatePostizPostParams,
   YouTubePostSettings,
@@ -145,6 +146,8 @@ export type CreateUnifiedPostParams = {
   postType?: "post" | "reel" | "story" | "short_video" | "video";
   youtubeSettings?: YouTubePostSettings;
   tiktokSettings?: TikTokPostSettings;
+  isAiGenerated?: boolean;
+  relatedVideoUrl?: string;
 };
 
 export async function createUnifiedSocialPost(
@@ -175,11 +178,13 @@ export async function createUnifiedSocialPost(
       preset = "video";
     }
 
+    const firstLine = params.caption ? params.caption.split("\n")[0].trim() : "";
+    const safeFallbackTitle = firstLine.length > 80 ? firstLine.slice(0, 80).replace(/\s+\S*$/, "") : firstLine;
     const pubResult = await createOpenPostPublication({
       type: params.type,
       date: params.date,
       accountIds: [params.integrationId],
-      title: params.title || params.caption.slice(0, 50) || "Gönderi",
+      title: params.title || safeFallbackTitle || "Gönderi",
       caption: params.caption,
       media: params.media,
       postType: preset,
@@ -202,6 +207,8 @@ export async function createUnifiedSocialPost(
       postType: params.postType === "reel" ? "reel" : params.postType === "story" ? "story" : "post",
       youtubeSettings: params.youtubeSettings,
       tiktokSettings: params.tiktokSettings,
+      isAiGenerated: params.isAiGenerated,
+      relatedVideoUrl: params.relatedVideoUrl,
     });
   }
 }

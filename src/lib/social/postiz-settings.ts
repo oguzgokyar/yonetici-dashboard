@@ -89,9 +89,11 @@ export function buildPlatformSettings(params: PlatformSettingsParams): Record<st
 
   if (platform.includes("youtube")) {
     const isShorts = isYouTubeShorts(params);
+    const rawFallback = params.caption ? params.caption.split("\n")[0].trim() : "";
     const title =
       params.youtubeSettings?.title ||
-      params.caption.slice(0, 97).trim() ||
+      (rawFallback.length > 90 ? rawFallback.slice(0, 90).replace(/\s+\S*$/, "") : rawFallback) ||
+      params.caption.slice(0, 90).trim() ||
       "Video";
     const formattedTags = formatYouTubeTags(params.youtubeSettings?.tags);
 
@@ -153,7 +155,8 @@ export function buildCaption(params: PlatformSettingsParams): string {
 
   if (platform.includes("youtube") && isYouTubeShorts(params)) {
     const hasShorts = caption.toLowerCase().includes("#shorts");
-    if (!hasShorts) {
+    const hasShortsInTitle = (params.youtubeSettings?.title || "").toLowerCase().includes("#shorts");
+    if (!hasShorts && !hasShortsInTitle) {
       caption = `${caption}\n\n#Shorts`;
     }
     if (params.isAiGenerated && !caption.toLowerCase().includes("#madewithai") && !caption.toLowerCase().includes("#yapayzeka")) {

@@ -4,6 +4,7 @@ import { brandConceptInstruction, type BrandConcept } from "@/lib/brand-concept"
 import {
   mergePlatformHashtags,
   normalizeHashtagList,
+  normalizeSearchTagList,
   sampleHashtags,
   type SocialPlatform,
 } from "@/lib/social/hashtag-policy";
@@ -110,9 +111,11 @@ ${platformSpecs}
 
 GÖREV (THE AGENCY VIRAL PRODUCTION PROTOCOL):
 Yukarıdaki her bir platform için ayrı ayrı optimize edilmiş, birbirinin kopyası OLMAYAN, ilgili platformun algoritmasına %100 uyumlu Türkçe paylaşım metinlerini TEK BİR JSON nesnesi içinde üret:
-1. TIKTOK için: Asla uzun metin yazma! Maksimum 2 kısa cümle + izleyiciyi yoruma çekecek 1 tartışmalı soru (Örn: 'Sence 10 üzerinden kaç puan?').
+1. TIKTOK için: Asla uzun metin yazma! Maksimum 2 kısa cümle + izleyiciyi yoruma çekecek 1 açık soru (Örn: 'Sence 10 üzerinden kaç puan?').
 2. INSTAGRAM için: İlk satırı kaydırmayı durduran kanca yap, gövdeyi madde imleriyle okunabilir kur, sonuna mutlaka 'Daha sonra denemek için kaydet 📌 / Arkadaşına gönder 🚀' ekle.
-3. YOUTUBE için: Başlık 70-90 karakter arası arama niyetli (SEO) + merak kancalı olsun ve '#Shorts' içersin; 'tags' dizisine 10-12 adet aranabilir anahtar kelime ekle.
+3. YOUTUBE için: Başlık 60-80 karakter arası, parçalı/tireli değil akıcı tek bir merak kancası ve arama niyetini birleştiren doğal Türkçe cümle olsun (Shorts ise sonuna ' #Shorts' ekle, uzun video ise asla #Shorts ekleme). 'tags' dizisine 10-12 adet aranabilir, kelime aralarında boşluk içeren Türkçe anahtar kelime/arama öbeği ekle.
+4. FACEBOOK için: Güven, fayda ve topluluk odaklı samimi anlatı kur; açıklayıcı paragraf ve net eylem çağrısı ekle (en fazla 3 ilgili hashtag).
+5. X/TWITTER için: 280 karaktere kesinlikle uygun, vurucu kanca, doğrudan değer veya tartışma başlatan soru ekle (en fazla 2 hashtag).
 
 Yalnızca geçerli JSON döndür:
 {
@@ -207,8 +210,10 @@ export async function POST(request: Request) {
         trendHashtags,
         includeSets: Boolean(input.includeHashtagSets),
       });
-      const aiTags = normalizeHashtagList(generated.tags || []).map((tag) => tag.replace(/^#/, ""));
-      const tags = platform === "youtube" ? [...new Set([...merged.tags, ...aiTags])].slice(0, 15) : [];
+      const aiTags = normalizeSearchTagList(generated.tags || []);
+      const tags = platform === "youtube"
+        ? (aiTags.length > 0 ? [...new Set([...aiTags, ...merged.tags])].slice(0, 15) : merged.tags.slice(0, 15))
+        : [];
 
       copies[platform] = {
         title: generated.title || input.idea?.title || input.sourceTopic || "Sosyal Medya Gönderisi",

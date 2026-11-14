@@ -450,9 +450,11 @@ export async function createOpenPostPublication(
           settings.playlist_id = optData.options.youtube_playlists[0].value;
         }
         if (Object.keys(settings).length > 0) {
+          const firstLine = params.caption ? params.caption.split("\n")[0].trim() : "";
+          const safeFallbackTitle = firstLine.length > 80 ? firstLine.slice(0, 80).replace(/\s+\S*$/, "") : firstLine;
           renditions.push({
             social_account_id: accId,
-            title: params.title || params.caption.slice(0, 50) || "Gönderi",
+            title: params.title || safeFallbackTitle || "Gönderi",
             body: params.caption,
             settings,
           });
@@ -463,9 +465,12 @@ export async function createOpenPostPublication(
     }
   }
 
+  const firstCaptionLine = params.caption ? params.caption.split("\n")[0].trim() : "";
+  const effectivePayloadTitle = params.title || (firstCaptionLine.length > 80 ? firstCaptionLine.slice(0, 80).replace(/\s+\S*$/, "") : firstCaptionLine) || "Gönderi";
+
   const payload: Record<string, unknown> = {
     workspace_id: targetWorkspaceId,
-    title: params.title || params.caption.slice(0, 50) || "Gönderi",
+    title: effectivePayloadTitle,
     content_profile: "default",
     creation_preset: preset,
     source_text: params.caption,

@@ -33,6 +33,7 @@ import {
   PreviewPlatform,
   TikTokIcon,
   FacebookIcon,
+  TwitterIcon,
 } from "./platform-previews";
 import { PublishingHealthBadge } from "./publishing-health-badge";
 import type { CopyStyle } from "@/app/api/ai/posts/generate-copy/route";
@@ -3602,6 +3603,7 @@ export function PublishingStudio({
                     const isYt = pKey === "youtube";
                     const isTt = pKey === "tiktok";
                     const isFb = pKey === "facebook";
+                    const isTw = pKey === "twitter";
                     const isCurrent = bulkActivePlatform === pKey;
                     const cleanHandle = (acc?.profile || acc?.name || "").replace(/^@+/, "");
 
@@ -3623,8 +3625,9 @@ export function PublishingStudio({
                         {isYt ? <Youtube size={12} color={isCurrent ? "white" : "#ef4444"} /> :
                          isTt ? <TikTokIcon size={12} color={isCurrent ? "white" : "#000000"} /> :
                          isFb ? <FacebookIcon size={12} /> :
+                         isTw ? <TwitterIcon size={12} color={isCurrent ? "white" : "#0f172a"} /> :
                          <Instagram size={12} color={isCurrent ? "white" : "#6d5dfc"} />}
-                        <span>{isYt ? "YouTube" : isTt ? "TikTok" : isFb ? "Facebook" : "Instagram"}</span>
+                        <span>{isYt ? "YouTube" : isTt ? "TikTok" : isFb ? "Facebook" : isTw ? "X (Twitter)" : "Instagram"}</span>
                         {cleanHandle && <small style={{ opacity: 0.8 }}>@{cleanHandle}</small>}
                       </button>
                     );

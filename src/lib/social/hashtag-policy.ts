@@ -41,6 +41,32 @@ export function normalizeHashtagList(values: string[] | string) {
   return result;
 }
 
+/**
+ * Normalizes multi-word YouTube/video backend search tags (preserving space between words).
+ * Keeps alphanumeric characters and single spaces; strips hashtags (#) and special symbols.
+ */
+export function normalizeSearchTagList(values: string[] | string): string[] {
+  const source = Array.isArray(values) ? values : String(values || "").split(/[\n,]+/);
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of source) {
+    const trimmed = String(raw || "").trim();
+    if (!trimmed) continue;
+    const clean = trimmed
+      .replace(/^#+/, "")
+      .replace(/[^\p{L}\p{N}\s_-]/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!clean || clean.length < 2 || clean.length > 50) continue;
+    const key = clean.toLocaleLowerCase("tr-TR");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(clean.slice(0, 30));
+    if (result.length >= 15) break;
+  }
+  return result;
+}
+
 export function platformVisibleHashtagLimit(platform: SocialPlatform) {
   return VISIBLE_LIMITS[platform];
 }
