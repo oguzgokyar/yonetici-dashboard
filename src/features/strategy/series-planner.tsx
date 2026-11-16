@@ -10,6 +10,11 @@ import {
   Plus,
   RefreshCw,
   Trash2,
+  Copy,
+  Check,
+  Pencil,
+  FileText,
+  X,
 } from "lucide-react";
 import type {
   ContentSeries,
@@ -32,6 +37,16 @@ export function SeriesPlanner({ projectId }: SeriesPlannerProps) {
   const [isExpanding, setIsExpanding] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  // Modals and feedback state
+  const [editingEpisode, setEditingEpisode] = useState<SeriesEpisode | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+
+  const [notingEpisode, setNotingEpisode] = useState<SeriesEpisode | null>(null);
+  const [noteContent, setNoteContent] = useState("");
+
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -214,20 +229,6 @@ export function SeriesPlanner({ projectId }: SeriesPlannerProps) {
     }
   }
 
-  async function handleEpisodeBlur(
-    episodeId: string,
-    field: "title" | "description" | "user_notes",
-    value: string
-  ) {
-    try {
-      await fetch(`/api/projects/${projectId}/strategy/series/episodes/${episodeId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: value, seriesId: series?.id }),
-      });
-    } catch {}
-  }
-
   async function handleDeleteEpisode(episodeId: string) {
     if (!confirm("Bu alt konuyu silmek istediğinize emin misiniz?")) return;
     try {
@@ -297,6 +298,71 @@ export function SeriesPlanner({ projectId }: SeriesPlannerProps) {
     } finally {
       setIsExpanding(false);
     }
+  }
+
+  function handleCopyEpisode(episode: SeriesEpisode) {
+    const textToCopy = `${episode.title}\n${episode.description}`;
+    navigator.clipboard.writeText(textToCopy);
+    setCopiedId(episode.id);
+    setTimeout(() => {
+      setCopiedId(null);
+    }, 1800);
+  }
+
+  function openEditModal(episode: SeriesEpisode) {
+    setEditingEpisode(episode);
+    setEditTitle(episode.title);
+    setEditDesc(episode.description);
+  }
+
+  async function handleSaveEdit() {
+    if (!editingEpisode || !editTitle.trim()) return;
+    try {
+      const res = await fetch(
+        `/api/projects/${projectId}/strategy/series/episodes/${editingEpisode.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: editTitle.trim(),
+            description: editDesc.trim(),
+            seriesId: series?.id,
+          }),
+        }
+      );
+      const data = await res.json();
+      if (data.success && data.series) {
+        setSeries(data.series);
+      }
+    } catch {}
+    setEditingEpisode(null);
+  }
+
+  function openNoteModal(episode: SeriesEpisode) {
+    setNotingEpisode(episode);
+    setNoteContent(episode.user_notes || "");
+  }
+
+  async function handleSaveNote() {
+    if (!notingEpisode) return;
+    try {
+      const res = await fetch(
+        `/api/projects/${projectId}/strategy/series/episodes/${notingEpisode.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_notes: noteContent.trim(),
+            seriesId: series?.id,
+          }),
+        }
+      );
+      const data = await res.json();
+      if (data.success && data.series) {
+        setSeries(data.series);
+      }
+    } catch {}
+    setNotingEpisode(null);
   }
 
   const completedCount = series?.episodes.filter((e) => e.status === "completed").length || 0;
@@ -486,7 +552,7 @@ export function SeriesPlanner({ projectId }: SeriesPlannerProps) {
               <div className="series-rationale-card">{series.rationale}</div>
             )}
 
-            {/* Yüksek Bilgi Yoğunluklu Kompakt Satır Listesi */}
+            {/* Yüksek Bilgi Yoğunluklu, Tam Görünür Kompakt Satır Listesi */}
             <div className="series-compact-list">
               {series.episodes.map((ep) => {
                 const isCurrent = currentEpisode?.id === ep.id && ep.status !== "completed";
@@ -520,33 +586,18 @@ export function SeriesPlanner({ projectId }: SeriesPlannerProps) {
                       {String(ep.order_index).padStart(2, "0")}
                     </span>
 
+                    {/* Düz Metin - Tam Görünür & Alt Satıra Kayar */}
                     <div className="series-compact-main">
-                      <input
-                        type="text"
-                        className="series-compact-title-input"
-                        defaultValue={ep.title}
-                        onBlur={(e) => handleEpisodeBlur(ep.id, "title", e.target.value)}
-                        placeholder="Alt konu başlığı..."
-                      />
-                      <input
-                        type="text"
-                        className="series-compact-desc-input"
-                        defaultValue={ep.description}
-                        onBlur={(e) => handleEpisodeBlur(ep.id, "description", e.target.value)}
-                        placeholder="Kısa açıklama..."
-                      />
+                      <h4 className="series-compact-title">
+                        {ep.title}
+                        {isCurrent && " •"}
+                      </h4>
+                      {ep.description && (
+                        <p className="series-compact-desc">{ep.description}</p>
+                      )}
                     </div>
 
-                    <div className="series-compact-note-wrap">
-                      <input
-                        type="text"
-                        className="series-compact-note-input"
-                        placeholder="Not..."
-                        defaultValue={ep.user_notes || ""}
-                        onBlur={(e) => handleEpisodeBlur(ep.id, "user_notes", e.target.value)}
-                      />
-                    </div>
-
+                    {/* Simge Eylemleri: Durum, Kopyala, Düzenle, Not, Sil */}
                     <div className="series-compact-actions">
                       <button
                         type="button"
@@ -557,6 +608,34 @@ export function SeriesPlanner({ projectId }: SeriesPlannerProps) {
                         {statusIcon}
                         <span>{statusLabel}</span>
                       </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleCopyEpisode(ep)}
+                        className={`series-icon-btn ${copiedId === ep.id ? "copied" : ""}`}
+                        title={copiedId === ep.id ? "Kopyalandı!" : "Metni Kopyala"}
+                      >
+                        {copiedId === ep.id ? <Check size={12} /> : <Copy size={12} />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(ep)}
+                        className="series-icon-btn"
+                        title="Başlık ve Açıklamayı Düzenle"
+                      >
+                        <Pencil size={12} />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openNoteModal(ep)}
+                        className={`series-icon-btn ${ep.user_notes?.trim() ? "has-note" : ""}`}
+                        title={ep.user_notes?.trim() ? "Notu Görüntüle / Düzenle" : "Not Ekle"}
+                      >
+                        <FileText size={12} />
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => handleDeleteEpisode(ep.id)}
@@ -602,6 +681,102 @@ export function SeriesPlanner({ projectId }: SeriesPlannerProps) {
           </>
         ) : null}
       </main>
+
+      {/* DÜZENLEME MODALI */}
+      {editingEpisode && (
+        <div className="series-modal-backdrop" onClick={() => setEditingEpisode(null)}>
+          <div className="series-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="series-modal-header">
+              <h4 className="series-modal-title">Alt Konuyu Düzenle</h4>
+              <button
+                type="button"
+                onClick={() => setEditingEpisode(null)}
+                className="series-modal-close"
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <div className="series-modal-body">
+              <span className="series-modal-label">Başlık</span>
+              <input
+                type="text"
+                className="series-modal-input"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                placeholder="Konu başlığı..."
+                autoFocus
+              />
+              <span className="series-modal-label">Açıklama</span>
+              <textarea
+                className="series-modal-textarea"
+                value={editDesc}
+                onChange={(e) => setEditDesc(e.target.value)}
+                placeholder="Kısa açıklama..."
+              />
+            </div>
+            <div className="series-modal-footer">
+              <button
+                type="button"
+                onClick={() => setEditingEpisode(null)}
+                className="series-modal-cancel-btn"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                className="series-modal-save-btn"
+              >
+                Kaydet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NOT MODALI */}
+      {notingEpisode && (
+        <div className="series-modal-backdrop" onClick={() => setNotingEpisode(null)}>
+          <div className="series-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="series-modal-header">
+              <h4 className="series-modal-title">Çalışma Notu ({notingEpisode.title})</h4>
+              <button
+                type="button"
+                onClick={() => setNotingEpisode(null)}
+                className="series-modal-close"
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <div className="series-modal-body">
+              <span className="series-modal-label">Notunuz</span>
+              <textarea
+                className="series-modal-textarea"
+                value={noteContent}
+                onChange={(e) => setNoteContent(e.target.value)}
+                placeholder="Bu konuyla ilgili kişisel hatırlatmalarınız, örnekler veya notlarınız..."
+                autoFocus
+              />
+            </div>
+            <div className="series-modal-footer">
+              <button
+                type="button"
+                onClick={() => setNotingEpisode(null)}
+                className="series-modal-cancel-btn"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveNote}
+                className="series-modal-save-btn"
+              >
+                Notu Kaydet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
