@@ -38,6 +38,7 @@ import {
 
 import type { StrategyOverview, StrategyIdea } from "@/lib/strategy-types";
 import { PlatformGrowthPanel } from "./platform-growth-panel";
+import { SeriesPlanner } from "./series-planner";
 
 type ColumnData = {
   suggested: StrategyIdea[];
@@ -127,7 +128,7 @@ const COLUMN_CONFIG: Record<
   },
 };
 
-type MainTab = "cockpit" | "content_ideas";
+type MainTab = "cockpit" | "content_ideas" | "series_planner";
 type CockpitTabId = "brand_input" | "brand_identity" | "competitor_analysis" | "target_audience" | "growth_plan" | "platform_growth";
 
 export function StrategyStudio({ projectId }: { projectId: string }) {
@@ -862,6 +863,15 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
             <span className="strategy-main-nav-badge">
               {totalSuggestedIdeas}
             </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMainTab("series_planner")}
+            className={`strategy-main-nav-btn ${mainTab === "series_planner" ? "active" : ""}`}
+          >
+            <Layers size={17} />
+            <span>Seri Planlayıcı</span>
           </button>
         </div>
 
@@ -2022,6 +2032,15 @@ export function StrategyStudio({ projectId }: { projectId: string }) {
               );
             })}
           </div>
+        </section>
+      )}
+
+      {/* ========================================================
+          3. ANA SEKME: SERİ PLANLAYICI (PROJEYE ÖZEL İÇERİK SERİSİ)
+      ======================================================== */}
+      {mainTab === "series_planner" && (
+        <section className="cockpit-tab-content-panel">
+          <SeriesPlanner projectId={projectId} />
         </section>
       )}
 

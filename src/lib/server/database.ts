@@ -651,6 +651,33 @@ export function getDatabase() {
     try {
      database.exec("ALTER TABLE project_social_accounts ADD COLUMN tiktok_method TEXT NOT NULL DEFAULT 'browser';");
     } catch {}
+
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS project_content_series (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        main_topic TEXT NOT NULL,
+        rationale TEXT NOT NULL DEFAULT '',
+        episode_count INTEGER NOT NULL DEFAULT 0,
+        current_index INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_project_content_series_proj ON project_content_series(project_id, updated_at DESC);
+
+      CREATE TABLE IF NOT EXISTS project_series_episodes (
+        id TEXT PRIMARY KEY,
+        series_id TEXT NOT NULL REFERENCES project_content_series(id) ON DELETE CASCADE,
+        order_index INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        core_message TEXT NOT NULL DEFAULT '',
+        key_points_json TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL DEFAULT 'pending',
+        user_notes TEXT NOT NULL DEFAULT '',
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_project_series_episodes_series ON project_series_episodes(series_id, order_index ASC);
+    `);
   } catch (err) {
     console.error("[Migration Strategy Tables Error]", err);
   }

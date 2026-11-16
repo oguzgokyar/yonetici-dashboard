@@ -5285,3 +5285,243 @@ button { cursor:pointer; }
   padding: 2px;
 }
 
+/* ==========================================================================
+   SERİ PLANLAYICI (MINIMALIST SERIES PLANNER)
+   ========================================================================== */
+
+.series-planner-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.series-search-form {
+  display: flex;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px;
+}
+
+.series-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--text);
+  padding: 6px 10px;
+}
+
+.series-search-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+}
+
+.series-search-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.series-tracker-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 18px;
+}
+
+.series-tracker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.series-tracker-current {
+  color: var(--primary);
+}
+
+.series-progress-element {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  border: none;
+  background: #f1f2f6;
+  overflow: hidden;
+  appearance: none;
+}
+
+.series-progress-element::-webkit-progress-bar {
+  background: #f1f2f6;
+  border-radius: 3px;
+}
+
+.series-progress-element::-webkit-progress-value {
+  background: var(--primary);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.series-progress-element::-moz-progress-bar {
+  background: var(--primary);
+  border-radius: 3px;
+}
+
+.series-rationale-card {
+  background: #fafafa;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.series-episodes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.series-episode-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.series-episode-card.in-progress {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.series-episode-card.completed {
+  opacity: 0.75;
+}
+
+.series-episode-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.series-order-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.series-status-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.series-status-btn.status-pending {
+  background: #f8fafc;
+  color: #64748b;
+  border-color: #e2e8f0;
+}
+
+.series-status-btn.status-in-progress {
+  background: #f5f3ff;
+  color: var(--primary);
+  border-color: #ddd6fe;
+}
+
+.series-status-btn.status-completed {
+  background: #f0fdf4;
+  color: #16a34a;
+  border-color: #bbf7d0;
+}
+
+.series-episode-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: "Manrope", sans-serif;
+  color: var(--text);
+}
+
+.series-episode-core {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.series-episode-points {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.series-notes-input {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text);
+  background: #fcfcfd;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.series-notes-input:focus {
+  border-color: var(--primary);
+  background: white;
+}
+
+.series-empty-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 48px 24px;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  color: var(--muted);
+  font-size: 13px;
+  gap: 8px;
+}
+
+
