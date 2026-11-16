@@ -9,8 +9,7 @@ export type SeriesEpisode = {
   series_id: string;
   order_index: number;
   title: string;
-  core_message: string;
-  key_points: string[];
+  description: string;
   status: "pending" | "in_progress" | "completed";
   user_notes: string;
   updated_at: string;
@@ -28,21 +27,70 @@ export type ContentSeries = {
   updated_at: string;
 };
 
+export type SeriesSummary = {
+  id: string;
+  main_topic: string;
+  episode_count: number;
+  completed_count: number;
+  current_index: number;
+  updated_at: string;
+};
+
+export type StrategicSuggestion = {
+  title: string;
+  description: string;
+};
+
 type AIResearchOutput = {
   rationale: string;
   episodes: Array<{
     order_index: number;
     title: string;
-    core_message: string;
-    key_points: string[];
+    description: string;
   }>;
 };
 
-export async function getProjectSeries(projectId: string): Promise<ContentSeries | null> {
+type AISuggestionOutput = {
+  suggestions: StrategicSuggestion[];
+};
+
+export async function getProjectSeriesList(projectId: string): Promise<SeriesSummary[]> {
+  const db = getDatabase();
+  const seriesRows = db
+    .prepare(
+      "SELECT id, main_topic, episode_count, current_index, updated_at FROM project_content_series WHERE project_id = ? ORDER BY updated_at DESC"
+    )
+    .all(projectId) as Array<{
+    id: string;
+    main_topic: string;
+    episode_count: number;
+    current_index: number;
+    updated_at: string;
+  }>;
+
+  return seriesRows.map((row) => {
+    const compRow = db
+      .prepare(
+        "SELECT COUNT(*) as count FROM project_series_episodes WHERE series_id = ? AND status = 'completed'"
+      )
+      .get(row.id) as { count: number } | undefined;
+
+    return {
+      id: row.id,
+      main_topic: row.main_topic,
+      episode_count: row.episode_count,
+      completed_count: compRow?.count || 0,
+      current_index: row.current_index,
+      updated_at: row.updated_at,
+    };
+  });
+}
+
+export async function getProjectSeriesById(seriesId: string): Promise<ContentSeries | null> {
   const db = getDatabase();
   const seriesRow = db
-    .prepare("SELECT * FROM project_content_series WHERE project_id = ? ORDER BY updated_at DESC LIMIT 1")
-    .get(projectId) as
+    .prepare("SELECT * FROM project_content_series WHERE id = ?")
+    .get(seriesId) as
     | {
         id: string;
         project_id: string;
@@ -65,36 +113,89 @@ export async function getProjectSeries(projectId: string): Promise<ContentSeries
     order_index: number;
     title: string;
     core_message: string;
-    key_points_json: string;
     status: string;
     user_notes: string;
     updated_at: string;
   }>;
 
-  const episodes: SeriesEpisode[] = episodeRows.map((row) => {
-    let keyPoints: string[] = [];
-    try {
-      keyPoints = JSON.parse(row.key_points_json || "[]");
-    } catch {
-      keyPoints = [];
-    }
-    return {
-      id: row.id,
-      series_id: row.series_id,
-      order_index: row.order_index,
-      title: row.title,
-      core_message: row.core_message,
-      key_points: keyPoints,
-      status: (row.status as "pending" | "in_progress" | "completed") || "pending",
-      user_notes: row.user_notes || "",
-      updated_at: row.updated_at,
-    };
-  });
+  const episodes: SeriesEpisode[] = episodeRows.map((row) => ({
+    id: row.id,
+    series_id: row.series_id,
+    order_index: row.order_index,
+    title: row.title,
+    description: row.core_message || "",
+    status: (row.status as "pending" | "in_progress" | "completed") || "pending",
+    user_notes: row.user_notes || "",
+    updated_at: row.updated_at,
+  }));
 
   return {
     ...seriesRow,
     episodes,
   };
+}
+
+export async function getProjectSeries(projectId: string): Promise<ContentSeries | null> {
+  const db = getDatabase();
+  const latestRow = db
+    .prepare("SELECT id FROM project_content_series WHERE project_id = ? ORDER BY updated_at DESC LIMIT 1")
+    .get(projectId) as { id: string } | undefined;
+
+  if (!latestRow) return null;
+  return getProjectSeriesById(latestRow.id);
+}
+
+export async function suggestStrategicSeries(projectId: string): Promise<StrategicSuggestion[]> {
+  const db = getDatabase();
+  const strategyRow = db
+    .prepare(
+      "SELECT brand_name, brand_description, brand_identity_json, competitor_analysis_json, audience_voc_json, growth_strategy_json FROM project_brand_strategies WHERE project_id = ?"
+    )
+    .get(projectId) as Record<string, string> | undefined;
+
+  const projectRow = db.prepare("SELECT name, brand_json FROM projects WHERE id = ?").get(projectId) as
+    | { name: string; brand_json: string }
+    | undefined;
+
+  let context = "";
+  if (strategyRow && strategyRow.brand_name) {
+    context = `Marka: ${strategyRow.brand_name}
+Açıklama: ${strategyRow.brand_description || ""}
+Marka Kimliği: ${strategyRow.brand_identity_json || "{}"}
+Rakip Boşlukları: ${strategyRow.competitor_analysis_json || "{}"}
+Kitle Acı Noktaları: ${strategyRow.audience_voc_json || "{}"}
+Büyüme Stratejisi: ${strategyRow.growth_strategy_json || "{}"}`;
+  } else if (projectRow) {
+    context = `Marka: ${projectRow.name || ""}, Veriler: ${projectRow.brand_json || "{}"}`;
+  }
+
+  const systemPrompt = `Sen kıdemli bir İçerik ve Büyüme Stratejistisin.
+Görevin: Verilen marka stratejisini, kitle acı noktalarını ve pazar dinamiklerini analiz ederek, markanın uzmanlık kurmasını ve hedef kitleyi çekecek 3 adet stratejik "Ana Seri Konusu" önermektir.
+
+KURALLAR:
+1. Kesinlikle hiçbir içerik formatına (karosel, reels, video, post vb.) atıfta bulunma. Yalnızca konunun ve serinin stratejik özüne odaklan.
+2. Her öneri net bir başlık ve bunun stratejik önemini anlatan 1-2 cümlelik kısa bir açıklamadan oluşmalıdır.
+3. Yalnızca JSON formatında yanıt ver.
+
+JSON ŞEMASI:
+{
+  "suggestions": [
+    {
+      "title": "Stratejik Seri Konu Başlığı",
+      "description": "Bu serinin neden üretilmesi gerektiğini ve kitlenin hangi temel sorununu çözdüğünü belirten kısa stratejik açıklama."
+    }
+  ]
+}`;
+
+  const userPrompt = `Marka ve Strateji Bağlamı:\n${context}\n\nLütfen bu marka için en yüksek etkiyi yaratacak 3 stratejik ana seri konusu öner.`;
+
+  const { content } = await completeText(systemPrompt, userPrompt, {
+    temperature: 0.75,
+    maxTokens: 1200,
+  });
+
+  const parsed = parseJsonResponse<AISuggestionOutput>(content);
+  return Array.isArray(parsed?.suggestions) ? parsed.suggestions.slice(0, 4) : [];
 }
 
 export async function researchAndCreateSeries(projectId: string, mainTopic: string): Promise<ContentSeries> {
@@ -119,25 +220,23 @@ export async function researchAndCreateSeries(projectId: string, mainTopic: stri
   }
 
   const systemPrompt = `Sen kıdemli bir İçerik Mimarisi ve Sosyal Medya Seri Planlama Uzmanısın.
-Görevin: Kullanıcının verdiği ana konuyu derinlemesine analiz etmek, kitleye aktarılacak en mantıklı anlatı akışını (narrative arc) kurmak ve konunun gerçek ağırlığına göre en uygun alt konu (bölüm) sayısını belirlemektir.
+Görevin: Kullanıcının verdiği ana konuyu derinlemesine analiz etmek ve konunun gerçek ağırlığına göre en mantıklı alt konulara bölmektir.
 
-KURALLAR:
-1. Sabit bir bölüm sayısına bağlı kalma (3, 5 gibi kısıtlamalar yok). Konunun derinliğine, hedef kitlenin öğrenme adımlarına ve konunun sindirilebilirliğine göre ideal bölüm sayısını sen belirle (genellikle 4 ila 8 bölüm arası).
-2. Her bölüm birbirini besleyen mantıklı bir zincir olmalıdır.
-3. Çıktı kesinlikle saf JSON formatında olmalıdır.
+KESİN KURALLAR:
+1. İÇERİK TİPİ YASAKTIR: Çıktıda karosel, video, reels, post, story veya infografik gibi formatlara ASLA değinme veya tavsiye verme. Sadece konunun kendisine odaklan.
+2. YALIN YAPI: Her alt konu sadece bir 'title' (başlık) ve 'description' (kısa ve net açıklama, 1-2 cümle) değerlerinden oluşmalıdır.
+3. ARAÇ VE YÖNTEMLERİ AYRIŞTIR: Farklı uygulama, araç, donanım veya yöntemleri (örnek: Micro:bit ile Makey Makey, veya Canva ile Figma) asla tek bir alt başlık altında birleştirme. Her bir aracı/yöntemi müstakil, ayrı birer alt konu olarak oluştur.
+4. DİNAMİK BÖLÜM SAYISI: Konuyu sabit bir sayıya sıkıştırma. Konunun derinliğine ve kapsamına göre optimal bölüm sayısını sen belirle.
+5. Çıktı kesinlikle saf JSON olmalıdır.
 
 JSON ŞEMASI:
 {
-  "rationale": "Konunun neden bu sayıda bölüme ayrıldığını açıklayan 1-2 cümlelik net, yalın Türkçe stratejik gerekçe.",
+  "rationale": "Konunun neden bu sayıda alt konuya ayrıldığını açıklayan 1-2 cümlelik gerekçe.",
   "episodes": [
     {
       "order_index": 1,
-      "title": "Net ve vurucu alt konu başlığı",
-      "core_message": "Bu paylaşımın vermek istediği tek cümlelik ana fikir",
-      "key_points": [
-        "İşlenecek 1. odak noktası",
-        "İşlenecek 2. odak noktası"
-      ]
+      "title": "Alt Konu Başlığı",
+      "description": "Bu alt konunun içeriğini anlatan kısa, net açıklama."
     }
   ]
 }`;
@@ -145,10 +244,10 @@ JSON ŞEMASI:
   const userPrompt = `Bağlam: ${brandContext}
 Ana Konu Başlığı: ${cleanTopic}
 
-Lütfen bu konuyu derinlemesine araştır, ideal bölüm sayısına karar ver ve ardışık alt konuları çıkar.`;
+Lütfen bu konuyu araştır, her aracı/yöntemi ayrı tutarak ardışık alt konuları çıkar.`;
 
   const { content } = await completeText(systemPrompt, userPrompt, {
-    temperature: 0.65,
+    temperature: 0.6,
     maxTokens: 2500,
   });
 
@@ -171,7 +270,7 @@ Lütfen bu konuyu derinlemesine araştır, ideal bölüm sayısına karar ver ve
 
     const insertEp = db.prepare(
       `INSERT INTO project_series_episodes (id, series_id, order_index, title, core_message, key_points_json, status, user_notes, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, '', ?)`
+       VALUES (?, ?, ?, ?, ?, '[]', ?, '', ?)`
     );
 
     parsed.episodes.forEach((ep, idx) => {
@@ -183,8 +282,7 @@ Lütfen bu konuyu derinlemesine araştır, ideal bölüm sayısına karar ver ve
         seriesId,
         order,
         ep.title || `Bölüm ${order}`,
-        ep.core_message || "",
-        JSON.stringify(ep.key_points || []),
+        ep.description || "",
         initialStatus,
         now
       );
@@ -196,7 +294,7 @@ Lütfen bu konuyu derinlemesine araştır, ideal bölüm sayısına karar ver ve
     throw error;
   }
 
-  const created = await getProjectSeries(projectId);
+  const created = await getProjectSeriesById(seriesId);
   if (!created) {
     throw new Error("Seri veritabanına kaydedilemedi.");
   }
@@ -208,7 +306,7 @@ export async function updateEpisode(
   updates: {
     status?: "pending" | "in_progress" | "completed";
     title?: string;
-    core_message?: string;
+    description?: string;
     user_notes?: string;
   }
 ): Promise<void> {
@@ -231,9 +329,9 @@ export async function updateEpisode(
     setClauses.push("title = ?");
     params.push(updates.title);
   }
-  if (updates.core_message !== undefined) {
+  if (updates.description !== undefined) {
     setClauses.push("core_message = ?");
-    params.push(updates.core_message);
+    params.push(updates.description);
   }
   if (updates.user_notes !== undefined) {
     setClauses.push("user_notes = ?");
@@ -246,7 +344,9 @@ export async function updateEpisode(
   // If status changed to completed, advance current_index of the series
   if (updates.status === "completed") {
     const nextEp = db
-      .prepare("SELECT order_index FROM project_series_episodes WHERE series_id = ? AND status != 'completed' ORDER BY order_index ASC LIMIT 1")
+      .prepare(
+        "SELECT order_index FROM project_series_episodes WHERE series_id = ? AND status != 'completed' ORDER BY order_index ASC LIMIT 1"
+      )
       .get(ep.series_id) as { order_index: number } | undefined;
 
     const nextIndex = nextEp ? nextEp.order_index : ep.order_index;
@@ -256,7 +356,6 @@ export async function updateEpisode(
       ep.series_id
     );
 
-    // Automatically set the next incomplete episode to in_progress if currently pending
     if (nextEp) {
       db.prepare(
         "UPDATE project_series_episodes SET status = 'in_progress', updated_at = ? WHERE series_id = ? AND order_index = ? AND status = 'pending'"

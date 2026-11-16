@@ -1,16 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getProjectSeries, researchAndCreateSeries } from "@/lib/server/series-researcher";
+import {
+  getProjectSeries,
+  getProjectSeriesById,
+  getProjectSeriesList,
+  researchAndCreateSeries,
+} from "@/lib/server/series-researcher";
 
 export const runtime = "nodejs";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
     const { projectId } = await params;
-    const series = await getProjectSeries(projectId);
-    return NextResponse.json({ success: true, series });
+    const { searchParams } = new URL(request.url);
+    const seriesId = searchParams.get("seriesId");
+
+    const allSeries = await getProjectSeriesList(projectId);
+    const series = seriesId
+      ? await getProjectSeriesById(seriesId)
+      : await getProjectSeries(projectId);
+
+    return NextResponse.json({ success: true, series, allSeries });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Seri verisi alınamadı.";
     return NextResponse.json({ success: false, error: message }, { status: 500 });
@@ -34,7 +46,8 @@ export async function POST(
     }
 
     const series = await researchAndCreateSeries(projectId, mainTopic);
-    return NextResponse.json({ success: true, series });
+    const allSeries = await getProjectSeriesList(projectId);
+    return NextResponse.json({ success: true, series, allSeries });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Seri araştırma işlemi başarısız oldu.";
     return NextResponse.json({ success: false, error: message }, { status: 500 });
