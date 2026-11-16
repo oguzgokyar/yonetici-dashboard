@@ -479,10 +479,116 @@ export async function updateEpisode(
       ).run(now, ep.series_id, nextEp.order_index);
     }
   } else if (updates.status === "in_progress") {
-    db.prepare("UPDATE project_content_series SET current_index = ?, updated_at = ? WHERE id = ?").run(
-      ep.order_index,
-      now,
-      ep.series_id
-    );
+  db.prepare("UPDATE project_content_series SET current_index = ?, updated_at = ? WHERE id = ?").run(
+    ep.order_index,
+    now,
+    ep.series_id
+  );
   }
-}
+  }
+
+  export async function expandSeries(seriesId: string): Promise<ContentSeries> {
+  const db = getDatabase();
+  const seriesRow = db
+  .prepare("SELECT * FROM project_content_series WHERE id = ?")
+  .get(seriesId) as { project_id: string; main_topic: string } | undefined;
+  if (!seriesRow) throw new Error("Seri bulunamadı.");
+
+  const currentEpisodes = db
+  .prepare(
+    "SELECT order_index, title, core_message FROM project_series_episodes WHERE series_id = ? ORDER BY order_index ASC"
+  )
+  .all(seriesId) as Array<{ order_index: number; title: string; core_message: string }>;
+
+  const existingTitles = currentEpisodes
+  .map((e) => `${e.order_index}. ${e.title} - ${e.core_message}`)
+  .join("\n");
+
+  const projectRow = db.prepare("SELECT name, brand_json FROM projects WHERE id = ?").get(seriesRow.project_id) as
+  | { name: string; brand_json: string }
+  | undefined;
+
+  let brandContext = "";
+  if (projectRow) {
+  try {
+    const b = JSON.parse(projectRow.brand_json || "{}");
+    brandContext = `Marka: ${projectRow.name || ""}, Sektör: ${b.industry || ""}, Hedef Kitle: ${b.audience || ""}`;
+  } catch {
+    brandContext = `Marka: ${projectRow.name || ""}`;
+  }
+  }
+
+  const systemPrompt = `Sen bir İçerik Mimarisi ve Konu Ağacı Uzmanısın.
+  Görevin: Mevcut bir içerik serisini derinlemesine araştırarak, eksik kalan ileri seviye veya tamamlayıcı boyutları için 3-5 adet YENİ alt konu üreterek seriyi mantıksal olarak uzatmaktır.
+
+  KESİN VE BAĞLAYICI KURALLAR:
+  1. MEVCUT KONULARI ASLA TEKRARLAMA: Aşağıda verilen mevcut alt konuları incele; aynı ya da benzer başlıklar üretme. Tamamlayıcı, bir sonraki aşama veya farklı araç/yöntem boyutlarını ele al.
+  2. JENERİK VE EDEBİ BAŞLIKLAR KESİNLİKLE YASAKTIR: İki noktalı edebi/pazarlama başlıkları ASLA üretme. Sadece konu alanını doğrudan belirten net, yalın ifadeler kullan.
+  3. ARAÇ VE YÖNTEMLERİ AYRIŞTIR: Farklı araç/yöntemleri asla tek bir alt başlık altında birleştirme.
+  4. İÇERİK TİPLERİNE REFERANS YASAKTIR: Karosel, video, reels, post vb. biçimsel kelimeler kullanma.
+  5. Yalnızca 3 ila 5 adet yeni alt konu üret.
+
+  JSON ŞEMASI:
+  {
+  "new_episodes": [
+  {
+    "title": "Doğrudan Konu Başlığı (Pazarlama jeneriği olmadan)",
+    "description": "Bu alt konunun içeriğini anlatan 1-2 cümlelik kısa ve net açıklama."
+  }
+  ]
+  }`;
+
+  const userPrompt = `Bağlam: ${brandContext}
+  Ana Konu: ${seriesRow.main_topic}
+
+  MEVCUT ALT KONULAR (Bunları tekrar etme, devamını ve tamamlayıcılarını üret):
+  ${existingTitles}
+
+  Lütfen seriyi mantıksal olarak genişletecek 3-5 yeni alt konu üret.`;
+
+  const { content } = await completeText(systemPrompt, userPrompt, {
+  temperature: 0.6,
+  maxTokens: 1800,
+  });
+
+  const parsed = parseJsonResponse<{ new_episodes: Array<{ title: string; description: string }> }>(content);
+
+  const startOrder = currentEpisodes.length;
+  const now = new Date().toISOString();
+
+  db.exec("BEGIN TRANSACTION");
+  try {
+  const insertEp = db.prepare(
+    `INSERT INTO project_series_episodes (id, series_id, order_index, title, core_message, key_points_json, status, user_notes, updated_at)
+     VALUES (?, ?, ?, ?, ?, '[]', 'pending', '', ?)`
+  );
+
+  (parsed.new_episodes || []).forEach((ep, idx) => {
+    const epId = `ep_${crypto.randomUUID()}`;
+    insertEp.run(
+      epId,
+      seriesId,
+      startOrder + idx + 1,
+      ep.title || `Konu ${startOrder + idx + 1}`,
+      ep.description || "",
+      now
+    );
+  });
+
+  const newTotal = startOrder + (parsed.new_episodes?.length || 0);
+  db.prepare("UPDATE project_content_series SET episode_count = ?, updated_at = ? WHERE id = ?").run(
+    newTotal,
+    now,
+    seriesId
+  );
+
+  db.exec("COMMIT");
+  } catch (err) {
+  db.exec("ROLLBACK");
+  throw err;
+  }
+
+  const updated = await getProjectSeriesById(seriesId);
+  if (!updated) throw new Error("Güncellenen seri alınamadı.");
+  return updated;
+  }

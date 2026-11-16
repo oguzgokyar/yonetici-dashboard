@@ -29,6 +29,7 @@ export function SeriesPlanner({ projectId }: SeriesPlannerProps) {
   const [suggestions, setSuggestions] = useState<StrategicSuggestion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSuggesting, setIsSuggesting] = useState(false);
+  const [isExpanding, setIsExpanding] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -269,6 +270,35 @@ export function SeriesPlanner({ projectId }: SeriesPlannerProps) {
     }
   }
 
+  async function handleExpandSeries() {
+    if (!series) return;
+    try {
+      setIsExpanding(true);
+      setError(null);
+      const res = await fetch(
+        `/api/projects/${projectId}/strategy/series/expand`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ seriesId: series.id }),
+        }
+      );
+      const data = await res.json();
+      if (data.success && data.series) {
+        setSeries(data.series);
+        const listRes = await fetch(`/api/projects/${projectId}/strategy/series`);
+        const listData = await listRes.json();
+        if (listData.allSeries) setAllSeries(listData.allSeries);
+      } else {
+        setError(data.error || "Seri uzatılamadı.");
+      }
+    } catch {
+      setError("Seri uzatılırken bağlantı hatası oluştu.");
+    } finally {
+      setIsExpanding(false);
+    }
+  }
+
   const completedCount = series?.episodes.filter((e) => e.status === "completed").length || 0;
   const totalCount = series?.episodes.length || 0;
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
@@ -456,11 +486,12 @@ export function SeriesPlanner({ projectId }: SeriesPlannerProps) {
               <div className="series-rationale-card">{series.rationale}</div>
             )}
 
-            <div className="series-episodes-list">
+            {/* Yüksek Bilgi Yoğunluklu Kompakt Satır Listesi */}
+            <div className="series-compact-list">
               {series.episodes.map((ep) => {
                 const isCurrent = currentEpisode?.id === ep.id && ep.status !== "completed";
-                const cardClass = [
-                  "series-episode-card",
+                const rowClass = [
+                  "series-compact-row",
                   ep.status === "in_progress" ? "in-progress" : "",
                   ep.status === "completed" ? "completed" : "",
                 ]
@@ -469,83 +500,104 @@ export function SeriesPlanner({ projectId }: SeriesPlannerProps) {
 
                 const statusIcon =
                   ep.status === "completed" ? (
-                    <CheckCircle2 size={13} />
+                    <CheckCircle2 size={12} />
                   ) : ep.status === "in_progress" ? (
-                    <PlayCircle size={13} />
+                    <PlayCircle size={12} />
                   ) : (
-                    <Clock size={13} />
+                    <Clock size={12} />
                   );
 
                 const statusLabel =
                   ep.status === "completed"
-                    ? "Tamamlandı"
+                    ? "Tamam"
                     : ep.status === "in_progress"
-                    ? "Çalışılıyor"
+                    ? "Aktif"
                     : "Bekliyor";
 
                 return (
-                  <div key={ep.id} className={cardClass}>
-                    <div className="series-episode-top">
-                      <span className="series-order-tag">
-                        Bölüm {String(ep.order_index).padStart(2, "0")}
-                        {isCurrent && " • Aktif"}
-                      </span>
-                      <div className="series-episode-actions">
-                        <button
-                          type="button"
-                          onClick={() => handleStatusToggle(ep)}
-                          className={`series-status-btn status-${ep.status}`}
-                          title="Durumu değiştirmek için tıklayın"
-                        >
-                          {statusIcon}
-                          <span>{statusLabel}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteEpisode(ep.id)}
-                          className="series-episode-del-btn"
-                          title="Bu alt konuyu sil"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
+                  <div key={ep.id} className={rowClass}>
+                    <span className="series-compact-order">
+                      {String(ep.order_index).padStart(2, "0")}
+                    </span>
+
+                    <div className="series-compact-main">
+                      <input
+                        type="text"
+                        className="series-compact-title-input"
+                        defaultValue={ep.title}
+                        onBlur={(e) => handleEpisodeBlur(ep.id, "title", e.target.value)}
+                        placeholder="Alt konu başlığı..."
+                      />
+                      <input
+                        type="text"
+                        className="series-compact-desc-input"
+                        defaultValue={ep.description}
+                        onBlur={(e) => handleEpisodeBlur(ep.id, "description", e.target.value)}
+                        placeholder="Kısa açıklama..."
+                      />
                     </div>
 
-                    <input
-                      type="text"
-                      className="series-episode-title-input"
-                      defaultValue={ep.title}
-                      onBlur={(e) => handleEpisodeBlur(ep.id, "title", e.target.value)}
-                      placeholder="Alt konu başlığı..."
-                    />
+                    <div className="series-compact-note-wrap">
+                      <input
+                        type="text"
+                        className="series-compact-note-input"
+                        placeholder="Not..."
+                        defaultValue={ep.user_notes || ""}
+                        onBlur={(e) => handleEpisodeBlur(ep.id, "user_notes", e.target.value)}
+                      />
+                    </div>
 
-                    <input
-                      type="text"
-                      className="series-episode-desc-input"
-                      defaultValue={ep.description}
-                      onBlur={(e) => handleEpisodeBlur(ep.id, "description", e.target.value)}
-                      placeholder="Alt konu kısa açıklaması..."
-                    />
-
-                    <input
-                      type="text"
-                      className="series-notes-input"
-                      placeholder="Bu bölüm için çalışma notunuz..."
-                      defaultValue={ep.user_notes || ""}
-                      onBlur={(e) => handleEpisodeBlur(ep.id, "user_notes", e.target.value)}
-                    />
+                    <div className="series-compact-actions">
+                      <button
+                        type="button"
+                        onClick={() => handleStatusToggle(ep)}
+                        className={`series-status-btn status-${ep.status}`}
+                        title="Durumu değiştirmek için tıklayın"
+                      >
+                        {statusIcon}
+                        <span>{statusLabel}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteEpisode(ep.id)}
+                        className="series-episode-del-btn"
+                        title="Bu alt konuyu sil"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
 
-              <button
-                type="button"
-                onClick={handleAddEpisode}
-                className="series-add-ep-btn"
-              >
-                <Plus size={14} />
-                <span>Yeni Alt Konu Ekle</span>
-              </button>
+              <div className="series-bottom-actions-row">
+                <button
+                  type="button"
+                  onClick={handleExpandSeries}
+                  disabled={isExpanding}
+                  className="series-expand-btn"
+                >
+                  {isExpanding ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" />
+                      <span>Araştırılarak Uzatılıyor...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={13} />
+                      <span>Seriyi Araştırarak Uzat (+3-5 Konu)</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddEpisode}
+                  className="series-add-blank-btn"
+                >
+                  <Plus size={13} />
+                  <span>Boş Konu Ekle</span>
+                </button>
+              </div>
             </div>
           </>
         ) : null}
