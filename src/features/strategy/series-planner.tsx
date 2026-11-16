@@ -9,6 +9,7 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 import type {
   ContentSeries,
@@ -135,6 +136,44 @@ export function SeriesPlanner({ projectId }: SeriesPlannerProps) {
     runResearchWithTopic(topicInput);
   }
 
+  async function handleDeleteSeries(seriesId: string, e?: React.MouseEvent) {
+    if (e) e.stopPropagation();
+    if (!confirm("Bu seriyi ve alt konularını silmek istediğinize emin misiniz?")) return;
+
+    try {
+      const res = await fetch(
+        `/api/projects/${projectId}/strategy/series?seriesId=${encodeURIComponent(seriesId)}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json();
+      if (data.success) {
+        setAllSeries(data.allSeries || []);
+        if (series?.id === seriesId) {
+          setSeries(data.series || null);
+          setTopicInput(data.series?.main_topic || "");
+        }
+      }
+    } catch {
+      setError("Seri silinirken hata oluştu.");
+    }
+  }
+
+  async function handleUpdateSeriesTitle(newTitle: string) {
+    if (!series || !newTitle.trim() || newTitle.trim() === series.main_topic) return;
+    try {
+      const res = await fetch(`/api/projects/${projectId}/strategy/series`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seriesId: series.id, mainTopic: newTitle.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.series) setSeries(data.series);
+        if (data.allSeries) setAllSeries(data.allSeries);
+      }
+    } catch {}
+  }
+
   async function handleStatusToggle(episode: SeriesEpisode) {
     const nextStatus: Record<string, "pending" | "in_progress" | "completed"> = {
       pending: "in_progress",
@@ -143,7 +182,6 @@ export function SeriesPlanner({ projectId }: SeriesPlannerProps) {
     };
     const targetStatus = nextStatus[episode.status] || "in_progress";
 
-    // Optimistic UI update
     setSeries((prev) => {
       if (!prev) return null;
       const updatedEpisodes = prev.episodes.map((ep) =>
@@ -158,13 +196,12 @@ export function SeriesPlanner({ projectId }: SeriesPlannerProps) {
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: targetStatus }),
+          body: JSON.stringify({ status: targetStatus, seriesId: series?.id }),
         }
       );
       const data = await res.json();
       if (data.success && data.series) {
         setSeries(data.series);
-        // Refresh index summary list
         const listRes = await fetch(`/api/projects/${projectId}/strategy/series`);
         const listData = await listRes.json();
         if (listData.allSeries) setAllSeries(listData.allSeries);
@@ -176,14 +213,60 @@ export function SeriesPlanner({ projectId }: SeriesPlannerProps) {
     }
   }
 
-  async function handleNotesBlur(episodeId: string, notes: string) {
+  async function handleEpisodeBlur(
+    episodeId: string,
+    field: "title" | "description" | "user_notes",
+    value: string
+  ) {
     try {
       await fetch(`/api/projects/${projectId}/strategy/series/episodes/${episodeId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_notes: notes }),
+        body: JSON.stringify({ [field]: value, seriesId: series?.id }),
       });
     } catch {}
+  }
+
+  async function handleDeleteEpisode(episodeId: string) {
+    if (!confirm("Bu alt konuyu silmek istediğinize emin misiniz?")) return;
+    try {
+      const res = await fetch(
+        `/api/projects/${projectId}/strategy/series/episodes/${episodeId}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json();
+      if (data.success && data.series) {
+        setSeries(data.series);
+        const listRes = await fetch(`/api/projects/${projectId}/strategy/series`);
+        const listData = await listRes.json();
+        if (listData.allSeries) setAllSeries(listData.allSeries);
+      }
+    } catch {
+      setError("Alt konu silinirken hata oluştu.");
+    }
+  }
+
+  async function handleAddEpisode() {
+    if (!series) return;
+    try {
+      const res = await fetch(
+        `/api/projects/${projectId}/strategy/series/episodes`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ seriesId: series.id }),
+        }
+      );
+      const data = await res.json();
+      if (data.success && data.series) {
+        setSeries(data.series);
+        const listRes = await fetch(`/api/projects/${projectId}/strategy/series`);
+        const listData = await listRes.json();
+        if (listData.allSeries) setAllSeries(listData.allSeries);
+      }
+    } catch {
+      setError("Yeni alt konu eklenemedi.");
+    }
   }
 
   const completedCount = series?.episodes.filter((e) => e.status === "completed").length || 0;
@@ -220,17 +303,26 @@ export function SeriesPlanner({ projectId }: SeriesPlannerProps) {
                 : 0;
 
             return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => handleSelectSeries(item.id)}
-                className={`series-index-item ${isSelected ? "active" : ""}`}
-              >
-                <span className="series-index-item-title">{item.main_topic}</span>
-                <span className="series-index-item-meta">
-                  {item.completed_count}/{item.episode_count} Bitti (%{pct})
-                </span>
-              </button>
+              <div key={item.id} className="series-index-item-row">
+                <button
+                  type="button"
+                  onClick={() => handleSelectSeries(item.id)}
+                  className={`series-index-item ${isSelected ? "active" : ""}`}
+                >
+                  <span className="series-index-item-title">{item.main_topic}</span>
+                  <span className="series-index-item-meta">
+                    {item.completed_count}/{item.episode_count} Bitti (%{pct})
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => handleDeleteSeries(item.id, e)}
+                  className="series-index-del-btn"
+                  title="Seriyi Sil"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
             );
           })}
         </div>
@@ -268,7 +360,7 @@ export function SeriesPlanner({ projectId }: SeriesPlannerProps) {
 
         {error && <div className="series-rationale-card">{error}</div>}
 
-        {/* Stratejik Seri Önerileri (Aktif Seri Yokken veya Boşken) */}
+        {/* Stratejik Seri Önerileri (Aktif Seri Yokken) */}
         {!series && (
           <section className="series-suggestions-panel">
             <div className="series-suggestions-header">
@@ -323,6 +415,25 @@ export function SeriesPlanner({ projectId }: SeriesPlannerProps) {
           </div>
         ) : series ? (
           <>
+            <div className="series-main-header-row">
+              <input
+                type="text"
+                className="series-title-edit-input"
+                defaultValue={series.main_topic}
+                key={series.id + series.main_topic}
+                onBlur={(e) => handleUpdateSeriesTitle(e.target.value)}
+                title="Seri başlığını düzenlemek için tıklayın"
+              />
+              <button
+                type="button"
+                onClick={() => handleDeleteSeries(series.id)}
+                className="series-delete-series-btn"
+              >
+                <Trash2 size={12} />
+                <span>Seriyi Sil</span>
+              </button>
+            </div>
+
             <div className="series-tracker-bar">
               <div className="series-tracker-header">
                 <span>
@@ -379,33 +490,62 @@ export function SeriesPlanner({ projectId }: SeriesPlannerProps) {
                         Bölüm {String(ep.order_index).padStart(2, "0")}
                         {isCurrent && " • Aktif"}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => handleStatusToggle(ep)}
-                        className={`series-status-btn status-${ep.status}`}
-                        title="Durumu değiştirmek için tıklayın"
-                      >
-                        {statusIcon}
-                        <span>{statusLabel}</span>
-                      </button>
+                      <div className="series-episode-actions">
+                        <button
+                          type="button"
+                          onClick={() => handleStatusToggle(ep)}
+                          className={`series-status-btn status-${ep.status}`}
+                          title="Durumu değiştirmek için tıklayın"
+                        >
+                          {statusIcon}
+                          <span>{statusLabel}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteEpisode(ep.id)}
+                          className="series-episode-del-btn"
+                          title="Bu alt konuyu sil"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </div>
 
-                    <h4 className="series-episode-title">{ep.title}</h4>
+                    <input
+                      type="text"
+                      className="series-episode-title-input"
+                      defaultValue={ep.title}
+                      onBlur={(e) => handleEpisodeBlur(ep.id, "title", e.target.value)}
+                      placeholder="Alt konu başlığı..."
+                    />
 
-                    {ep.description && (
-                      <p className="series-episode-core">{ep.description}</p>
-                    )}
+                    <input
+                      type="text"
+                      className="series-episode-desc-input"
+                      defaultValue={ep.description}
+                      onBlur={(e) => handleEpisodeBlur(ep.id, "description", e.target.value)}
+                      placeholder="Alt konu kısa açıklaması..."
+                    />
 
                     <input
                       type="text"
                       className="series-notes-input"
                       placeholder="Bu bölüm için çalışma notunuz..."
                       defaultValue={ep.user_notes || ""}
-                      onBlur={(e) => handleNotesBlur(ep.id, e.target.value)}
+                      onBlur={(e) => handleEpisodeBlur(ep.id, "user_notes", e.target.value)}
                     />
                   </div>
                 );
               })}
+
+              <button
+                type="button"
+                onClick={handleAddEpisode}
+                className="series-add-ep-btn"
+              >
+                <Plus size={14} />
+                <span>Yeni Alt Konu Ekle</span>
+              </button>
             </div>
           </>
         ) : null}

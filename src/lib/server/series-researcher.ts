@@ -145,6 +145,110 @@ export async function getProjectSeries(projectId: string): Promise<ContentSeries
   return getProjectSeriesById(latestRow.id);
 }
 
+export async function updateSeriesTitle(seriesId: string, mainTopic: string): Promise<void> {
+  const clean = mainTopic.trim();
+  if (!clean) throw new Error("Seri başlığı boş olamaz.");
+  const db = getDatabase();
+  const now = new Date().toISOString();
+  db.prepare("UPDATE project_content_series SET main_topic = ?, updated_at = ? WHERE id = ?").run(
+    clean,
+    now,
+    seriesId
+  );
+}
+
+export async function deleteSeries(seriesId: string): Promise<void> {
+  const db = getDatabase();
+  db.prepare("DELETE FROM project_content_series WHERE id = ?").run(seriesId);
+}
+
+export async function deleteEpisode(episodeId: string): Promise<string> {
+  const db = getDatabase();
+  const ep = db.prepare("SELECT series_id FROM project_series_episodes WHERE id = ?").get(episodeId) as
+    | { series_id: string }
+    | undefined;
+
+  if (!ep) throw new Error("Bölüm bulunamadı.");
+
+  const seriesId = ep.series_id;
+  const now = new Date().toISOString();
+
+  db.exec("BEGIN TRANSACTION");
+  try {
+    db.prepare("DELETE FROM project_series_episodes WHERE id = ?").run(episodeId);
+
+    // Re-index remaining episodes in order
+    const remaining = db
+      .prepare("SELECT id FROM project_series_episodes WHERE series_id = ? ORDER BY order_index ASC")
+      .all(seriesId) as Array<{ id: string }>;
+
+    const updateOrder = db.prepare("UPDATE project_series_episodes SET order_index = ?, updated_at = ? WHERE id = ?");
+    remaining.forEach((row, idx) => {
+      updateOrder.run(idx + 1, now, row.id);
+    });
+
+    db.prepare("UPDATE project_content_series SET episode_count = ?, updated_at = ? WHERE id = ?").run(
+      remaining.length,
+      now,
+      seriesId
+    );
+
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+
+  return seriesId;
+}
+
+export async function createEpisode(
+  seriesId: string,
+  title?: string,
+  description?: string
+): Promise<SeriesEpisode> {
+  const db = getDatabase();
+  const countRow = db
+    .prepare("SELECT COUNT(*) as count FROM project_series_episodes WHERE series_id = ?")
+    .get(seriesId) as { count: number };
+
+  const nextOrder = (countRow?.count || 0) + 1;
+  const now = new Date().toISOString();
+  const epId = `ep_${crypto.randomUUID()}`;
+  const epTitle = title?.trim() || `Yeni Konu ${nextOrder}`;
+  const epDesc = description?.trim() || "";
+
+  db.exec("BEGIN TRANSACTION");
+  try {
+    db.prepare(
+      `INSERT INTO project_series_episodes (id, series_id, order_index, title, core_message, key_points_json, status, user_notes, updated_at)
+       VALUES (?, ?, ?, ?, ?, '[]', 'pending', '', ?)`
+    ).run(epId, seriesId, nextOrder, epTitle, epDesc, now);
+
+    db.prepare("UPDATE project_content_series SET episode_count = ?, updated_at = ? WHERE id = ?").run(
+      nextOrder,
+      now,
+      seriesId
+    );
+
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+
+  return {
+    id: epId,
+    series_id: seriesId,
+    order_index: nextOrder,
+    title: epTitle,
+    description: epDesc,
+    status: "pending",
+    user_notes: "",
+    updated_at: now,
+  };
+}
+
 export async function suggestStrategicSeries(projectId: string): Promise<StrategicSuggestion[]> {
   const db = getDatabase();
   const strategyRow = db
@@ -170,19 +274,20 @@ Büyüme Stratejisi: ${strategyRow.growth_strategy_json || "{}"}`;
   }
 
   const systemPrompt = `Sen kıdemli bir İçerik ve Büyüme Stratejistisin.
-Görevin: Verilen marka stratejisini, kitle acı noktalarını ve pazar dinamiklerini analiz ederek, markanın uzmanlık kurmasını ve hedef kitleyi çekecek 3 adet stratejik "Ana Seri Konusu" önermektir.
+Görevin: Verilen marka stratejisini analiz ederek, markanın uzmanlık kurmasını sağlayacak 3 adet stratejik "Ana Seri Konusu" önermektir.
 
 KURALLAR:
-1. Kesinlikle hiçbir içerik formatına (karosel, reels, video, post vb.) atıfta bulunma. Yalnızca konunun ve serinin stratejik özüne odaklan.
-2. Her öneri net bir başlık ve bunun stratejik önemini anlatan 1-2 cümlelik kısa bir açıklamadan oluşmalıdır.
-3. Yalnızca JSON formatında yanıt ver.
+1. EDEBİ/PAZARLAMA SLOGANLARI YASAKTIR: İki noktalı süslü başlıklar (örn: "Görünmeyen Tehlike: X", "Zirveye Giden Yol: Y") KULLANMA. Başlıklar doğrudan konunun kendisini belirten net ifadeler olmalıdır (örn: "Scratch ile Blok Kodlama Temelleri", "Micro:bit ile Sensör Uygulamaları").
+2. Kesinlikle hiçbir içerik formatına (karosel, reels, video, post vb.) atıfta bulunma. Yalnızca konunun özüne odaklan.
+3. Her öneri net bir başlık ve 1-2 cümlelik kısa bir stratejik açıklamadan oluşmalıdır.
+4. Yalnızca JSON formatında yanıt ver.
 
 JSON ŞEMASI:
 {
   "suggestions": [
     {
-      "title": "Stratejik Seri Konu Başlığı",
-      "description": "Bu serinin neden üretilmesi gerektiğini ve kitlenin hangi temel sorununu çözdüğünü belirten kısa stratejik açıklama."
+      "title": "Net ve Doğrudan Seri Konu Başlığı",
+      "description": "Bu serinin kitle için neden önemli olduğunu açıklayan 1-2 cümlelik kısa açıklama."
     }
   ]
 }`;
@@ -190,7 +295,7 @@ JSON ŞEMASI:
   const userPrompt = `Marka ve Strateji Bağlamı:\n${context}\n\nLütfen bu marka için en yüksek etkiyi yaratacak 3 stratejik ana seri konusu öner.`;
 
   const { content } = await completeText(systemPrompt, userPrompt, {
-    temperature: 0.75,
+    temperature: 0.7,
     maxTokens: 1200,
   });
 
@@ -219,15 +324,27 @@ export async function researchAndCreateSeries(projectId: string, mainTopic: stri
     }
   }
 
-  const systemPrompt = `Sen kıdemli bir İçerik Mimarisi ve Sosyal Medya Seri Planlama Uzmanısın.
-Görevin: Kullanıcının verdiği ana konuyu derinlemesine analiz etmek ve konunun gerçek ağırlığına göre en mantıklı alt konulara bölmektir.
+  const systemPrompt = `Sen bir İçerik Mimarisi ve Konu Ağacı Uzmanısın.
+Görevin: Kullanıcının verdiği ana konuyu mantıksal alt konulara ayırmaktır.
 
-KESİN KURALLAR:
-1. İÇERİK TİPİ YASAKTIR: Çıktıda karosel, video, reels, post, story veya infografik gibi formatlara ASLA değinme veya tavsiye verme. Sadece konunun kendisine odaklan.
-2. YALIN YAPI: Her alt konu sadece bir 'title' (başlık) ve 'description' (kısa ve net açıklama, 1-2 cümle) değerlerinden oluşmalıdır.
-3. ARAÇ VE YÖNTEMLERİ AYRIŞTIR: Farklı uygulama, araç, donanım veya yöntemleri (örnek: Micro:bit ile Makey Makey, veya Canva ile Figma) asla tek bir alt başlık altında birleştirme. Her bir aracı/yöntemi müstakil, ayrı birer alt konu olarak oluştur.
-4. DİNAMİK BÖLÜM SAYISI: Konuyu sabit bir sayıya sıkıştırma. Konunun derinliğine ve kapsamına göre optimal bölüm sayısını sen belirle.
-5. Çıktı kesinlikle saf JSON olmalıdır.
+KESİN VE BAĞLAYICI KURALLAR:
+1. JENERİK VE EDEBİ BAŞLIKLAR KESİNLİKLE YASAKTIR:
+   - İki noktalı edebi/pazarlama başlıkları ASLA üretme! (Örn: "Ekrandaki Renkli Bloklar: Scratch ve Algoritmik Düşünmenin Temeli" YASAKTIR!).
+   - Sadece konu alanını doğrudan belirten net, yalın ifadeler kullan: (Örn: "Scratch ve Algoritmik Düşünme Temeli").
+   - Başlık doğrudan o bölümün öz konusunu yazmalıdır. Pazarlama jeneriklerini içerik hazırlarken üreteceğiz.
+
+2. FARKLI ARAÇ VE YÖNTEMLERİ ASLA BİRLEŞTİRME:
+   - Farklı uygulama, yazılım, araç veya yöntemleri (örnek: Micro:bit ile Makey Makey, veya Figma ile Canva, veya Python ile JavaScript) ASLA tek bir alt başlık altında birleştirme.
+   - Her bir aracı veya yöntemi AYRI, müstakil birer alt konu olarak oluştur.
+
+3. İÇERİK TİPLERİNE REFERANS YASAKTIR:
+   - Karosel, video, reels, post, story veya infografik gibi kelimeleri ASLA kullanma. Yalnızca konunun özüne odaklan.
+
+4. YALIN YAPI:
+   - Her alt konu yalnızca 'title' (saf ve doğrudan konu başlığı) ve 'description' (1-2 cümlelik kısa ve net açıklama) içerecektir.
+
+5. DİNAMİK BÖLÜM SAYISI:
+   - Konuyu sabit bir sayıya sıkıştırma. Konunun derinliğine göre en uygun alt konu sayısını sen belirle.
 
 JSON ŞEMASI:
 {
@@ -235,8 +352,8 @@ JSON ŞEMASI:
   "episodes": [
     {
       "order_index": 1,
-      "title": "Alt Konu Başlığı",
-      "description": "Bu alt konunun içeriğini anlatan kısa, net açıklama."
+      "title": "Doğrudan Konu Başlığı (Pazarlama jeneriği olmadan)",
+      "description": "Bu alt konunun neyi işlediğini belirten 1-2 cümlelik net açıklama."
     }
   ]
 }`;
@@ -244,10 +361,10 @@ JSON ŞEMASI:
   const userPrompt = `Bağlam: ${brandContext}
 Ana Konu Başlığı: ${cleanTopic}
 
-Lütfen bu konuyu araştır, her aracı/yöntemi ayrı tutarak ardışık alt konuları çıkar.`;
+Lütfen bu konuyu araştır, her aracı/yöntemi ayrı tutarak ve edebi jenerik başlıklar kullanmadan doğrudan alt konuları çıkar.`;
 
   const { content } = await completeText(systemPrompt, userPrompt, {
-    temperature: 0.6,
+    temperature: 0.5,
     maxTokens: 2500,
   });
 

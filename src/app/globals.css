@@ -5690,6 +5690,187 @@ button { cursor:pointer; }
   background: white;
 }
 
+.series-index-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 8px;
+  position: relative;
+}
+
+.series-index-item-row:hover .series-index-del-btn {
+  opacity: 1;
+}
+
+.series-index-del-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.series-index-del-btn:hover {
+  color: #ef4444;
+  background: #fee2e2;
+}
+
+.series-main-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.series-title-edit-input {
+  font-family: "Manrope", sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 8px;
+  padding: 4px 8px;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.series-title-edit-input:hover {
+  border-color: var(--border);
+  background: #f8fafc;
+}
+
+.series-title-edit-input:focus {
+  border-color: var(--primary);
+  background: white;
+  outline: none;
+}
+
+.series-delete-series-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 1px solid #fee2e2;
+  color: #ef4444;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.series-delete-series-btn:hover {
+  background: #fee2e2;
+}
+
+.series-episode-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.series-episode-del-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+
+.series-episode-del-btn:hover {
+  color: #ef4444;
+  background: #fee2e2;
+}
+
+.series-episode-title-input {
+  font-family: "Manrope", sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 6px;
+  padding: 4px 6px;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.series-episode-title-input:hover {
+  border-color: var(--border);
+  background: #fcfcfd;
+}
+
+.series-episode-title-input:focus {
+  border-color: var(--primary);
+  background: white;
+  outline: none;
+}
+
+.series-episode-desc-input {
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 6px;
+  padding: 4px 6px;
+  width: 100%;
+  box-sizing: border-box;
+  line-height: 1.45;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.series-episode-desc-input:hover {
+  border-color: var(--border);
+  background: #fcfcfd;
+}
+
+.series-episode-desc-input:focus {
+  border-color: var(--primary);
+  background: white;
+  outline: none;
+}
+
+.series-add-ep-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  width: 100%;
+  box-sizing: border-box;
+  transition: all 0.15s;
+}
+
+.series-add-ep-btn:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: #f5f3ff;
+}
+
 .series-empty-placeholder {
   display: flex;
   flex-direction: column;
